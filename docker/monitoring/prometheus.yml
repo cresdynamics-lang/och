@@ -1,0 +1,69 @@
+# Prometheus configuration for monitoring Ongoza CyberHub services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ongozacyberhub'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Django metrics
+  - job_name: 'django'
+    static_configs:
+      - targets: ['django:9091']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # FastAPI metrics
+  - job_name: 'fastapi'
+    static_configs:
+      - targets: ['fastapi:9092']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Next.js metrics (if instrumented)
+  - job_name: 'nextjs'
+    static_configs:
+      - targets: ['nextjs:3000']
+    metrics_path: '/api/metrics'
+    scrape_interval: 30s
+
+  # PostgreSQL exporter (if deployed)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Redis exporter (if deployed)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # NGINX metrics (if nginx-prometheus-exporter deployed)
+  # - job_name: 'nginx'
+  #   static_configs:
+  #     - targets: ['nginx-exporter:9113']
+
+
+
+
+
+

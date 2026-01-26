@@ -1,0 +1,64 @@
+{
+  "slug": "grc-advanced-vendor_risk_review-4",
+  "title": "Grc: Vendor Risk Review (advanced)",
+  "track_code": "grc",
+  "skill_code": "vendor_risk_review",
+  "level": "advanced",
+  "source_type": "dummy_seed",
+  "description": "Learn vendor risk review in the grc track. This advanced-level recipe covers essential concepts and practical implementation.",
+  "prerequisites": [
+    "Basic understanding of grc concepts",
+    "Intermediate grc skills"
+  ],
+  "tools_and_environment": [
+    "Excel/Google Sheets",
+    "Compliance Frameworks",
+    "Risk Assessment Tools"
+  ],
+  "inputs": [
+    "Access to appropriate testing environment",
+    "Sample data or target systems",
+    "Documentation tools"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "instruction": "Set up your grc environment and tools",
+      "expected_outcome": "Environment ready",
+      "evidence_hint": "Screenshot of tool setup"
+    },
+    {
+      "step_number": 2,
+      "instruction": "Execute the primary vendor risk review command",
+      "expected_outcome": "Command executed successfully",
+      "evidence_hint": "Command output screenshot"
+    },
+    {
+      "step_number": 3,
+      "instruction": "Analyze the results and identify key findings",
+      "expected_outcome": "Analysis completed",
+      "evidence_hint": "Annotated results"
+    },
+    {
+      "step_number": 4,
+      "instruction": "Document your findings and create a summary report",
+      "expected_outcome": "Report created",
+      "evidence_hint": "Report document"
+    }
+  ],
+  "expected_duration_minutes": 35,
+  "difficulty": "advanced",
+  "tags": [
+    "grc",
+    "vendor_risk_review",
+    "advanced",
+    "hands-on",
+    "practical"
+  ],
+  "validation_checks": [
+    "Can you execute the primary commands?",
+    "Do you understand the output/results?",
+    "Can you explain the security implications?"
+  ],
+  "is_free_sample": false
+}

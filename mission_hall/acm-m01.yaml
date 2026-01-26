@@ -1,0 +1,77 @@
+mission_meta:
+  id: ACM-M01
+  version: 1.0.0
+  status: draft
+  created_at: "2025-12-19T23:15:22.883Z"
+  last_updated: "2025-12-19T23:22:25.601Z"
+header:
+  title: Ransomware Crisis Response
+  slug: ransomware-crisis-response
+  difficulty: Intermediate
+  tier: 2
+  estimated_duration: "168"
+  track: leader
+narrative:
+  context_location: Ransom Tower , OCH Cyber-city
+  scenario: >-
+    Set within the "Ransomware Tower" of the OCH Cyber-City, this mission simulates a high-stakes attack on a critical
+    sector in the African digital economy. The story follows a ransomware outbreak requiring immediate identification,
+    triage, and response
+  role: Lead SOC analyst
+subtasks:
+  - id: 1
+    title: Initial triage
+    description: |2
+       Perform log analysis and identify the point of entry for the ransomware executable.
+    order: 1
+    type: technical
+  - id: 2
+    title: containment
+    description: Execute commands or scripts to isolate infected hosts within the simulated environment
+    order: 2
+    type: technical
+  - id: 3
+    title: Evidence Collection
+    description: Extract malicious binaries and associated network traffic (PCAPs) for further analysis
+    order: 3
+    type: technical
+framework_mappings:
+  mitre_attack:
+    - code: "11486"
+      name: Data encrypted for impact
+  nice_workrole:
+    - code: ""
+      name: ""
+  nist_csf: []
+  iso_27001: []
+  pci_dss: []
+  owasp_asvs: []
+  cis_controls: []
+deliverables:
+  - id: del_01
+    title: ""
+    format: ""
+    description: Sanitized logs showing the detection of the ransomware
+  - id: del_02
+    title: " Scripts/Tools"
+    format: ""
+    description: Any automation scripts used for host isolation (relevant for the Innovation track)
+  - id: del_03
+    title: " Mission Report"
+    format: ""
+    description: A formal document using professional templates that details the investigation and remediation steps
+  - id: del_04
+    title: " Video Walkthrough"
+    format: ""
+    description: A recording explaining the technical logic behind the response
+scoring:
+  ai_evaluation:
+    enabled: true
+    focus: []
+  mentor_review:
+    enabled: true
+    tier_required: Paid ($7)
+    rubric_focus: []
+  skills_update:
+    - skill: ""
+      impact: medium

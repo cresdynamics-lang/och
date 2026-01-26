@@ -1,0 +1,90 @@
+mission_meta:
+  id: ACM-M02
+  version: 1.0.0
+  status: draft
+  created_at: "2025-12-21T10:00:00.000Z"
+  last_updated: "2025-12-21T10:05:00.000Z"
+header:
+  title: API Infiltration Broken Object Level Authorization
+  slug: api-infiltration-bola
+  difficulty: Advanced
+  tier: 3
+  estimated_duration: "120"
+  track: innovation
+narrative:
+  context_location: FinTech District, OCH Cyber-city
+  scenario: >-
+    Located in the high-frequency trading zone of the OCH Cyber-City, this mission targets a vulnerability in the
+    "Neobank Prime" API. Reports indicate that user transaction history is exposed via ID manipulation. You must
+    intercept traffic, identify the Insecure Direct Object Reference (IDOR/BOLA), and prove the vulnerability without
+    damaging data integrity.
+  role: Senior Penetration Tester
+subtasks:
+  - id: 1
+    title: API Reconnaissance
+    description: |2
+       Map the application attack surface and identify API endpoints using proxy tools to analyze HTTP request patterns.
+    order: 1
+    type: technical
+  - id: 2
+    title: Token Analysis & Fuzzing
+    description: Decode JWT tokens to understand permission scopes and fuzz user ID parameters to detect authorization flaws.
+    order: 2
+    type: technical
+  - id: 3
+    title: Exploit Development
+    description: Create a Proof of Concept (PoC) script that successfully retrieves sensitive data of a target user (User_ID- 9999).
+    order: 3
+    type: technical
+framework_mappings:
+  mitre_attack:
+    - code: "T1595"
+      name: Active Scanning
+    - code: "T1210"
+      name: Exploitation of Remote Services
+  nice_workrole:
+    - code: "SP-DEV-001"
+      name: Software Developer
+  nist_csf:
+    - code: "PR.IP-2"
+      name: System Development Life Cycle to manage systems
+  iso_27001: []
+  pci_dss: []
+  owasp_asvs:
+    - code: "V4.1"
+      name: Access Control Verification
+  cis_controls: []
+deliverables:
+  - id: del_01
+    title: " Traffic Capture"
+    format: ".har or .xml"
+    description: Exported HTTP history showing the manipulated requests and server responses
+  - id: del_02
+    title: " Exploit Script"
+    format: ".py"
+    description: A Python script that automates the data retrieval of the target user
+  - id: del_03
+    title: " Vulnerability Assessment"
+    format: "PDF"
+    description: A concise report detailing the BOLA vulnerability, impact, and remediation advice
+  - id: del_04
+    title: " Remediation Patch"
+    format: "Code Snippet"
+    description: A suggested code fix (pseudo-code or language specific) to patch the authorization logic
+scoring:
+  ai_evaluation:
+    enabled: true
+    focus:
+      - Script Efficiency
+      - False Positive Rate
+  mentor_review:
+    enabled: true
+    tier_required: Paid ($10)
+    rubric_focus:
+      - Report Professionalism
+      - Remediation Accuracy
+  skills_update:
+    - skill: "API Security"
+      impact: high
+    - skill: "Python Request Library"
+      impact: medium

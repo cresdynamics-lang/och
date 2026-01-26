@@ -1,0 +1,197 @@
+# Ongoza CyberHub - Production/Testing Orchestration
+services:
+  # 1. Nginx Reverse Proxy (Gateway)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: ongozacyberhub_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      nextjs:
+        condition: service_started
+      django:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. PostgreSQL Relational (Django)
+  postgres-relational:
+    build:
+      context: .
+      dockerfile: backend/docker/postgres.Dockerfile
+    container_name: ongozacyberhub_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ongozacyberhub}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+
+  # 3. PostgreSQL Vector (FastAPI)
+  postgres-vector:
+    build:
+      context: .
+      dockerfile: backend/docker/vector_db.Dockerfile
+    container_name: ongozacyberhub_vector_db
+    environment:
+      POSTGRES_DB: ${VECTOR_POSTGRES_DB:-ongozacyberhub_vector}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - vector_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+
+  # 4. Redis
+  redis:
+    image: redis:7-alpine
+    container_name: ongozacyberhub_redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+
+  # 5. Django Backend
+  django:
+    build:
+      context: .
+      dockerfile: backend/docker/django.Dockerfile
+    container_name: ongozacyberhub_django
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_NAME: ${POSTGRES_DB:-ongozacyberhub}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_HOST: postgres-relational
+      DB_PORT: 5432
+      FASTAPI_BASE_URL: http://fastapi:8001
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DEBUG: ${DEBUG:-False}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,159.223.224.136}
+    volumes:
+      - ./backend/django_app:/app
+      - django_static:/app/staticfiles
+      - django_media:/app/media
+    depends_on:
+      postgres-relational:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # 6. FastAPI AI Service
+  fastapi:
+    build:
+      context: .
+      dockerfile: backend/docker/fastapi.Dockerfile
+    container_name: ongozacyberhub_fastapi
+    environment:
+      VECTOR_DB_HOST: postgres-vector
+      VECTOR_DB_PORT: 5432
+      VECTOR_DB_NAME: ${VECTOR_POSTGRES_DB:-ongozacyberhub_vector}
+      VECTOR_DB_USER: ${POSTGRES_USER:-postgres}
+      VECTOR_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DJANGO_API_URL: http://django:8000
+      CORS_ORIGINS: '["http://localhost:3000","http://159.223.224.136"]'
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./backend/fastapi_app:/app
+    depends_on:
+      postgres-vector:
+        condition: service_healthy
+      django:
+        condition: service_healthy
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # 7. Next.js Frontend
+  nextjs:
+    build:
+      context: .
+      dockerfile: frontend/nextjs_app/Dockerfile
+      args:
+        NEXT_PUBLIC_DJANGO_API_URL: http://159.223.224.136/api
+        NEXT_PUBLIC_FASTAPI_API_URL: http://159.223.224.136/ai
+        NEXT_PUBLIC_FRONTEND_URL: http://159.223.224.136
+    container_name: ongozacyberhub_nextjs
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+      DJANGO_INTERNAL_URL: http://django:8000
+      FASTAPI_INTERNAL_URL: http://fastapi:8001
+      NEXT_PUBLIC_DJANGO_API_URL: http://159.223.224.136/api
+      NEXT_PUBLIC_FASTAPI_API_URL: http://159.223.224.136/ai
+      NEXT_PUBLIC_FRONTEND_URL: http://159.223.224.136
+    volumes:
+      - nextjs_cache:/app/.next/cache
+    networks:
+      - ongoza-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+volumes:
+  postgres_data:
+  vector_db_data:
+  redis_data:
+  django_static:
+  django_media:
+  nextjs_cache:
+
+networks:
+  ongoza-network:
+    driver: bridge

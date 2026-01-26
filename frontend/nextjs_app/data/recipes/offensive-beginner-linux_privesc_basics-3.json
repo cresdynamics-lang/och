@@ -1,0 +1,64 @@
+{
+  "slug": "offensive-beginner-linux_privesc_basics-3",
+  "title": "Offensive: Linux Privesc Basics (beginner)",
+  "track_code": "offensive",
+  "skill_code": "linux_privesc_basics",
+  "level": "beginner",
+  "source_type": "dummy_seed",
+  "description": "Learn linux privesc basics in the offensive track. This beginner-level recipe covers essential concepts and practical implementation.",
+  "prerequisites": [
+    "Basic understanding of offensive concepts",
+    "No prior experience required"
+  ],
+  "tools_and_environment": [
+    "Kali Linux",
+    "Nmap",
+    "Metasploit"
+  ],
+  "inputs": [
+    "Access to appropriate testing environment",
+    "Sample data or target systems",
+    "Documentation tools"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "instruction": "Set up your offensive environment and tools",
+      "expected_outcome": "Environment ready",
+      "evidence_hint": "Screenshot of tool setup"
+    },
+    {
+      "step_number": 2,
+      "instruction": "Execute the primary linux privesc basics command",
+      "expected_outcome": "Command executed successfully",
+      "evidence_hint": "Command output screenshot"
+    },
+    {
+      "step_number": 3,
+      "instruction": "Analyze the results and identify key findings",
+      "expected_outcome": "Analysis completed",
+      "evidence_hint": "Annotated results"
+    },
+    {
+      "step_number": 4,
+      "instruction": "Document your findings and create a summary report",
+      "expected_outcome": "Report created",
+      "evidence_hint": "Report document"
+    }
+  ],
+  "expected_duration_minutes": 30,
+  "difficulty": "beginner",
+  "tags": [
+    "offensive",
+    "linux_privesc_basics",
+    "beginner",
+    "hands-on",
+    "practical"
+  ],
+  "validation_checks": [
+    "Can you execute the primary commands?",
+    "Do you understand the output/results?",
+    "Can you explain the security implications?"
+  ],
+  "is_free_sample": false
+}

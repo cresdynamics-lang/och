@@ -1,0 +1,75 @@
+mission_meta:
+  id: ACM-M03
+  version: 1.0.0
+  status: draft
+  created_at: "2025-12-23T08:15:00.000Z"
+  last_updated: "2025-12-23T08:15:00.000Z"
+header:
+  title: Cloud Leak- The Open Bucket
+  slug: cloud-leak-open-bucket
+  difficulty: Beginner
+  tier: 1
+  estimated_duration: "60"
+  track: foundation
+narrative:
+  context_location: Sky Vault District, OCH Cyber-city
+  scenario: >-
+    A developer at "Cumulus Logistics" has accidentally deployed a storage bucket with public read access. 
+    This bucket contains sensitive architectural blueprints for the city's power grid. 
+    Your mission is to scan the public cloud infrastructure, identify the unsecured bucket, and securely report the exposure.
+  role: Cloud Security Associate
+subtasks:
+  - id: 1
+    title: Bucket Enumeration
+    description: |2
+       Use CLI tools to enumerate storage buckets based on keyword lists associated with the target organization.
+    order: 1
+    type: technical
+  - id: 2
+    title: ACL Analysis
+    description: Inspect the Access Control Lists (ACLs) of the identified bucket to confirm "Public Read" permissions.
+    order: 2
+    type: technical
+  - id: 3
+    title: Data Verification
+    description: Download a non-sensitive sample file to verify access without reading PII (Personally Identifiable Information).
+    order: 3
+    type: technical
+framework_mappings:
+  mitre_attack:
+    - code: "T1530"
+      name: Data from Cloud Storage Object
+  nice_workrole:
+    - code: "SP-ARC-002"
+      name: Cloud Architect
+  nist_csf:
+    - code: "PR.AC-3"
+      name: Access Control
+  iso_27001: []
+  pci_dss: []
+  owasp_asvs: []
+  cis_controls:
+    - code: "3.1"
+      name: Data Protection
+deliverables:
+  - id: del_01
+    title: " Enumeration Logs"
+    format: ".txt"
+    description: Log output showing the discovery of the bucket name
+  - id: del_02
+    title: " Incident Report"
+    format: "PDF"
+    description: A brief report documenting the URL of the exposed bucket and the specific ACL configuration that failed
+scroing:
+  ai_evaluation:
+    enabled: true
+    focus:
+      - Ethics (Did not download PII)
+      - Speed of discovery
+  mentor_review:
+    enabled: false
+    tier_required: Free
+    rubric_focus: []
+  skills_update:
+    - skill: "Cloud Infrastructure"
+      impact: medium

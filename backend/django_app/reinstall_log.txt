@@ -1,0 +1,27 @@
+Collecting django==5.1.4
+  Downloading Django-5.1.4-py3-none-any.whl.metadata (4.2 kB)
+Collecting asgiref<4,>=3.8.1 (from django==5.1.4)
+  Using cached asgiref-3.11.0-py3-none-any.whl.metadata (9.3 kB)
+Collecting sqlparse>=0.3.1 (from django==5.1.4)
+  Downloading sqlparse-0.5.5-py3-none-any.whl.metadata (4.7 kB)
+Downloading Django-5.1.4-py3-none-any.whl (8.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.3/8.3 MB 16.6 kB/s  0:05:41
+Using cached asgiref-3.11.0-py3-none-any.whl (24 kB)
+Downloading sqlparse-0.5.5-py3-none-any.whl (46 kB)
+Installing collected packages: sqlparse, asgiref, django
+  Attempting uninstall: sqlparse
+    Found existing installation: sqlparse 0.5.4
+    Uninstalling sqlparse-0.5.4:
+      Successfully uninstalled sqlparse-0.5.4
+  Attempting uninstall: asgiref
+    Found existing installation: asgiref 3.11.0
+    Uninstalling asgiref-3.11.0:
+      Successfully uninstalled asgiref-3.11.0
+  Attempting uninstall: django
+    Found existing installation: Django 5.2.9
+    Uninstalling Django-5.2.9:
+      Successfully uninstalled Django-5.2.9
+
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+django-filter 25.2 requires Django>=5.2, but you have django 5.1.4 which is incompatible.
+Successfully installed asgiref-3.11.0 django-5.1.4 sqlparse-0.5.5

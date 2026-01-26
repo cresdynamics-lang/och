@@ -1,0 +1,71 @@
+{
+  "slug": "grc-vendor-risk-review-intermediate",
+  "title": "Grc: Vendor Risk Review (intermediate)",
+  "track_code": "grc",
+  "skill_code": "vendor_risk_review",
+  "level": "intermediate",
+  "source_type": "dummy_seed",
+  "description": "Master vendor risk review in the grc track. This intermediate-level recipe provides hands-on experience with essential cybersecurity concepts and practical implementation techniques.",
+  "prerequisites": [
+    "Basic understanding of grc concepts",
+    "Beginner grc skills recommended"
+  ],
+  "tools_and_environment": [
+    "Excel/Google Sheets",
+    "Compliance Frameworks",
+    "Risk Assessment Tools"
+  ],
+  "inputs": [
+    "grc environment access",
+    "Sample data or test scenarios",
+    "Documentation tools for evidence collection"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "instruction": "Set up your grc environment and verify all required tools are available",
+      "expected_outcome": "Environment configured and tools verified",
+      "evidence_hint": "Screenshot of tool setup and verification"
+    },
+    {
+      "step_number": 2,
+      "instruction": "Execute the primary vendor risk review procedure using appropriate tools and techniques",
+      "expected_outcome": "Primary procedure completed successfully",
+      "evidence_hint": "Command output or tool results screenshot"
+    },
+    {
+      "step_number": 3,
+      "instruction": "Analyze the results and identify key findings, patterns, or security implications",
+      "expected_outcome": "Results analyzed and insights documented",
+      "evidence_hint": "Annotated analysis with key findings highlighted"
+    },
+    {
+      "step_number": 4,
+      "instruction": "Document your methodology, findings, and create a summary report with recommendations",
+      "expected_outcome": "Comprehensive report created",
+      "evidence_hint": "Final report document with all findings"
+    },
+    {
+      "step_number": 5,
+      "instruction": "Clean up the environment and document lessons learned for future reference",
+      "expected_outcome": "Environment cleaned and lessons documented",
+      "evidence_hint": "Cleanup verification and lessons learned summary"
+    }
+  ],
+  "expected_duration_minutes": 30,
+  "difficulty": "intermediate",
+  "tags": [
+    "grc",
+    "vendor-risk-review",
+    "intermediate",
+    "hands-on",
+    "practical"
+  ],
+  "validation_checks": [
+    "Did you successfully complete all vendor risk review steps?",
+    "Can you explain the security implications of your findings?",
+    "Have you documented your methodology and results?",
+    "What evidence did you collect to support your analysis?"
+  ],
+  "is_free_sample": false
+}

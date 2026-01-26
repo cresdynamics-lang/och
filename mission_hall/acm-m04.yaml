@@ -1,0 +1,81 @@
+mission_meta:
+  id: ACM-M04
+  version: 1.0.0
+  status: draft
+  created_at: "2025-12-23T08:30:00.000Z"
+  last_updated: "2025-12-23T08:30:00.000Z"
+header:
+  title: Silent Pivot:Lateral Movement
+  slug: silent-pivot-lateral-movement
+  difficulty: Intermediate
+  tier: 2
+  estimated_duration: "180"
+  track: defender
+narrative:
+  context_location: Core Grid Substation, OCH Cyber-city
+  scenario: >-
+    An intruder has breached the perimeter of the "Core Grid." Alarms are silent, but unusual SMB traffic has been observed between workstations.
+    You must analyze the PCAP files to map the attacker's movement through the network topology and identify the compromised credentials used to pivot.
+  role: Network Forensics Investigator
+subtasks:
+  - id: 1
+    title: Protocol Analysis
+    description: |2
+       Filter network traffic to isolate SMB and RPC protocols to identify suspicious file shares or remote execution commands.
+    order: 1
+    type: technical
+  - id: 2
+    title: Mapping the Attack Path
+    description: Reconstruct the flow of traffic to visualize which host was Patient Zero and which hosts were subsequently infected.
+    order: 2
+    type: technical
+  - id: 3
+    title: Credential Extraction
+    description: Identify NTLM hashes or cleartext passwords passed over the wire during the lateral movement phase.
+    order: 3
+    type: technical
+framework_mappings:
+  mitre_attack:
+    - code: "T1021"
+      name: Remote Services
+    - code: "T1570"
+      name: Lateral Tool Transfer
+  nice_workrole:
+    - code: "OM-ANA-001"
+      name: Threat/Warning Analyst
+  nist_csf:
+    - code: "DE.AE-1"
+      name: Anomalies and Events
+  iso_27001: []
+  pci_dss: []
+  owasp_asvs: []
+  cis_controls: []
+deliverables:
+  - id: del_01
+    title: " Traffic Analysis"
+    format: ".pcapng"
+    description: An annotated PCAP file highlighting the malicious packets
+  - id: del_02
+    title: " Topology Map"
+    format: "Image/Diagram"
+    description: A visual diagram showing the attacker's path from Host A to Host B to Host C
+  - id: del_03
+    title: " IOC List"
+    format: ".csv"
+    description: Indicators of Compromise (IPs, Hashes, Filenames)
+scoring:
+  ai_evaluation:
+    enabled: true
+    focus:
+      - Accuracy of Timeline
+  mentor_review:
+    enabled: true
+    tier_required: Paid ($15)
+    rubric_focus:
+      - Forensic Methodology
+      - Chain of Custody
+  skills_update:
+    - skill: "Wireshark"
+      impact: high
+    - skill: "Network Protocols"
+      impact: high

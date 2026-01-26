@@ -1,0 +1,81 @@
+mission_meta:
+  id: ACM-M05
+  version: 1.0.0
+  status: draft
+  created_at: "2025-12-23T08:45:00.000Z"
+  last_updated: "2025-12-23T08:45:00.000Z"
+header:
+  title: The Graph Breach:API Injection
+  slug: graph-breach-api-injection
+  difficulty: Advanced
+  tier: 3
+  estimated_duration: "240"
+  track: innovation
+narrative:
+  context_location: Data Nexus, OCH Cyber-city
+  scenario: >-
+    The "Data Nexus" has upgraded its legacy REST API to GraphQL to improve performance. However, they failed to disable Introspection in production.
+    You must map the entire schema, identify hidden administrative queries, and perform a batching attack to bypass rate limits and dump the user database.
+  role: Application Security Engineer
+subtasks:
+  - id: 1
+    title: Schema Introspection
+    description: |2
+       Send an introspection query to the GraphQL endpoint to retrieve the full schema, including types, queries, and mutations.
+    order: 1
+    type: technical
+  - id: 2
+    title: Query Construct Analysis
+    description: Analyze the schema to find sensitive fields (e.g., `systemUsers`, `adminKey`) that are not protected by authentication.
+    order: 2
+    type: technical
+  - id: 3
+    title: Batching Attack
+    description: Craft a malicious query using aliases or array batching to retrieve thousands of records in a single HTTP request, bypassing the WAF.
+    order: 3
+    type: technical
+framework_mappings:
+  mitre_attack:
+    - code: "T1190"
+      name: Exploit Public-Facing Application
+  nice_workrole:
+    - code: "SP-DEV-001"
+      name: Software Developer
+  nist_csf:
+    - code: "PR.IP-1"
+      name: Baseline Configuration
+  iso_27001: []
+  pci_dss: []
+  owasp_asvs:
+    - code: "V13.1"
+      name: API Architecture
+  cis_controls: []
+deliverables:
+  - id: del_01
+    title: " Schema Map"
+    format: ".json"
+    description: The full JSON output of the introspection query
+  - id: del_02
+    title: " Attack Payload"
+    format: ".txt"
+    description: The raw GraphQL query used to perform the batch data extraction
+  - id: del_03
+    title: " Mitigation Strategy"
+    format: "Markdown"
+    description: A guide on how to disable introspection and implement Query Depth Limiting
+scoring:
+  ai_evaluation:
+    enabled: true
+    focus:
+      - Query Optimization
+  mentor_review:
+    enabled: true
+    tier_required: Paid ($20)
+    rubric_focus:
+      - Understanding of GraphQL Architecture
+      - Quality of Remediation Code
+  skills_update:
+    - skill: "GraphQL"
+      impact: high
+    - skill: "API Security"
+      impact: high

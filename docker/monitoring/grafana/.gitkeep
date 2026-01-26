@@ -1,0 +1,15 @@
+# Grafana configuration and dashboards will be placed here
+# Example structure:
+# - dashboards/
+#   - django.json
+#   - fastapi.json
+#   - system.json
+# - provisioning/
+#   - datasources/
+#   - dashboards/
+
+
+
+
+
+

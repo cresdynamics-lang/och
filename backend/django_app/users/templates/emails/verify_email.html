@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email - Ongoza CyberHub</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #A8B0B8;
+            background-color: #0A0A0C;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: #0A0A0C;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .title {
+            color: #FFFFFF;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .content {
+            background-color: #1A1A1C;
+            border: 1px solid #0648A8;
+            border-radius: 8px;
+            padding: 32px;
+            margin-bottom: 24px;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #0648A8, #0A0A0C);
+            color: #FFFFFF;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 24px 0;
+            border: 1px solid #33FFC1;
+            text-align: center;
+        }
+        .button:hover {
+            background: linear-gradient(135deg, #0648A8, #33FFC1);
+        }
+        .footer {
+            text-align: center;
+            color: #A8B0B8;
+            font-size: 12px;
+            margin-top: 32px;
+        }
+        .link {
+            color: #33FFC1;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🛡️</div>
+            <div class="title">Ongoza CyberHub</div>
+        </div>
+        
+        <div class="content">
+            <h2 style="color: #FFFFFF; margin-top: 0;">Verify Your Email Address</h2>
+            
+            <p>Hello {{ user.first_name|default:user.email }},</p>
+            
+            <p>Thank you for joining Ongoza CyberHub! To complete your registration and activate your account, please verify your email address by clicking the button below:</p>
+            
+            <div style="text-align: center;">
+                <a href="{{ verification_url }}" class="button">Verify Email Address</a>
+            </div>
+            
+            <p style="font-size: 14px; color: #A8B0B8;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="font-size: 12px;"><a href="{{ verification_url }}" class="link">{{ verification_url }}</a></p>
+            
+            <p style="margin-top: 24px; font-size: 14px; color: #A8B0B8;">
+                This verification link will expire in 24 hours. If you didn't create an account with Ongoza CyberHub, please ignore this email.
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 Ongoza CyberHub. All rights reserved.</p>
+            <p>This is an automated message. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>
+

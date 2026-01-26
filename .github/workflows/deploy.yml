@@ -1,0 +1,190 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service: [django, fastapi, nextjs]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Django image
+        if: matrix.service == 'django'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/django.Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push FastAPI image
+        if: matrix.service == 'fastapi'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/docker/fastapi.Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Next.js image
+        if: matrix.service == 'nextjs'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend/nextjs_app
+          file: ./frontend/nextjs_app/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  generate-openapi:
+    name: Generate and Merge OpenAPI Schemas
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start services for schema generation
+        run: |
+          cd backend
+          docker-compose up -d django fastapi
+          sleep 10
+
+      - name: Fetch Django OpenAPI schema
+        run: |
+          curl -o shared/openapi/openapi_django.json \
+            http://localhost:8000/api/schema/ || echo "Django schema fetch failed"
+
+      - name: Fetch FastAPI OpenAPI schema
+        run: |
+          curl -o shared/openapi/openapi_fastapi.json \
+            http://localhost:8001/docs/openapi.json || echo "FastAPI schema fetch failed"
+
+      - name: Merge OpenAPI schemas
+        run: |
+          python shared/openapi/merge_openapi.py
+
+      - name: Upload merged schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: merged-openapi
+          path: shared/openapi/merged_openapi.json
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-and-push, generate-openapi]
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.ongoza.cyberhub
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment"
+          # Add your deployment commands here
+          # Example: kubectl apply -f k8s/staging/
+          # Or: docker-compose -f docker-compose.prod.yml up -d
+
+      - name: Run Django migrations
+        run: |
+          echo "Running Django migrations on staging"
+          # docker-compose exec django python manage.py migrate
+
+      - name: Clear Next.js cache
+        run: |
+          echo "Clearing Next.js build cache"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push, generate-openapi]
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://ongoza.cyberhub
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment"
+          # Add your deployment commands here
+          # Example: kubectl apply -f k8s/production/
+
+      - name: Run Django migrations
+        run: |
+          echo "Running Django migrations on production"
+          # docker-compose exec django python manage.py migrate
+
+      - name: Clear Next.js cache
+        run: |
+          echo "Clearing Next.js build cache"
+
+
+
+
+
+

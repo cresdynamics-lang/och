@@ -1,0 +1,187 @@
+# Enable BuildKit for faster builds with cache mounts
+# Run with: DOCKER_BUILDKIT=1 docker-compose build
+# Or set in your shell: export DOCKER_BUILDKIT=1
+
+services:
+  # Nginx Reverse Proxy (single entry point)
+  nginx:
+    image: nginx:stable-alpine
+    container_name: ongozacyberhub_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - django
+      - fastapi
+      - nextjs
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL Relational Database (for Django)
+  postgres-relational:
+    build:
+      context: ..
+      dockerfile: backend/docker/postgres.Dockerfile
+    container_name: ongozacyberhub_postgres
+    environment:
+      POSTGRES_DB: ongozacyberhub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Vector Database (for FastAPI)
+  postgres-vector:
+    build:
+      context: ..
+      dockerfile: backend/docker/vector_db.Dockerfile
+    container_name: ongozacyberhub_vector_db
+    environment:
+      POSTGRES_DB: ongozacyberhub_vector
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - vector_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for caching and async tasks)
+  redis:
+    image: redis:7-alpine
+    container_name: ongozacyberhub_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Django Application
+  django:
+    build:
+      context: ..
+      dockerfile: backend/docker/django.Dockerfile
+    container_name: ongozacyberhub_django
+    environment:
+      # Force Docker service names (override any .env file values)
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-change-me-in-production}
+      DB_NAME: ongozacyberhub
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: postgres-relational
+      DB_PORT: "5432"
+      FASTAPI_BASE_URL: http://fastapi:8001
+      ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,nginx,django,159.223.224.136"
+      # Redis configuration (use service name in Docker)
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend/django_app:/app
+    depends_on:
+      postgres-relational:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FastAPI Application
+  fastapi:
+    build:
+      context: ..
+      dockerfile: backend/docker/fastapi.Dockerfile
+    container_name: ongozacyberhub_fastapi
+    environment:
+      VECTOR_DB_HOST: postgres-vector
+      VECTOR_DB_PORT: 5432
+      VECTOR_DB_NAME: ongozacyberhub_vector
+      VECTOR_DB_USER: postgres
+      VECTOR_DB_PASSWORD: postgres
+      USE_PINECONE: ${USE_PINECONE:-false}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_ENVIRONMENT: ${PINECONE_ENVIRONMENT:-}
+      PINECONE_INDEX_NAME: ${PINECONE_INDEX_NAME:-ongozacyberhub}
+      DJANGO_API_URL: http://django:8000
+      DJANGO_API_TIMEOUT: 30
+      EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      EMBEDDING_DIMENSION: 384
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-django-insecure-change-me-in-production}
+      JWT_ALGORITHM: HS256
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../backend/fastapi_app:/app
+    depends_on:
+      postgres-vector:
+        condition: service_healthy
+      django:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend Application
+  nextjs:
+    build:
+      context: ..
+      dockerfile: frontend/docker/nextjs.Dockerfile
+    container_name: ongozacyberhub_nextjs
+    command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_DJANGO_API_URL: ""
+      NEXT_PUBLIC_FASTAPI_API_URL: ""
+      NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      DJANGO_INTERNAL_URL: http://django:8000
+      HOST: 0.0.0.0
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend/nextjs_app:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - django
+      - fastapi
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  vector_db_data:
+  redis_data:
+
+

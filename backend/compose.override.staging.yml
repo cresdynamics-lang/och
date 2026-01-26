@@ -1,0 +1,50 @@
+version: '3.8'
+
+# Staging overrides for docker-compose.prod.yml
+# Usage: docker-compose -f docker-compose.prod.yml -f compose.override.staging.yml up
+
+services:
+  django:
+    environment:
+      DEBUG: "False"
+      DJANGO_SETTINGS_MODULE: core.settings.production
+      ALLOWED_HOSTS: staging.ongoza.cyberhub,staging-api.ongoza.cyberhub
+      LOG_LEVEL: INFO
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  fastapi:
+    environment:
+      FASTAPI_RELOAD: "False"
+      FASTAPI_WORKERS: "4"
+      LOG_LEVEL: INFO
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  nextjs:
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_ENVIRONMENT: staging
+
+  nginx:
+    ports:
+      - "80:80"
+    # SSL configuration for staging would go here
+
+
+
+
+
+

@@ -1,0 +1,36 @@
+#!/usr/bin/expect -f
+
+set timeout 30
+set password "Ongoza@#1CyberHub"
+set host "159.65.76.180"
+set user "root"
+
+spawn ssh -o StrictHostKeyChecking=no $user@$host
+expect {
+    "password:" {
+        send "$password\r"
+        exp_continue
+    }
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+    "$ " {
+        send "echo 'Connected successfully'\r"
+    }
+    "# " {
+        send "echo 'Connected successfully'\r"
+    }
+}
+
+expect {
+    "$ " {
+        send "exit\r"
+    }
+    "# " {
+        send "exit\r"
+    }
+}
+
+expect eof
+

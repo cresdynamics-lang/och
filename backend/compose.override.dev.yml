@@ -1,0 +1,41 @@
+version: '3.8'
+
+# Development overrides for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f compose.override.dev.yml up
+
+services:
+  django:
+    build:
+      context: ..
+      dockerfile: backend/docker/django.Dockerfile
+    environment:
+      DEBUG: "True"
+      DJANGO_SETTINGS_MODULE: core.settings.development
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../backend/django_app:/app
+      - django_dev_logs:/var/log/django
+    command: python manage.py runserver 0.0.0.0:8000
+
+  fastapi:
+    build:
+      context: ..
+      dockerfile: backend/docker/fastapi.Dockerfile
+    environment:
+      FASTAPI_RELOAD: "True"
+      FASTAPI_WORKERS: "1"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../backend/fastapi_app:/app
+      - fastapi_dev_logs:/var/log/fastapi
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+volumes:
+  django_dev_logs:
+  fastapi_dev_logs:
+
+
+
+
+
+

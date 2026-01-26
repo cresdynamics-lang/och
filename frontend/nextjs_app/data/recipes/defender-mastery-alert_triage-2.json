@@ -1,0 +1,64 @@
+{
+  "slug": "defender-mastery-alert_triage-2",
+  "title": "Defender: Alert Triage (mastery)",
+  "track_code": "defender",
+  "skill_code": "alert_triage",
+  "level": "mastery",
+  "source_type": "dummy_seed",
+  "description": "Learn alert triage in the defender track. This mastery-level recipe covers essential concepts and practical implementation.",
+  "prerequisites": [
+    "Basic understanding of defender concepts",
+    "Intermediate defender skills"
+  ],
+  "tools_and_environment": [
+    "Windows Event Viewer",
+    "PowerShell",
+    "SIEM Console"
+  ],
+  "inputs": [
+    "Access to appropriate testing environment",
+    "Sample data or target systems",
+    "Documentation tools"
+  ],
+  "steps": [
+    {
+      "step_number": 1,
+      "instruction": "Set up your defender environment and tools",
+      "expected_outcome": "Environment ready",
+      "evidence_hint": "Screenshot of tool setup"
+    },
+    {
+      "step_number": 2,
+      "instruction": "Execute the primary alert triage command",
+      "expected_outcome": "Command executed successfully",
+      "evidence_hint": "Command output screenshot"
+    },
+    {
+      "step_number": 3,
+      "instruction": "Analyze the results and identify key findings",
+      "expected_outcome": "Analysis completed",
+      "evidence_hint": "Annotated results"
+    },
+    {
+      "step_number": 4,
+      "instruction": "Document your findings and create a summary report",
+      "expected_outcome": "Report created",
+      "evidence_hint": "Report document"
+    }
+  ],
+  "expected_duration_minutes": 25,
+  "difficulty": "mastery",
+  "tags": [
+    "defender",
+    "alert_triage",
+    "mastery",
+    "hands-on",
+    "practical"
+  ],
+  "validation_checks": [
+    "Can you execute the primary commands?",
+    "Do you understand the output/results?",
+    "Can you explain the security implications?"
+  ],
+  "is_free_sample": false
+}

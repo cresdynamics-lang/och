@@ -1,0 +1,101 @@
+# Multi-stage build for Django production (optimized for DigitalOcean)
+# Stage 1: Build dependencies
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set pip timeout environment variable (in seconds - 6000 = 100 minutes)
+ENV PIP_DEFAULT_TIMEOUT=6000
+
+# Copy requirements and install Python dependencies
+COPY backend/django_app/requirements.txt .
+
+# Upgrade pip first
+RUN pip install --no-cache-dir --user --upgrade pip
+
+# Install critical packages first
+RUN pip install --no-cache-dir --user --timeout=6000 \
+    "Django>=5.0,<6.0" \
+    "psycopg2-binary>=2.9.9" \
+    "djangorestframework>=3.14.0" \
+    "django-environ>=0.10.0"
+
+# Then install remaining packages
+RUN pip install --no-cache-dir --user --timeout=6000 -r requirements.txt
+
+# Stage 2: Production runtime
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Create non-root user for security
+RUN groupadd -r django && \
+    useradd -r -g django -u 1000 django && \
+    mkdir -p /app /app/staticfiles /app/media /var/log/django && \
+    chown -R django:django /app /var/log/django
+
+WORKDIR /app
+
+# Install runtime dependencies only (minimal)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    curl \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/django/.local
+
+# Set Python path to include user packages
+ENV PATH=/home/django/.local/bin:$PATH
+
+# Copy Django application
+COPY --chown=django:django backend/django_app/ .
+
+# Collect static files (as root, then change ownership)
+RUN python manage.py collectstatic --noinput || true && \
+    chown -R django:django /app/staticfiles
+
+# Switch to non-root user
+USER django
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health/ || exit 1
+
+# Run with gunicorn (production WSGI server)
+# Workers: (2 * CPU cores) + 1, but capped at 4 for DigitalOcean droplets
+CMD ["gunicorn", "core.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--threads", "2", \
+     "--worker-class", "sync", \
+     "--timeout", "120", \
+     "--keep-alive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--log-level", "info", \
+     "--capture-output"]
+
+
+
+
+
+
