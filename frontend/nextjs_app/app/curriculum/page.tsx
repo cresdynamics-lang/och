@@ -57,11 +57,11 @@ const TRACK_CONFIGS = {
   },
   innovation: {
     icon: Rocket,
-    color: 'cyan',
-    gradient: 'from-cyan-500/20 via-cyan-600/10 to-slate-900/30',
-    borderColor: 'border-cyan-500/30',
-    textColor: 'text-cyan-400',
-    bgColor: 'bg-cyan-500/20'
+    color: 'amber',
+    gradient: 'from-amber-500/20 via-amber-600/10 to-slate-900/30',
+    borderColor: 'border-amber-500/30',
+    textColor: 'text-amber-400',
+    bgColor: 'bg-amber-500/20'
   },
   leadership: {
     icon: Award,
