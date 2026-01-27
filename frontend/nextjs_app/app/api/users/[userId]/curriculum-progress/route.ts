@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { emitCurriculumVideoCompleted, emitCurriculumQuizCompleted } from '@/lib/coaching-events';
+import { emitCurriculumVideoCompleted, emitCurriculumQuizCompleted, emitCoachingEvent } from '@/lib/coaching-events';
 
 interface CurriculumProgressUpdate {
   content_id: string;
   status: 'not_started' | 'in_progress' | 'completed';
   quiz_score?: number;
+  video_progress_seconds?: number;
+  video_duration_seconds?: number;
+  last_position_resume?: boolean;
 }
 
 /**
@@ -19,7 +22,14 @@ export async function POST(
     const userId = params.userId;
     const body: CurriculumProgressUpdate = await request.json();
 
-    const { content_id, status, quiz_score } = body;
+    const {
+      content_id,
+      status,
+      quiz_score,
+      video_progress_seconds,
+      video_duration_seconds,
+      last_position_resume
+    } = body;
 
     if (!content_id || !status) {
       return NextResponse.json(
@@ -33,7 +43,10 @@ export async function POST(
     console.log(`Updating curriculum progress for user ${userId}:`, {
       content_id,
       status,
-      quiz_score
+      quiz_score,
+      video_progress_seconds,
+      video_duration_seconds,
+      last_position_resume
     });
 
     // Mock successful database update
@@ -42,6 +55,9 @@ export async function POST(
       content_id,
       status,
       quiz_score,
+      video_progress_seconds,
+      video_duration_seconds,
+      last_position_resume,
       updated_at: new Date().toISOString()
     };
 
@@ -52,7 +68,25 @@ export async function POST(
       const mockContentMetadata = parseContentIdForMetadata(content_id);
 
       if (mockContentMetadata) {
+        const skillCodes = getSkillCodesForContent(mockContentMetadata);
+
         if (mockContentMetadata.type === 'video') {
+          await emitCoachingEvent({
+            event_type: 'curriculum_video_completed',
+            track_slug: mockContentMetadata.track_slug,
+            level_slug: mockContentMetadata.level_slug,
+            module_slug: mockContentMetadata.module_slug,
+            content_slug: mockContentMetadata.content_slug,
+            skill_codes: skillCodes,
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              video_duration_seconds: video_duration_seconds || 0,
+              completion_percentage: 100
+            }
+          });
+
+          // Also emit the legacy event for backward compatibility
           await emitCurriculumVideoCompleted(
             userId,
             mockContentMetadata.track_slug,
@@ -61,6 +95,23 @@ export async function POST(
             mockContentMetadata.content_slug
           );
         } else if (mockContentMetadata.type === 'quiz' && quiz_score !== undefined) {
+          await emitCoachingEvent({
+            event_type: 'curriculum_quiz_completed',
+            track_slug: mockContentMetadata.track_slug,
+            level_slug: mockContentMetadata.level_slug,
+            module_slug: mockContentMetadata.module_slug,
+            content_slug: mockContentMetadata.content_slug,
+            skill_codes: skillCodes,
+            user_id: userId,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              quiz_score: quiz_score,
+              quiz_score_percentage: (quiz_score / 100) * 100, // Assuming score is out of 100
+              passed: quiz_score >= 70 // Assuming 70% is passing
+            }
+          });
+
+          // Also emit the legacy event for backward compatibility
           await emitCurriculumQuizCompleted(
             userId,
             mockContentMetadata.track_slug,
@@ -70,6 +121,26 @@ export async function POST(
             quiz_score
           );
         }
+      }
+    }
+
+    // Emit assessment completion events
+    if (content_id.includes('assessment') && status === 'completed') {
+      const mockContentMetadata = parseContentIdForMetadata(content_id);
+      if (mockContentMetadata) {
+        await emitCoachingEvent({
+          event_type: 'curriculum_assessment_completed',
+          track_slug: mockContentMetadata.track_slug,
+          level_slug: mockContentMetadata.level_slug,
+          assessment_slug: mockContentMetadata.content_slug,
+          skill_codes: getSkillCodesForContent(mockContentMetadata),
+          user_id: userId,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            assessment_type: 'level_assessment',
+            completion_score: quiz_score || 100
+          }
+        });
       }
     }
 
@@ -117,4 +188,54 @@ function parseContentIdForMetadata(contentId: string) {
   }
 
   return null;
+}
+
+/**
+ * Get skill codes associated with content based on track/module
+ * In production, this would be stored in the database with content metadata
+ */
+function getSkillCodesForContent(metadata: any): string[] {
+  const { track_slug, module_slug, type } = metadata;
+
+  // Skill code mappings by track and module
+  const skillMappings: Record<string, Record<string, string[]>> = {
+    defender: {
+      'log-analysis-fundamentals': ['log_parsing', 'event_analysis', 'security_monitoring'],
+      'siem-searching-basics': ['siem_queries', 'log_correlation', 'threat_detection'],
+      'alert-triage-intro': ['alert_analysis', 'threat_prioritization', 'incident_response']
+    },
+    grc: {
+      'grc-foundations': ['risk_assessment', 'compliance_basics', 'policy_understanding'],
+      'policies-and-standards-intro': ['policy_analysis', 'standards_compliance', 'governance_basics'],
+      'risk-assessment-basics': ['risk_identification', 'impact_analysis', 'control_evaluation']
+    },
+    innovation: {
+      'innovation-mindset-basics': ['problem_identification', 'creative_thinking', 'solution_design'],
+      'threat-research-basics': ['threat_intelligence', 'osint_analysis', 'trend_identification'],
+      'tool-prototyping-intro': ['rapid_prototyping', 'tool_development', 'user_testing']
+    },
+    leadership: {
+      'leadership-mindset-cyber': ['team_leadership', 'executive_communication', 'technical_management'],
+      'communication-security': ['stakeholder_communication', 'risk_explanation', 'crisis_communication'],
+      'team-dynamics-cyber': ['team_motivation', 'conflict_resolution', 'performance_management']
+    },
+    offensive: {
+      'recon-fundamentals': ['passive_recon', 'active_scanning', 'osint_collection'],
+      'port-scanning-nmap': ['network_scanning', 'service_enumeration', 'evasion_techniques'],
+      'web-recon-basics': ['web_fingerprinting', 'directory_enumeration', 'subdomain_discovery']
+    }
+  };
+
+  // Get skills for this track/module combination
+  const trackSkills = skillMappings[track_slug] || {};
+  const moduleSkills = trackSkills[module_slug] || [];
+
+  // Add type-specific skills
+  if (type === 'video') {
+    moduleSkills.push('video_learning', 'conceptual_understanding');
+  } else if (type === 'quiz') {
+    moduleSkills.push('knowledge_assessment', 'skill_validation');
+  }
+
+  return moduleSkills;
 }
