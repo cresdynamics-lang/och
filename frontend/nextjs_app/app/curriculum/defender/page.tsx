@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { useDefenderCurriculum, useDefenderProgress, useAuth } from '@/hooks/useCurriculum';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
+import Link from 'next/link';
+import { Users, Hash, MessageSquare } from 'lucide-react';
 
 const LEVEL_CONFIGS = {
   beginner: {
@@ -236,23 +238,80 @@ export default function DefenderTrackPage() {
             </Card>
           </div>
 
-          {/* Overall Progress Bar */}
-          {progress.length > 0 && (
-            <Card className="p-6 bg-slate-900/50 border-slate-700 mb-8">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-white">Track Progress</h3>
-                <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                  {totalProgress}% Complete
-                </Badge>
-              </div>
-              <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-400 via-green-400 to-blue-500 rounded-full transition-all duration-1000"
-                  style={{ width: `${totalProgress}%` }}
-                />
-              </div>
-            </Card>
-          )}
+        {/* Overall Progress Bar */}
+        {progress.length > 0 && (
+          <Card className="p-6 bg-slate-900/50 border-slate-700 mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold text-white">Track Progress</h3>
+              <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                {totalProgress}% Complete
+              </Badge>
+            </div>
+            <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-400 via-green-400 to-blue-500 rounded-full transition-all duration-1000"
+                style={{ width: `${totalProgress}%` }}
+              />
+            </div>
+          </Card>
+        )}
+
+        {/* Community Section */}
+        <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Users className="w-6 h-6 text-blue-400" />
+            <h3 className="text-lg font-semibold text-white">Community Support</h3>
+          </div>
+
+          <p className="text-slate-300 text-sm mb-4">
+            Connect with fellow Defender students, get help with missions, and share your learning journey.
+          </p>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <Link href="/community/spaces/defender-beginner">
+              <Card className="p-4 bg-slate-800/50 border-slate-600 hover:border-blue-400 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3 mb-2">
+                  <Hash className="w-5 h-5 text-blue-400" />
+                  <h4 className="text-white font-medium">Defender Beginner Space</h4>
+                </div>
+                <p className="text-slate-400 text-sm mb-3">
+                  Join discussions with fellow beginners learning cybersecurity defense.
+                </p>
+                <div className="flex items-center gap-4 text-xs text-slate-500">
+                  <span>1,250 members</span>
+                  <span>4 channels</span>
+                </div>
+              </Card>
+            </Link>
+
+            <Link href="/community/spaces/announcements">
+              <Card className="p-4 bg-slate-800/50 border-slate-600 hover:border-blue-400 transition-colors cursor-pointer">
+                <div className="flex items-center gap-3 mb-2">
+                  <MessageSquare className="w-5 h-5 text-orange-400" />
+                  <h4 className="text-white font-medium">Official Announcements</h4>
+                </div>
+                <p className="text-slate-400 text-sm mb-3">
+                  Stay updated with OCH news, updates, and important information.
+                </p>
+                <div className="flex items-center gap-4 text-xs text-slate-500">
+                  <span>5,000 members</span>
+                  <span>Global</span>
+                </div>
+              </Card>
+            </Link>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-sm">Need help with a specific topic?</span>
+              <Link href="/community">
+                <Button variant="outline" size="sm" className="text-blue-400 border-blue-400 hover:bg-blue-400 hover:text-white">
+                  Explore All Communities
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
         </div>
       </div>
 

@@ -1670,3 +1670,340 @@ class ModerationLog(models.Model):
     def __str__(self):
         return f"{self.action} by {self.moderator.email if self.moderator else 'System'}"
 
+
+# ============================================================================
+# DISCORD-STYLE COMMUNITY MODULE
+# ============================================================================
+
+class CommunitySpace(models.Model):
+    """
+    Community Space (Server equivalent) - bound to context like track/level/cohort
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.SlugField(unique=True, max_length=100, help_text='URL-friendly identifier')
+    title = models.CharField(max_length=255, help_text='Display title')
+    track_code = models.CharField(max_length=50, blank=True, null=True, help_text='Track code like defender, offensive')
+    level_slug = models.CharField(max_length=50, blank=True, null=True, help_text='Level slug like beginner, intermediate')
+    cohort_code = models.CharField(max_length=50, blank=True, null=True, help_text='Cohort identifier')
+    description = models.TextField(blank=True)
+    is_global = models.BooleanField(default=False, help_text='Global spaces like announcements')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'community_spaces'
+        verbose_name = 'Community Space'
+        verbose_name_plural = 'Community Spaces'
+        ordering = ['title']
+
+    def __str__(self):
+        return f"{self.title} ({self.slug})"
+
+
+class CommunityChannel(models.Model):
+    """
+    Channel within a space - topical areas like help, missions, recipes
+    """
+    CHANNEL_TYPES = [
+        ('text', 'Text Channel'),
+        ('announcement', 'Announcement Channel'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    space = models.ForeignKey(
+        CommunitySpace,
+        on_delete=models.CASCADE,
+        related_name='channels'
+    )
+    slug = models.SlugField(max_length=100, help_text='URL-friendly identifier')
+    title = models.CharField(max_length=255, help_text='Display title with # prefix')
+    description = models.TextField(blank=True)
+    channel_type = models.CharField(max_length=20, choices=CHANNEL_TYPES, default='text')
+    sort_order = models.IntegerField(default=0, help_text='Display order within space')
+    is_hidden = models.BooleanField(default=False, help_text='Hidden from regular users')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'community_channels'
+        verbose_name = 'Community Channel'
+        verbose_name_plural = 'Community Channels'
+        unique_together = [['space', 'slug']]
+        ordering = ['space', 'sort_order', 'title']
+
+    def __str__(self):
+        return f"{self.title}"
+
+
+class CommunityThread(models.Model):
+    """
+    Thread (conversation) within a channel - focused discussions
+    """
+    THREAD_TYPES = [
+        ('generic', 'Generic Discussion'),
+        ('mission', 'Mission Discussion'),
+        ('recipe', 'Recipe Discussion'),
+        ('module', 'Module Discussion'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    channel = models.ForeignKey(
+        CommunityChannel,
+        on_delete=models.CASCADE,
+        related_name='threads'
+    )
+    title = models.CharField(max_length=255)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='community_threads'
+    )
+    thread_type = models.CharField(max_length=20, choices=THREAD_TYPES, default='generic')
+
+    # Optional links to other entities
+    mission_id = models.UUIDField(blank=True, null=True, help_text='Linked mission UUID')
+    recipe_slug = models.CharField(max_length=255, blank=True, null=True, help_text='Linked recipe slug')
+    module_id = models.UUIDField(blank=True, null=True, help_text='Linked curriculum module UUID')
+
+    is_locked = models.BooleanField(default=False, help_text='Thread locked from new messages')
+    is_pinned = models.BooleanField(default=False, help_text='Pinned thread')
+    is_active = models.BooleanField(default=True)
+
+    message_count = models.IntegerField(default=0, help_text='Cached message count')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_message_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'community_threads'
+        verbose_name = 'Community Thread'
+        verbose_name_plural = 'Community Threads'
+        ordering = ['-last_message_at', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} ({self.channel.title})"
+
+
+class CommunityMessage(models.Model):
+    """
+    Individual message within a thread
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(
+        CommunityThread,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='community_messages'
+    )
+    body = models.TextField()
+
+    # Threading support
+    reply_to_message = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='replies'
+    )
+
+    # AI moderation
+    has_ai_flag = models.BooleanField(default=False, help_text='Flagged by AI moderation')
+    ai_flag_reason = models.TextField(blank=True, help_text='Reason for AI flag')
+    ai_confidence_score = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text='AI confidence score 0-1'
+    )
+
+    # Metadata
+    metadata = models.JSONField(default=dict, help_text='Additional message metadata')
+
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'community_messages'
+        verbose_name = 'Community Message'
+        verbose_name_plural = 'Community Messages'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.author.email}: {self.body[:50]}..."
+
+
+class CommunityMessageReaction(models.Model):
+    """
+    Emoji reactions on messages
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    message = models.ForeignKey(
+        CommunityMessage,
+        on_delete=models.CASCADE,
+        related_name='reactions'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='message_reactions'
+    )
+    emoji = models.CharField(max_length=50, help_text='Emoji character')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'community_message_reactions'
+        verbose_name = 'Message Reaction'
+        verbose_name_plural = 'Message Reactions'
+        unique_together = [['message', 'user', 'emoji']]
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.email} reacted {self.emoji} to message {self.message.id}"
+
+
+class CommunityRole(models.Model):
+    """
+    Community roles with permissions
+    """
+    ROLE_CHOICES = [
+        ('student', 'Student'),
+        ('student_mod', 'Student Moderator'),
+        ('mentor', 'Mentor'),
+        ('staff_admin', 'Staff Admin'),
+        ('employer_guest', 'Employer Guest'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=50, choices=ROLE_CHOICES, unique=True)
+    description = models.TextField(blank=True)
+
+    # Permissions
+    can_create_threads = models.BooleanField(default=True)
+    can_post_messages = models.BooleanField(default=True)
+    can_react_messages = models.BooleanField(default=True)
+    can_moderate = models.BooleanField(default=False, help_text='Can moderate content')
+    can_lock_threads = models.BooleanField(default=False)
+    can_pin_threads = models.BooleanField(default=False)
+    can_access_hidden_channels = models.BooleanField(default=False)
+    can_view_flagged_content = models.BooleanField(default=False)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'community_roles'
+        verbose_name = 'Community Role'
+        verbose_name_plural = 'Community Roles'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.get_name_display()
+
+
+class CommunitySpaceMember(models.Model):
+    """
+    Membership in community spaces with roles
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='community_memberships'
+    )
+    space = models.ForeignKey(
+        CommunitySpace,
+        on_delete=models.CASCADE,
+        related_name='members'
+    )
+    role = models.ForeignKey(
+        CommunityRole,
+        on_delete=models.CASCADE,
+        related_name='members'
+    )
+
+    joined_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'community_space_members'
+        verbose_name = 'Space Member'
+        verbose_name_plural = 'Space Members'
+        unique_together = [['user', 'space']]
+        ordering = ['joined_at']
+
+    def __str__(self):
+        return f"{self.user.email} in {self.space.title} ({self.role.name})"
+
+
+class CommunityModerationAction(models.Model):
+    """
+    Audit log of moderation actions
+    """
+    ACTION_TYPES = [
+        ('approve', 'Approve Flagged Content'),
+        ('edit', 'Edit Content'),
+        ('delete', 'Delete Content'),
+        ('warn', 'Warn User'),
+        ('ban', 'Ban User'),
+        ('lock_thread', 'Lock Thread'),
+        ('unlock_thread', 'Unlock Thread'),
+        ('pin_thread', 'Pin Thread'),
+        ('unpin_thread', 'Unpin Thread'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    moderator = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='moderation_actions'
+    )
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
+
+    # Target entities (one of these will be set)
+    message = models.ForeignKey(
+        CommunityMessage,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='moderation_actions'
+    )
+    thread = models.ForeignKey(
+        CommunityThread,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='moderation_actions'
+    )
+    target_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='moderation_actions_taken'
+    )
+
+    reason = models.TextField(help_text='Reason for moderation action')
+    notes = models.TextField(blank=True, help_text='Additional notes')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'community_moderation_actions'
+        verbose_name = 'Moderation Action'
+        verbose_name_plural = 'Moderation Actions'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.moderator.email} {self.action_type} on {self.created_at}"
+

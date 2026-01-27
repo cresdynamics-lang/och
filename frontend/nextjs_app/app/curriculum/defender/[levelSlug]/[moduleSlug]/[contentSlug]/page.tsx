@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
-import { useAuth, useContentProgress } from '@/hooks/useCurriculum';
+import { useAuth } from '@/hooks/useAuth';
+import { useContentProgress } from '@/hooks/useCurriculum';
 import { emitCurriculumVideoCompleted } from '@/lib/coaching-events';
 
 export default function VideoContentPage() {

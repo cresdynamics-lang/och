@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { useDefenderLevel, useAuth, useContentProgress } from '@/hooks/useCurriculum';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
+import Link from 'next/link';
+import { Users, Hash, MessageSquare, ExternalLink } from 'lucide-react';
 
 function ModuleAccordion({ module, levelSlug }: { module: any, levelSlug: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -308,6 +310,93 @@ export default function DefenderLevelPage() {
               levelSlug={levelSlug}
             />
           ))}
+        </div>
+
+        {/* Community Section */}
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-400" />
+            Community Resources
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Help Channel */}
+            <Card className="p-4 bg-slate-900/50 border-slate-700">
+              <div className="flex items-center gap-3 mb-3">
+                <Hash className="w-5 h-5 text-blue-400" />
+                <h3 className="text-white font-medium">#defender-{levelSlug}-help</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                Get help with {levelSlug} level concepts, missions, and challenges from mentors and peers.
+              </p>
+              <Link href={`/community/spaces/defender-${levelSlug}?channel=help`}>
+                <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Ask for Help
+                </Button>
+              </Link>
+            </Card>
+
+            {/* Mission Discussions */}
+            <Card className="p-4 bg-slate-900/50 border-slate-700">
+              <div className="flex items-center gap-3 mb-3">
+                <Hash className="w-5 h-5 text-green-400" />
+                <h3 className="text-white font-medium">#defender-{levelSlug}-missions</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                Discuss missions, share solutions, and learn from others' approaches to {levelSlug} challenges.
+              </p>
+              <Link href={`/community/spaces/defender-${levelSlug}?channel=missions`}>
+                <Button className="w-full bg-green-600 hover:bg-green-700">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Mission Discussions
+                </Button>
+              </Link>
+            </Card>
+
+            {/* Recipe Sharing */}
+            <Card className="p-4 bg-slate-900/50 border-slate-700">
+              <div className="flex items-center gap-3 mb-3">
+                <Hash className="w-5 h-5 text-purple-400" />
+                <h3 className="text-white font-medium">#defender-{levelSlug}-recipes</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                Share and discuss recipes, techniques, and best practices for {levelSlug} level work.
+              </p>
+              <Link href={`/community/spaces/defender-${levelSlug}?channel=recipes`}>
+                <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Recipe Discussions
+                </Button>
+              </Link>
+            </Card>
+
+            {/* General Chat */}
+            <Card className="p-4 bg-slate-900/50 border-slate-700">
+              <div className="flex items-center gap-3 mb-3">
+                <Hash className="w-5 h-5 text-slate-400" />
+                <h3 className="text-white font-medium">#defender-{levelSlug}-general</h3>
+              </div>
+              <p className="text-slate-400 text-sm mb-4">
+                Casual discussions, introductions, and general {levelSlug} level conversation.
+              </p>
+              <Link href={`/community/spaces/defender-${levelSlug}?channel=general`}>
+                <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:border-slate-500">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Join the Conversation
+                </Button>
+              </Link>
+            </Card>
+          </div>
+
+          <div className="mt-6 text-center">
+            <Link href="/community">
+              <Button variant="outline" className="text-blue-400 border-blue-400 hover:bg-blue-400 hover:text-white">
+                <Users className="w-4 h-4 mr-2" />
+                Explore All Communities
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Assessment Block */}
