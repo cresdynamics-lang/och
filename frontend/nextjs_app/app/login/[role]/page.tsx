@@ -230,8 +230,19 @@ function LoginForm() {
         }
       }
 
+      // Validate the final route
       if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/'))) {
+        console.warn('login: Invalid route generated, using fallback:', route);
         route = '/dashboard/student';
+      }
+
+      // Additional validation for dashboard routes
+      if (route.startsWith('/dashboard/')) {
+        const { isValidDashboardRoute, getFallbackRoute } = await import('@/utils/redirect');
+        if (!isValidDashboardRoute(route)) {
+          console.warn('login: Dashboard route validation failed, using fallback for user:', updatedUser?.id);
+          route = getFallbackRoute(updatedUser);
+        }
       }
 
       setIsRedirecting(true);

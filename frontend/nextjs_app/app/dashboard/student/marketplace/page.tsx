@@ -86,7 +86,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Cybersecurity',
               country: 'United States',
               logo_url: null,
-              description: 'Leading cybersecurity solutions provider'
+              description: 'Leading cybersecurity solutions provider',
+              user_id: 'mock-user-1',
+              created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+              updated_at: new Date(Date.now() - 86400000).toISOString()
             },
             subject: 'Interest in Your Profile',
             message: 'We are impressed with your cybersecurity skills and would like to discuss potential opportunities at our company. Your background in network security and incident response aligns well with our current openings.',
@@ -101,7 +104,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Information Security',
               country: 'Canada',
               logo_url: null,
-              description: 'Enterprise security consulting firm'
+              description: 'Enterprise security consulting firm',
+              user_id: 'mock-user-2',
+              created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
+              updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
             },
             subject: 'Junior Security Analyst Position',
             message: 'Your portfolio demonstrates strong foundational skills in cybersecurity. We have an opening for a Junior Security Analyst that matches your experience level and career goals.',
@@ -120,7 +126,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Cybersecurity',
               country: 'United States',
               logo_url: null,
-              description: 'Leading cybersecurity solutions provider'
+              description: 'Leading cybersecurity solutions provider',
+              user_id: 'mock-user-1',
+              created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+              updated_at: new Date(Date.now() - 86400000).toISOString()
             },
             subject: 'Interest in Your Profile',
             message: 'We are impressed with your cybersecurity skills and would like to discuss potential opportunities at our company. Your background in network security and incident response aligns well with our current openings.',
@@ -231,7 +240,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Cybersecurity',
               country: 'United States',
               logo_url: null,
-              description: 'Leading cybersecurity solutions provider'
+              description: 'Leading cybersecurity solutions provider',
+              user_id: 'mock-user-1',
+              created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+              updated_at: new Date(Date.now() - 86400000).toISOString()
             },
             title: 'Junior Security Analyst',
             description: 'We are looking for a motivated Junior Security Analyst to join our SOC team. You will monitor security systems, analyze threats, and respond to incidents in a fast-paced environment.',
@@ -255,7 +267,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Information Security',
               country: 'Canada',
               logo_url: null,
-              description: 'Enterprise security consulting firm'
+              description: 'Enterprise security consulting firm',
+              user_id: 'mock-user-2',
+              created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
+              updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
             },
             title: 'Cybersecurity Intern',
             description: 'Great opportunity for students to gain hands-on experience in cybersecurity. Work on real projects, learn from experienced professionals, and build your portfolio.',
@@ -279,7 +294,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Technology',
               country: 'United Kingdom',
               logo_url: null,
-              description: 'Innovative technology security company'
+              description: 'Innovative technology security company',
+              user_id: 'mock-user-3',
+              created_at: new Date(Date.now() - 86400000 * 60).toISOString(),
+              updated_at: new Date(Date.now() - 86400000 * 5).toISOString()
             },
             title: 'Threat Intelligence Analyst',
             description: 'Join our threat intelligence team to analyze cyber threats, create intelligence reports, and support our security operations center.',
@@ -320,7 +338,10 @@ export default function MarketplaceProfilePage() {
               sector: 'Cybersecurity',
               country: 'United States',
               logo_url: null,
-              description: 'Leading cybersecurity solutions provider'
+              description: 'Leading cybersecurity solutions provider',
+              user_id: 'mock-user-1',
+              created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+              updated_at: new Date(Date.now() - 86400000).toISOString()
             },
             title: 'Junior Security Analyst',
             description: 'We are looking for a motivated Junior Security Analyst to join our SOC team.',

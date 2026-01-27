@@ -23,24 +23,11 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-// import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
+import { useCurriculumTracks } from '@/hooks/useCurriculum';
 import Link from 'next/link';
 
-interface CurriculumTrack {
-  id: string;
-  slug: string;
-  title: string;
-  description: string;
-  thumbnail_url: string;
-  order_number: number;
-  levels_count: number;
-  total_duration_hours: number;
-  user_enrollment: {
-    enrolled: boolean;
-    current_level?: string;
-    progress_percent?: number;
-  };
-}
+// CurriculumTrack interface is now imported from useCurriculum hook
 
 // Track configurations
 const TRACK_CONFIGS = {
@@ -198,89 +185,15 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
 }
 
 export default function CurriculumHubPage() {
-  const [tracks, setTracks] = useState<CurriculumTrack[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tracks, loading, error } = useCurriculumTracks();
   const [recommendedTrack, setRecommendedTrack] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadTracks = async () => {
-      try {
-        // For now, use mock data. Replace with actual API call
-        const mockTracks: CurriculumTrack[] = [
-          {
-            id: 'defender-track',
-            slug: 'defender',
-            title: 'Defender Track',
-            description: 'Master cybersecurity defense from fundamentals to advanced threat hunting',
-            thumbnail_url: 'https://placeholder.com/defender.jpg',
-            order_number: 1,
-            levels_count: 4,
-            total_duration_hours: 48,
-            user_enrollment: {
-              enrolled: true,
-              current_level: 'beginner',
-              progress_percent: 75
-            }
-          },
-          {
-            id: 'offensive-track',
-            slug: 'offensive',
-            title: 'Offensive Security Track',
-            description: 'Master penetration testing and red team operations',
-            thumbnail_url: 'https://placeholder.com/offensive.jpg',
-            order_number: 2,
-            levels_count: 4,
-            total_duration_hours: 50,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'grc-track',
-            slug: 'grc',
-            title: 'Governance, Risk & Compliance Track',
-            description: 'Master GRC frameworks and compliance management',
-            thumbnail_url: 'https://placeholder.com/grc.jpg',
-            order_number: 3,
-            levels_count: 4,
-            total_duration_hours: 40,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'innovation-track',
-            slug: 'innovation',
-            title: 'Innovation & Cloud Security Track',
-            description: 'Master cloud security and innovative security solutions',
-            thumbnail_url: 'https://placeholder.com/innovation.jpg',
-            order_number: 4,
-            levels_count: 4,
-            total_duration_hours: 48,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'leadership-track',
-            slug: 'leadership',
-            title: 'Cyber Leadership Track',
-            description: 'Develop executive cybersecurity leadership skills',
-            thumbnail_url: 'https://placeholder.com/leadership.jpg',
-            order_number: 5,
-            levels_count: 4,
-            total_duration_hours: 56,
-            user_enrollment: { enrolled: false }
-          }
-        ];
-
-        setTracks(mockTracks);
-
-        // Mock recommended track logic
-        setRecommendedTrack('defender');
-      } catch (error) {
-        console.error('Failed to load tracks:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTracks();
-  }, []);
+    // Set recommended track based on available tracks
+    if (tracks.length > 0) {
+      setRecommendedTrack('defender'); // Always recommend defender for now
+    }
+  }, [tracks]);
 
   // All tracks are freely available
   const enrolledTracks = tracks.filter(track => track.user_enrollment.enrolled);
@@ -292,6 +205,17 @@ export default function CurriculumHubPage() {
         <div className="text-center">
           <BookOpen className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-pulse" />
           <p className="text-slate-400">Loading Curriculum Hub...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-400 mb-4">Failed to load curriculum tracks</div>
+          <p className="text-slate-400 text-sm">{error}</p>
         </div>
       </div>
     );

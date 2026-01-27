@@ -177,11 +177,39 @@ export function middleware(request: NextRequest) {
   if (hasToken && pathname.startsWith('/dashboard') && roles.length > 0) {
     // Redirect /dashboard to role home
     if (pathname === '/dashboard' || pathname === '/dashboard/') {
+      console.log('middleware: Redirecting /dashboard to role home:', home);
       return NextResponse.redirect(new URL(home, request.url));
     }
 
     if (!canAccess(pathname, roles)) {
+      console.log('middleware: Access denied to', pathname, 'for roles:', roles, '- redirecting to home:', home);
       return NextResponse.redirect(new URL(home, request.url));
+    }
+  }
+
+  // Additional validation: ensure role-specific dashboards exist
+  if (hasToken && pathname.startsWith('/dashboard/') && roles.length > 0) {
+    const roleFromPath = pathname.split('/')[2]; // Extract role from /dashboard/{role}/...
+    if (roleFromPath) {
+      // Map path role to actual roles
+      const pathRoleMapping: Record<string, string[]> = {
+        'director': ['program_director'],
+        'admin': ['admin'],
+        'mentor': ['mentor'],
+        'sponsor': ['sponsor_admin'],
+        'analyst': ['analyst'],
+        'analytics': ['analyst', 'program_director'],
+        'employer': ['employer'],
+        'marketplace': ['employer'],
+        'finance': ['finance', 'finance_admin'],
+        'student': ['student', 'mentee']
+      };
+
+      const allowedRoles = pathRoleMapping[roleFromPath];
+      if (allowedRoles && !allowedRoles.some(role => roles.includes(role))) {
+        console.log('middleware: User with roles', roles, 'trying to access', pathname, '- redirecting to their home dashboard:', home);
+        return NextResponse.redirect(new URL(home, request.url));
+      }
     }
   }
 
