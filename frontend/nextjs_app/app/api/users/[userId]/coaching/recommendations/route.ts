@@ -26,9 +26,9 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const trackSlug = searchParams.get('track_slug') || 'defender';
 
-    if (trackSlug !== 'defender') {
+    if (trackSlug !== 'defender' && trackSlug !== 'grc') {
       return NextResponse.json(
-        { error: 'Only defender track recommendations are currently supported' },
+        { error: 'Only defender and GRC track recommendations are currently supported' },
         { status: 400 }
       );
     }
