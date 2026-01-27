@@ -2,14 +2,13 @@
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { ChevronLeft, Play, CheckCircle, Clock, BookOpen, Target, ChevronDown, ChevronRight, FileText, Award, MessageSquare } from 'lucide-react';
+import { ChevronLeft, Play, CheckCircle, Clock, BookOpen, Target, ChevronDown, ChevronRight, FileText, Award } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { useDefenderLevel, useAuth, useContentProgress } from '@/hooks/useCurriculum';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
-import Link from 'next/link';
 import { Users, Hash, MessageSquare, ExternalLink } from 'lucide-react';
 
 function ModuleAccordion({ module, levelSlug }: { module: any, levelSlug: string }) {

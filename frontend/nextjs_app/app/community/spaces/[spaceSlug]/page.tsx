@@ -360,7 +360,7 @@ export default function CommunitySpacePage() {
       const response = await fetch(`/api/community/threads/${selectedThreadId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body, reply_to_message_id: reply_to_message_id: replyToId })
+        body: JSON.stringify({ body, reply_to_message_id: replyToId })
       });
 
       if (!response.ok) throw new Error('Failed to send message');

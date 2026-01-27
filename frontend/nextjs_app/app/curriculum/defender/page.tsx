@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
 import { useDefenderCurriculum, useDefenderProgress, useAuth } from '@/hooks/useCurriculum';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
-import Link from 'next/link';
 import { Users, Hash, MessageSquare } from 'lucide-react';
 
 const LEVEL_CONFIGS = {
