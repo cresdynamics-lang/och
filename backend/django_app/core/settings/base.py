@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'mentorship_coordination',
     'programs',
     'sponsor_dashboard',
+    'sponsors',
     'director_dashboard',
     'talentscope',
     'marketplace',
