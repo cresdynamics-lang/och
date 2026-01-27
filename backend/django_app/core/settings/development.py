@@ -29,6 +29,14 @@ INSTALLED_APPS = INSTALLED_APPS + [
     'django_extensions',  # Optional: for enhanced shell, etc.
 ]
 
+# Use SQLite for development (easier setup)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
 # Logging configuration for development
 LOGGING = {
     'version': 1,

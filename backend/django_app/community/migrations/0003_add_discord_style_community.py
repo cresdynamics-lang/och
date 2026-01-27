@@ -6,6 +6,25 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def create_community_models(apps, schema_editor):
+    """Create community models if they don't exist."""
+    db_engine = schema_editor.connection.vendor
+
+    # Skip for SQLite since tables might already exist
+    if db_engine == 'sqlite':
+        print("⚠️ Skipping community model creation for SQLite (tables may already exist)")
+        return
+
+    # For PostgreSQL, create the models normally
+    # (Django will handle this automatically)
+
+
+def remove_community_models(apps, schema_editor):
+    """Remove community models."""
+    # This will be handled automatically by Django's reverse migrations
+    pass
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
