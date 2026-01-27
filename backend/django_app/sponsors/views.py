@@ -3,10 +3,12 @@ Views for the Sponsors app.
 Provides dashboard data and management endpoints for sponsors.
 """
 import json
+from datetime import datetime
 from django.shortcuts import get_object_or_404
 from django.db import models
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from django.http import StreamingHttpResponse
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,8 +17,11 @@ from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 
 from .models import Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics
-from .services import SponsorAIService
+from . import services as sponsor_services
 from .services.cohorts_service import SponsorCohortsService
+from .services.finance_service import FinanceDataService
+from .services.payment_service import PaymentService
+from .permissions import IsSponsorUser, IsSponsorAdmin, check_sponsor_access, check_sponsor_admin_access
 from .export_service import SponsorExportService
 from .audit_service import SponsorAuditService
 from .serializers import (
@@ -173,7 +178,7 @@ class SponsorDashboardView(APIView):
     def _get_top_talent(self, cohort):
         """Get top 25 students by readiness score"""
         # Get AI insights including readiness scores
-        ai_insights = SponsorAIService.get_dashboard_ai_insights(cohort)
+        ai_insights = sponsor_services.SponsorAIService.get_dashboard_ai_insights(cohort)
         readiness_scores = ai_insights['readiness_scores']
 
         # Convert to expected format and get top 25
@@ -237,7 +242,7 @@ class SponsorDashboardView(APIView):
     def _get_ai_alerts(self, cohort):
         """Get AI-generated alerts and recommendations"""
         # Get AI insights including alerts
-        ai_insights = SponsorAIService.get_dashboard_ai_insights(cohort)
+        ai_insights = sponsor_services.SponsorAIService.get_dashboard_ai_insights(cohort)
 
         # Format alerts for dashboard
         alerts = []
@@ -614,3 +619,386 @@ class CohortAIInterventionView(APIView):
             return Response({
                 'error': f'Failed to deploy interventions: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SponsorFinanceOverviewView(APIView):
+    """
+    GET /api/sponsors/[slug]/finance
+    Get comprehensive financial overview for a sponsor
+    """
+    permission_classes = [IsSponsorUser]
+
+    def get(self, request, slug):
+        sponsor = check_sponsor_access(request.user, slug)
+        finance_data = FinanceDataService.get_finance_overview(sponsor)
+
+        return Response(finance_data)
+
+
+class SponsorCohortBillingView(APIView):
+    """
+    GET /api/sponsors/[slug]/cohorts/[cohortId]/billing
+    Get detailed billing information for a cohort
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug, cohort_id):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+        cohort = get_object_or_404(
+            SponsorCohort,
+            id=cohort_id,
+            sponsor=sponsor
+        )
+
+        # TODO: Add sponsor access control
+        billing_data = FinanceDataService.get_cohort_billing_detail(cohort)
+
+        return Response(billing_data)
+
+
+class GenerateInvoiceView(APIView):
+    """
+    POST /api/sponsors/[slug]/invoices
+    Generate invoice for sponsor or specific cohort
+    """
+    permission_classes = [IsSponsorAdmin]
+
+    def post(self, request, slug):
+        sponsor = check_sponsor_admin_access(request.user, slug)
+
+        cohort_id = request.data.get('cohort_id')
+        billing_month_str = request.data.get('billing_month')
+
+        billing_month = None
+        if billing_month_str:
+            try:
+                billing_month = datetime.fromisoformat(billing_month_str).date()
+            except ValueError:
+                return Response({
+                    'error': 'Invalid billing_month format. Use YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invoice_data = FinanceDataService.generate_invoice(sponsor, cohort_id, billing_month)
+
+            # Log invoice generation
+            SponsorAuditService.log_cohort_action(
+                request.user, None, 'invoice_generated',
+                {'cohort_id': cohort_id, 'billing_month': billing_month_str}
+            )
+
+            return Response(invoice_data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'error': f'Failed to generate invoice: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MarkPaymentView(APIView):
+    """
+    POST /api/sponsors/[slug]/payments
+    Mark a billing record as paid
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor admin permission check
+
+        billing_record_id = request.data.get('billing_record_id')
+        payment_date_str = request.data.get('payment_date')
+
+        if not billing_record_id:
+            return Response({
+                'error': 'billing_record_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_date = None
+        if payment_date_str:
+            try:
+                payment_date = datetime.fromisoformat(payment_date_str)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid payment_date format. Use ISO format'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment_data = FinanceDataService.mark_payment(sponsor, billing_record_id, payment_date)
+
+            # Log payment
+            SponsorAuditService.log_cohort_action(
+                request.user, None, 'payment_marked',
+                {'billing_record_id': billing_record_id, 'amount': payment_data['amount_paid']}
+            )
+
+            return Response(payment_data)
+
+        except ValueError as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to mark payment: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PaymentSummaryView(APIView):
+    """
+    GET /api/sponsors/[slug]/payments/summary
+    Get payment summary for a sponsor
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor access control
+        summary = PaymentService.get_payment_summary(sponsor)
+
+        return Response(summary)
+
+
+class ProcessPaymentView(APIView):
+    """
+    POST /api/sponsors/[slug]/payments/process
+    Process a payment for a billing record
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor admin permission check
+
+        billing_record_id = request.data.get('billing_record_id')
+        payment_amount = request.data.get('amount')
+        payment_method = request.data.get('payment_method', 'bank_transfer')
+        payment_date_str = request.data.get('payment_date')
+
+        if not billing_record_id or not payment_amount:
+            return Response({
+                'error': 'billing_record_id and amount are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment_amount = float(payment_amount)
+        except (ValueError, TypeError):
+            return Response({
+                'error': 'Invalid payment amount'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        payment_date = None
+        if payment_date_str:
+            try:
+                payment_date = datetime.fromisoformat(payment_date_str)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid payment_date format. Use ISO format'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get billing record
+        try:
+            billing_record = get_object_or_404(
+                SponsorCohortBilling,
+                id=billing_record_id,
+                sponsor_cohort__sponsor=sponsor
+            )
+        except:
+            return Response({
+                'error': 'Billing record not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            payment_result = PaymentService.process_payment(
+                sponsor, billing_record, payment_amount, payment_date, payment_method
+            )
+
+            # Log payment
+            SponsorAuditService.log_cohort_action(
+                request.user, billing_record.sponsor_cohort, 'payment_processed',
+                {'amount': payment_amount, 'method': payment_method}
+            )
+
+            return Response(payment_result)
+
+        except ValueError as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'error': f'Failed to process payment: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ProcessRevenueSharePaymentView(APIView):
+    """
+    POST /api/sponsors/[slug]/revenue-share/[id]/pay
+    Mark a revenue share payment as paid
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, slug, revenue_share_id):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor admin permission check
+
+        payment_date_str = request.data.get('payment_date')
+
+        payment_date = None
+        if payment_date_str:
+            try:
+                payment_date = datetime.fromisoformat(payment_date_str)
+            except ValueError:
+                return Response({
+                    'error': 'Invalid payment_date format. Use ISO format'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get revenue share record
+        try:
+            from .models import RevenueShareTracking
+            revenue_share = get_object_or_404(
+                RevenueShareTracking,
+                id=revenue_share_id,
+                sponsor=sponsor
+            )
+        except:
+            return Response({
+                'error': 'Revenue share record not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            payment_result = PaymentService.process_revenue_share_payment(
+                revenue_share, payment_date
+            )
+
+            # Log payment
+            SponsorAuditService.log_cohort_action(
+                request.user, revenue_share.cohort, 'revenue_share_paid',
+                {'amount': float(revenue_share.revenue_share_3pct)}
+            )
+
+            return Response(payment_result)
+
+        except Exception as e:
+            return Response({
+                'error': f'Failed to process revenue share payment: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PaymentTermsView(APIView):
+    """
+    GET /api/sponsors/[slug]/payment-terms
+    POST /api/sponsors/[slug]/payment-terms
+    Get or update payment terms configuration
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor access control
+        # For now, return default terms
+        terms = {
+            'payment_terms_days': 30,
+            'auto_reminders': True,
+            'preferred_currency': 'KES',
+            'payment_methods': ['bank_transfer', 'mpesa', 'card'],
+            'late_payment_fee': 0.02  # 2% per month
+        }
+
+        return Response(terms)
+
+    def post(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor admin permission check
+
+        try:
+            terms_result = PaymentService.configure_payment_terms(sponsor, request.data)
+
+            # Log terms update
+            SponsorAuditService.log_cohort_action(
+                request.user, None, 'payment_terms_updated',
+                request.data
+            )
+
+            return Response(terms_result)
+
+        except Exception as e:
+            return Response({
+                'error': f'Failed to update payment terms: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FinanceRealtimeView(APIView):
+    """
+    GET /api/sponsors/[slug]/finance/stream
+    Server-Sent Events endpoint for real-time financial updates
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, slug):
+        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+
+        # TODO: Add sponsor access control
+
+        def event_stream():
+            # Send initial connection confirmation
+            yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'sponsor': sponsor.name})}\n\n"
+
+            # Monitor for financial updates (simplified - in production use Django Channels or similar)
+            last_update = datetime.now()
+
+            while True:
+                current_time = datetime.now()
+
+                # Check for new billing records
+                from .models import SponsorCohortBilling, SponsorFinancialTransaction
+                new_billing = SponsorCohortBilling.objects.filter(
+                    sponsor_cohort__sponsor=sponsor,
+                    created_at__gt=last_update
+                ).exists()
+
+                # Check for new transactions
+                new_transactions = SponsorFinancialTransaction.objects.filter(
+                    sponsor=sponsor,
+                    created_at__gt=last_update
+                ).exists()
+
+                # Check for payment status changes
+                payment_changes = SponsorCohortBilling.objects.filter(
+                    sponsor_cohort__sponsor=sponsor,
+                    updated_at__gt=last_update
+                ).exists()
+
+                if new_billing or new_transactions or payment_changes:
+                    # Send update notification
+                    yield f"event: finance_update\ndata: {json.dumps({'type': 'data_changed', 'timestamp': current_time.isoformat()})}\n\n"
+                    last_update = current_time
+
+                # Check for overdue payments
+                overdue_count = SponsorCohortBilling.objects.filter(
+                    sponsor_cohort__sponsor=sponsor,
+                    payment_status='overdue'
+                ).count()
+
+                yield f"event: overdue_alert\ndata: {json.dumps({'overdue_count': overdue_count})}\n\n"
+
+                # Wait before next check (30 seconds)
+                import time
+                time.sleep(30)
+
+        response = StreamingHttpResponse(
+            event_stream(),
+            content_type='text/event-stream'
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['Connection'] = 'keep-alive'
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Headers'] = 'Cache-Control'
+
+        return response

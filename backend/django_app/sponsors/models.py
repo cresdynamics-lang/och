@@ -3,6 +3,7 @@ Sponsor models for Ongóza Cyber Hub.
 Manages sponsors, cohorts, and student enrollments for enterprise partnerships.
 """
 import uuid
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -353,3 +354,283 @@ class SponsorIntervention(models.Model):
 
     def __str__(self):
         return f"{self.intervention_type} for {self.sponsor_cohort.name}"
+
+
+class SponsorFinancialTransaction(models.Model):
+    """
+    Financial transactions for sponsors including fees, revenue share, and adjustments.
+    """
+    TRANSACTION_TYPES = [
+        ('platform_fee', 'Platform Fee'),
+        ('mentor_fee', 'Mentor Fee'),
+        ('lab_cost', 'Lab Cost'),
+        ('scholarship', 'Scholarship'),
+        ('revenue_share', 'Revenue Share'),
+        ('refund', 'Refund'),
+        ('adjustment', 'Adjustment'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('invoiced', 'Invoiced'),
+        ('paid', 'Paid'),
+        ('refunded', 'Refunded'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor = models.ForeignKey(
+        Sponsor,
+        on_delete=models.CASCADE,
+        related_name='financial_transactions'
+    )
+    cohort = models.ForeignKey(
+        SponsorCohort,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='financial_transactions'
+    )
+
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TRANSACTION_TYPES,
+        help_text='Type of financial transaction'
+    )
+    description = models.TextField(help_text='Detailed transaction description')
+
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='Transaction amount (positive = income, negative = expense)'
+    )
+    currency = models.CharField(
+        max_length=3,
+        default='KES',
+        help_text='Currency code (KES, USD, etc.)'
+    )
+
+    # Billing period
+    period_start = models.DateField(null=True, blank=True, help_text='Start date of billing period')
+    period_end = models.DateField(null=True, blank=True, help_text='End date of billing period')
+
+    # Status and documents
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text='Transaction status'
+    )
+    invoice_url = models.URLField(null=True, blank=True, help_text='Generated invoice PDF URL')
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sponsor_financial_transactions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['sponsor', 'status']),
+            models.Index(fields=['cohort', 'transaction_type']),
+            models.Index(fields=['period_start', 'period_end']),
+            models.Index(fields=['transaction_type', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.sponsor.name} - {self.transaction_type} - {self.amount} {self.currency}"
+
+
+class SponsorCohortBilling(models.Model):
+    """
+    Monthly billing summary for sponsor cohorts.
+    Auto-generated monthly with platform costs, mentor costs, and revenue share.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor_cohort = models.ForeignKey(
+        SponsorCohort,
+        on_delete=models.CASCADE,
+        related_name='billing_records'
+    )
+
+    # Billing period
+    billing_month = models.DateField(help_text='Month being billed (YYYY-MM-01)')
+
+    # Activity metrics
+    students_active = models.IntegerField(default=0, help_text='Number of active students this month')
+    mentor_sessions = models.IntegerField(default=0, help_text='Number of mentor sessions this month')
+    lab_usage_hours = models.IntegerField(default=0, help_text='Lab usage hours this month')
+    hires = models.IntegerField(default=0, help_text='Number of hires this month')
+
+    # Cost breakdown (KES)
+    platform_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Platform fee (students_active × 20,000 KES)'
+    )
+    mentor_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Mentor fees (mentor_sessions × 7,000 KES)'
+    )
+    lab_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Lab costs (lab_usage_hours × 200 KES)'
+    )
+    scholarship_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Scholarship costs allocated this month'
+    )
+
+    # Revenue
+    revenue_share_kes = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Revenue share from hires (3% of first year salaries)'
+    )
+
+    # Calculated totals
+    total_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Total costs (platform + mentor + lab + scholarship)'
+    )
+    net_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text='Net amount due (total_cost - revenue_share)'
+    )
+
+    # ROI calculation
+    net_roi = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Return on investment ratio'
+    )
+
+    # Payment status
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('invoiced', 'Invoiced'),
+            ('paid', 'Paid'),
+            ('overdue', 'Overdue'),
+        ],
+        default='pending',
+        help_text='Payment status'
+    )
+    payment_date = models.DateTimeField(null=True, blank=True, help_text='Date payment was received')
+    invoice_generated = models.BooleanField(default=False, help_text='Whether invoice PDF has been generated')
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sponsor_cohort_billing'
+        unique_together = ['sponsor_cohort', 'billing_month']
+        ordering = ['-billing_month']
+        indexes = [
+            models.Index(fields=['sponsor_cohort', 'billing_month']),
+            models.Index(fields=['billing_month', 'payment_status']),
+            models.Index(fields=['payment_status']),
+        ]
+
+    def __str__(self):
+        return f"{self.sponsor_cohort.name} - {self.billing_month.strftime('%Y-%m')}"
+
+    def calculate_totals(self):
+        """Calculate total costs and net amount"""
+        self.total_cost = self.platform_cost + self.mentor_cost + self.lab_cost + self.scholarship_cost
+        self.net_amount = self.total_cost - self.revenue_share_kes
+        self.save(update_fields=['total_cost', 'net_amount'])
+
+
+class RevenueShareTracking(models.Model):
+    """
+    Revenue share tracking for sponsor hires (3% of first year salaries).
+    """
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor = models.ForeignKey(
+        Sponsor,
+        on_delete=models.CASCADE,
+        related_name='revenue_shares'
+    )
+    cohort = models.ForeignKey(
+        SponsorCohort,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revenue_shares'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='revenue_shares'
+    )
+
+    # Employment details
+    employer_name = models.CharField(max_length=255, help_text='Company that hired the student')
+    role_title = models.CharField(max_length=255, help_text='Job title/role')
+    first_year_salary_kes = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='Annual first year salary in KES'
+    )
+
+    # Revenue share calculation (3%)
+    revenue_share_3pct = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text='OCH revenue share (3% of first year salary)',
+        editable=False
+    )
+
+    # Payment tracking
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='pending',
+        help_text='Payment status of revenue share'
+    )
+    paid_date = models.DateTimeField(null=True, blank=True, help_text='Date revenue share was paid to sponsor')
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'revenue_share_tracking'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['sponsor', 'payment_status']),
+            models.Index(fields=['cohort', 'created_at']),
+            models.Index(fields=['employer_name']),
+            models.Index(fields=['payment_status', 'paid_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.student.get_full_name()} → {self.employer_name} ({self.first_year_salary_kes} KES)"
+
+    def save(self, *args, **kwargs):
+        # Auto-calculate revenue share
+        if not self.revenue_share_3pct:
+            self.revenue_share_3pct = self.first_year_salary_kes * Decimal('0.03')
+        super().save(*args, **kwargs)

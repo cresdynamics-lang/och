@@ -113,7 +113,7 @@ export function StudentRoster({ students, cohortId, sponsorSlug }: StudentRoster
       case 'withdrawn': return 'bg-red-500/20 text-red-400';
       default: return 'bg-slate-500/20 text-slate-400';
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -177,7 +177,7 @@ export function StudentRoster({ students, cohortId, sponsorSlug }: StudentRoster
             <option value="excellent">Excellent (90+)</option>
             <option value="strong">Strong (80-89)</option>
             <option value="good">Good (70-79)</option>
-            <option value="developing">Developing (<70)</option>
+            <option value="developing">Developing (&lt;70)</option>
           </select>
         </div>
       </Card>

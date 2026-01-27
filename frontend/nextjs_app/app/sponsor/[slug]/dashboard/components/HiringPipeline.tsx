@@ -9,7 +9,8 @@ import {
   Users,
   Target,
   CheckCircle,
-  ArrowRight
+  ArrowRight,
+  MessageSquare
 } from 'lucide-react';
 
 interface HiringPipelineProps {

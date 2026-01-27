@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { CohortStatusBadge, getTrackColor } from '../../components/CohortStatusBadge';
+import { CohortStatusBadge, getTrackColor } from '../../../cohorts/components/CohortStatusBadge';
 import { StudentRoster } from '../components/StudentRoster';
 import { CohortAIAlerts } from '../components/CohortAIAlerts';
 import {

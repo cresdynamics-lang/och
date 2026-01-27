@@ -7,7 +7,7 @@ import io
 from datetime import datetime
 from django.http import HttpResponse
 from .models import Sponsor, SponsorCohort
-from .services import SponsorAIService
+from . import services as sponsor_services
 
 # Optional imports for PDF/PPTX generation
 try:
@@ -35,7 +35,7 @@ class SponsorExportService:
     def generate_csv_export(sponsor: Sponsor, cohort: SponsorCohort) -> HttpResponse:
         """Generate CSV export of dashboard data"""
         # Get dashboard data
-        ai_insights = SponsorAIService.get_dashboard_ai_insights(cohort)
+        ai_insights = sponsor_services.SponsorAIService.get_dashboard_ai_insights(cohort)
 
         # Create CSV response
         response = HttpResponse(content_type='text/csv')
@@ -110,7 +110,7 @@ class SponsorExportService:
 
         # Executive Summary
         story.append(Paragraph("Executive Summary", styles['Heading2']))
-        ai_insights = SponsorAIService.get_dashboard_ai_insights(cohort)
+        ai_insights = sponsor_services.SponsorAIService.get_dashboard_ai_insights(cohort)
 
         summary_data = [
             ['Metric', 'Value'],
@@ -210,7 +210,7 @@ class SponsorExportService:
         title_shape.text = 'Top Talent'
         tf = body_shape.text_frame
 
-        ai_insights = SponsorAIService.get_dashboard_ai_insights(cohort)
+        ai_insights = sponsor_services.SponsorAIService.get_dashboard_ai_insights(cohort)
         for talent in ai_insights['readiness_scores'][:5]:
             p = tf.add_paragraph()
             p.text = f"#{talent['cohort_rank']}: {talent['student_name']} - {talent['readiness_score']} readiness"

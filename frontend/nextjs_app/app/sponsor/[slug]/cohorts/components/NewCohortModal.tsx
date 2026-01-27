@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { DialogHeader } from '@/components/ui/dialog';
 import { TRACK_COLORS } from './CohortStatusBadge';
 import {
   Calendar,
@@ -117,11 +117,14 @@ export function NewCohortModal({ isOpen, onClose, onCreateCohort, sponsorSlug }:
   const selectedTrack = TRACK_OPTIONS.find(t => t.slug === formData.track_slug);
   const trackColors = TRACK_COLORS[formData.track_slug as keyof typeof TRACK_COLORS];
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create New Cohort</DialogTitle>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-white">Create New Cohort</h2>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
@@ -332,6 +335,7 @@ export function NewCohortModal({ isOpen, onClose, onCreateCohort, sponsorSlug }:
           </Button>
         </div>
       </form>
-    </Modal>
+      </div>
+    </div>
   );
 }

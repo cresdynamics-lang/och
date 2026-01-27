@@ -267,6 +267,14 @@ export default function SponsorDashboardPage() {
               </Button>
               <Button
                 variant="outline"
+                onClick={() => router.push(`/sponsor/${slug}/finance`)}
+                className="text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+              >
+                <DollarSign className="w-4 h-4 mr-2" />
+                Finance
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => router.push(`/sponsor/${slug}/cohorts`)}
                 className="text-slate-400 border-slate-600 hover:text-white"
               >

@@ -358,7 +358,7 @@ export function CohortsSidebar({
         <div className="flex gap-2">
           <Button
             size="sm"
-            variant={sortBy === 'status' ? 'default' : 'outline'}
+            variant={sortBy === 'status' ? 'defender' : 'outline'}
             onClick={() => handleSort('status')}
             className="flex-1 text-xs"
           >
@@ -366,7 +366,7 @@ export function CohortsSidebar({
           </Button>
           <Button
             size="sm"
-            variant={sortBy === 'completion' ? 'default' : 'outline'}
+            variant={sortBy === 'completion' ? 'defender' : 'outline'}
             onClick={() => handleSort('completion')}
             className="flex-1 text-xs"
           >
