@@ -336,3 +336,106 @@ class StudentMissionProgress(models.Model):
     
     def __str__(self):
         return f"Progress: {self.user.email} - {self.mission.title} ({self.status})"
+
+
+class UserNotification(models.Model):
+    """
+    User notifications for control center feed.
+    Aggregates notifications from AI Coach, mentors, missions, curriculum, community.
+    """
+    NOTIFICATION_TYPES = [
+        ('ai_coach', 'AI Coach'),
+        ('mentor_message', 'Mentor Message'),
+        ('mission_due', 'Mission Due'),
+        ('quiz_ready', 'Quiz Ready'),
+        ('video_next', 'Next Video'),
+        ('community_mention', 'Community Mention'),
+        ('track_progress', 'Track Progress'),
+        ('assessment_blocked', 'Assessment Blocked'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        db_index=True
+    )
+    title = models.CharField(max_length=255, help_text='Notification title')
+    body = models.TextField(help_text='Notification body/content')
+    type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        help_text='Type of notification'
+    )
+    track_slug = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text='Related track slug (defender, grc, etc.)'
+    )
+    level_slug = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text='Related level slug (beginner, intermediate, etc.)'
+    )
+    source_id = models.UUIDField(
+        null=True,
+        blank=True,
+        help_text='Source object ID (mission_id, message_id, etc.)'
+    )
+    action_url = models.URLField(
+        blank=True,
+        null=True,
+        help_text='URL to navigate to when clicked'
+    )
+    priority = models.IntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text='Priority 1=highest, 5=lowest'
+    )
+    is_read = models.BooleanField(default=False, db_index=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Auto-dismiss after this date'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_notifications'
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=['user', 'priority']),
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['user', 'type']),
+            models.Index(fields=['expires_at']),
+            models.Index(fields=['dismissed_at']),
+        ]
+        ordering = ['-priority', '-created_at']
+
+    def __str__(self):
+        return f"Notification: {self.user.email} - {self.title} ({self.type})"
+
+    @property
+    def is_expired(self):
+        """Check if notification has expired"""
+        return self.expires_at and timezone.now() > self.expires_at
+
+    @property
+    def is_dismissed(self):
+        """Check if notification has been dismissed"""
+        return self.dismissed_at is not None
+
+    def mark_read(self):
+        """Mark notification as read"""
+        self.is_read = True
+        self.save(update_fields=['is_read', 'updated_at'])
+
+    def dismiss(self):
+        """Dismiss notification"""
+        self.dismissed_at = timezone.now()
+        self.save(update_fields=['dismissed_at', 'updated_at'])
