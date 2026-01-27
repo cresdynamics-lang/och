@@ -171,6 +171,17 @@ export function useCurriculumTracks() {
             levels_count: 4,
             total_duration_hours: 56,
             user_enrollment: { enrolled: false }
+          },
+          {
+            id: 'offensive-track',
+            slug: 'offensive',
+            title: 'Offensive Security Track',
+            description: 'Master penetration testing, red teaming, and adversary emulation',
+            thumbnail_url: 'https://placeholder.com/offensive.jpg',
+            order_number: 6,
+            levels_count: 4,
+            total_duration_hours: 50,
+            user_enrollment: { enrolled: false }
           }
         ];
 

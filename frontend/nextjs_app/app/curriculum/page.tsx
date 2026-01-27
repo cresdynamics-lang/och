@@ -70,6 +70,14 @@ const TRACK_CONFIGS = {
     borderColor: 'border-amber-500/30',
     textColor: 'text-amber-400',
     bgColor: 'bg-amber-500/20'
+  },
+  offensive: {
+    icon: Target,
+    color: 'orange',
+    gradient: 'from-orange-500/20 via-red-600/10 to-slate-900/30',
+    borderColor: 'border-orange-500/30',
+    textColor: 'text-orange-400',
+    bgColor: 'bg-orange-500/20'
   }
 };
 
