@@ -179,7 +179,7 @@ export async function POST(
 
     return NextResponse.json({
       message: newMessage,
-      message: 'Message posted successfully'
+      status: 'Message posted successfully'
     }, { status: 201 });
 
   } catch (error: any) {

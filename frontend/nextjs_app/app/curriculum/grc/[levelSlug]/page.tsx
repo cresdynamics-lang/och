@@ -290,7 +290,7 @@ function ModuleAccordion({ module, levelSlug }: { module: any, levelSlug: string
 
                   <Button
                     size="sm"
-                    variant={item.completed ? "outline" : "default"}
+                    variant={item.completed ? "outline" : "defender"}
                     className={item.completed ? "border-emerald-500 text-emerald-400" : "bg-emerald-600 hover:bg-emerald-700"}
                   >
                     {item.completed ? 'Review' : 'Start'}

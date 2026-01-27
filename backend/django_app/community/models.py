@@ -1043,9 +1043,9 @@ class Channel(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
-        db_table = 'community_channels'
+        db_table = 'university_channels'
         unique_together = ['university', 'slug']
         ordering = ['-member_count', 'name']
         indexes = [
@@ -1966,7 +1966,7 @@ class CommunityModerationAction(models.Model):
     moderator = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='moderation_actions'
+        related_name='community_moderation_actions'
     )
     action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
 

@@ -318,12 +318,17 @@ export default function AIProfilerPage() {
 
         // Initialize mock module progress
         const mockModuleProgress: ModuleProgress = {
-          identity_value: { answered: 0, total: 1 },
-          cyber_aptitude: { answered: 0, total: 1 },
-          technical_exposure: { answered: 0, total: 1 },
-          scenario_preference: { answered: 0, total: 1 },
-          work_style: { answered: 0, total: 1 },
-          difficulty_selection: { answered: 0, total: 1 }
+          modules: {
+            identity_value: { answered: 0, total: 1, completed: false },
+            cyber_aptitude: { answered: 0, total: 1, completed: false },
+            technical_exposure: { answered: 0, total: 1, completed: false },
+            scenario_preference: { answered: 0, total: 1, completed: false },
+            work_style: { answered: 0, total: 1, completed: false },
+            difficulty_selection: { answered: 0, total: 1, completed: false }
+          },
+          current_module: null,
+          completed_modules: [],
+          remaining_modules: ['identity_value', 'cyber_aptitude', 'technical_exposure', 'scenario_preference', 'work_style', 'difficulty_selection']
         }
         setModuleProgress(mockModuleProgress)
 
@@ -401,12 +406,17 @@ export default function AIProfilerPage() {
 
         // Initialize mock module progress
         const mockModuleProgress: ModuleProgress = {
-          identity_value: { answered: 0, total: 1 },
-          cyber_aptitude: { answered: 0, total: 1 },
-          technical_exposure: { answered: 0, total: 1 },
-          scenario_preference: { answered: 0, total: 1 },
-          work_style: { answered: 0, total: 1 },
-          difficulty_selection: { answered: 0, total: 1 }
+          modules: {
+            identity_value: { answered: 0, total: 1, completed: false },
+            cyber_aptitude: { answered: 0, total: 1, completed: false },
+            technical_exposure: { answered: 0, total: 1, completed: false },
+            scenario_preference: { answered: 0, total: 1, completed: false },
+            work_style: { answered: 0, total: 1, completed: false },
+            difficulty_selection: { answered: 0, total: 1, completed: false }
+          },
+          current_module: null,
+          completed_modules: [],
+          remaining_modules: ['identity_value', 'cyber_aptitude', 'technical_exposure', 'scenario_preference', 'work_style', 'difficulty_selection']
         }
         setModuleProgress(mockModuleProgress)
 

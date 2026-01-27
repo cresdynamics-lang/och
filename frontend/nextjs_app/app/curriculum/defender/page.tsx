@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
-import { useDefenderCurriculum, useDefenderProgress, useAuth } from '@/hooks/useCurriculum';
+import { useDefenderCurriculum, useDefenderProgress } from '@/hooks/useCurriculum';
+import { useAuth } from '@/hooks/useAuth';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
 import { AICoachRecommendations } from '@/components/coaching/AICoachRecommendations';
 import { Users, Hash, MessageSquare } from 'lucide-react';
@@ -150,7 +151,7 @@ function LevelCard({ level, progress }: { level: any, progress?: any }) {
 export default function DefenderTrackPage() {
   const { data: levels, loading, error } = useDefenderCurriculum();
   const { user } = useAuth();
-  const { progress } = useDefenderProgress(user?.id);
+  const { progress } = useDefenderProgress(user?.id?.toString());
 
   if (loading) {
     return (

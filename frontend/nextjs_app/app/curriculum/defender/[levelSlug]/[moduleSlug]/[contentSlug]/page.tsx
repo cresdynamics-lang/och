@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, Play, CheckCircle, Clock, Volume2, Settings, Maximize } from 'lucide-react';
+import { ChevronLeft, Play, CheckCircle, Clock, Volume2, Settings, Maximize, Target } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -19,7 +19,7 @@ export default function VideoContentPage() {
   const contentSlug = params.contentSlug as string;
 
   const { user } = useAuth();
-  const { updateProgress, updating } = useContentProgress(user?.id);
+  const { updateProgress, updating } = useContentProgress(user?.id?.toString());
 
   const [isCompleted, setIsCompleted] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
@@ -51,7 +51,7 @@ export default function VideoContentPage() {
       // Emit coaching event
       if (user?.id) {
         await emitCurriculumVideoCompleted(
-          user.id,
+          user.id.toString(),
           'defender',
           levelSlug,
           moduleSlug,
@@ -168,13 +168,13 @@ export default function VideoContentPage() {
                       <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button size="sm" variant="secondary" className="bg-slate-800/80 hover:bg-slate-700">
+                      <Button size="sm" variant="ghost" className="bg-slate-800/80 hover:bg-slate-700">
                         <Volume2 className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="secondary" className="bg-slate-800/80 hover:bg-slate-700">
+                      <Button size="sm" variant="ghost" className="bg-slate-800/80 hover:bg-slate-700">
                         <Settings className="w-4 h-4" />
                       </Button>
-                      <Button size="sm" variant="secondary" className="bg-slate-800/80 hover:bg-slate-700">
+                      <Button size="sm" variant="ghost" className="bg-slate-800/80 hover:bg-slate-700">
                         <Maximize className="w-4 h-4" />
                       </Button>
                     </div>

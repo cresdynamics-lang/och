@@ -72,15 +72,14 @@ export async function POST(
 
         if (mockContentMetadata.type === 'video') {
           await emitCoachingEvent({
-            event_type: 'curriculum_video_completed',
-            track_slug: mockContentMetadata.track_slug,
-            level_slug: mockContentMetadata.level_slug,
-            module_slug: mockContentMetadata.module_slug,
-            content_slug: mockContentMetadata.content_slug,
-            skill_codes: skillCodes,
             user_id: userId,
-            timestamp: new Date().toISOString(),
-            metadata: {
+            event_type: 'curriculum_video_completed',
+            payload: {
+              track_slug: mockContentMetadata.track_slug,
+              level_slug: mockContentMetadata.level_slug,
+              module_slug: mockContentMetadata.module_slug,
+              content_slug: mockContentMetadata.content_slug,
+              skill_codes: skillCodes,
               video_duration_seconds: video_duration_seconds || 0,
               completion_percentage: 100
             }
@@ -96,15 +95,14 @@ export async function POST(
           );
         } else if (mockContentMetadata.type === 'quiz' && quiz_score !== undefined) {
           await emitCoachingEvent({
-            event_type: 'curriculum_quiz_completed',
-            track_slug: mockContentMetadata.track_slug,
-            level_slug: mockContentMetadata.level_slug,
-            module_slug: mockContentMetadata.module_slug,
-            content_slug: mockContentMetadata.content_slug,
-            skill_codes: skillCodes,
             user_id: userId,
-            timestamp: new Date().toISOString(),
-            metadata: {
+            event_type: 'curriculum_quiz_completed',
+            payload: {
+              track_slug: mockContentMetadata.track_slug,
+              level_slug: mockContentMetadata.level_slug,
+              module_slug: mockContentMetadata.module_slug,
+              content_slug: mockContentMetadata.content_slug,
+              skill_codes: skillCodes,
               quiz_score: quiz_score,
               quiz_score_percentage: (quiz_score / 100) * 100, // Assuming score is out of 100
               passed: quiz_score >= 70 // Assuming 70% is passing
@@ -129,14 +127,13 @@ export async function POST(
       const mockContentMetadata = parseContentIdForMetadata(content_id);
       if (mockContentMetadata) {
         await emitCoachingEvent({
-          event_type: 'curriculum_assessment_completed',
-          track_slug: mockContentMetadata.track_slug,
-          level_slug: mockContentMetadata.level_slug,
-          assessment_slug: mockContentMetadata.content_slug,
-          skill_codes: getSkillCodesForContent(mockContentMetadata),
           user_id: userId,
-          timestamp: new Date().toISOString(),
-          metadata: {
+          event_type: 'curriculum_assessment_completed',
+          payload: {
+            track_slug: mockContentMetadata.track_slug,
+            level_slug: mockContentMetadata.level_slug,
+            assessment_slug: mockContentMetadata.content_slug,
+            skill_codes: getSkillCodesForContent(mockContentMetadata),
             assessment_type: 'level_assessment',
             completion_score: quiz_score || 100
           }

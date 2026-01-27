@@ -333,7 +333,8 @@ function generateCrossTrackRecommendations(userProgress: any): RecommendationAct
   }
 
   // If user struggles with technical concepts, recommend leadership communication
-  if (Math.max(...Object.values(userProgress.quiz_scores)) < 80) {
+  const quizScores = Object.values(userProgress.quiz_scores) as number[];
+  if (quizScores.length > 0 && Math.max(...quizScores) < 80) {
     recommendations.push({
       type: 'video',
       track_slug: 'leadership',
