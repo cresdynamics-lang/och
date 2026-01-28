@@ -1,77 +1,39 @@
 import { NextRequest } from 'next/server';
 
-// Mock real-time event generator
-// In production, this would connect to a message queue or WebSocket system
-
 export async function GET(
   request: NextRequest,
   { params }: { params: { userId: string } }
 ) {
   const userId = params.userId;
 
-  // Create a ReadableStream for Server-Sent Events
+  if (!userId) {
+    return new Response('User ID required', { status: 400 });
+  }
+
+  // Create a Server-Sent Events stream
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial connection confirmation
-      const encoder = new TextEncoder();
-      controller.enqueue(encoder.encode('data: {"type": "connected", "user_id": "' + userId + '"}\n\n'));
+      // Send initial connection message
+      const data = {
+        type: 'connected',
+        message: 'Control center stream connected',
+        timestamp: new Date().toISOString()
+      };
 
-      // Mock real-time events (in production, this would listen to a message queue)
-      const eventInterval = setInterval(() => {
-        // Randomly send different types of events
-        const events = [
-          {
-            type: 'notification_new',
-            data: {
-              id: `notif-${Date.now()}`,
-              title: 'AI Coach: New Recommendation Available',
-              body: 'Check out the latest personalized learning suggestions.',
-              type: 'ai_coach',
-              priority: 3,
-              is_read: false,
-              created_at: new Date().toISOString()
-            }
-          },
-          {
-            type: 'next_actions_updated',
-            data: [
-              {
-                id: 'action-' + Date.now(),
-                type: 'video',
-                title: 'Updated Video Recommendation',
-                subtitle: 'New content based on your progress',
-                priority: 2,
-                action_url: '/curriculum/defender',
-                reason: 'Fresh recommendation from AI Coach'
-              }
-            ]
-          },
-          {
-            type: 'summary_updated',
-            data: {
-              tracks_active: 2,
-              missions_due_24h: 1,
-              unread_mentor_messages: 4,
-              ai_recommendations: 6
-            }
-          }
-        ];
+      controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
 
-        // Send a random event (in production, this would be triggered by actual events)
-        const randomEvent = events[Math.floor(Math.random() * events.length)];
+      // Set up periodic heartbeat to keep connection alive
+      const heartbeat = setInterval(() => {
+        const heartbeatData = {
+          type: 'heartbeat',
+          timestamp: new Date().toISOString()
+        };
+        controller.enqueue(`data: ${JSON.stringify(heartbeatData)}\n\n`);
+      }, 30000); // 30 seconds
 
-        try {
-          controller.enqueue(encoder.encode(`event: ${randomEvent.type}\n`));
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(randomEvent.data)}\n\n`));
-        } catch (error) {
-          // Connection might be closed
-          clearInterval(eventInterval);
-        }
-      }, 30000); // Send event every 30 seconds
-
-      // Handle client disconnect
+      // Clean up on connection close
       request.signal.addEventListener('abort', () => {
-        clearInterval(eventInterval);
+        clearInterval(heartbeat);
         controller.close();
       });
     }

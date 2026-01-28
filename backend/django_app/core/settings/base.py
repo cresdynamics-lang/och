@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'dashboard',
     'subscriptions',
     'mentorship_coordination',
+    'mentors',
     'programs',
     'sponsor_dashboard',
     'sponsors',

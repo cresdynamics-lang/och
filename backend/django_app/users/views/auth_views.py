@@ -59,30 +59,67 @@ def _get_client_ip(request):
     return ip
 
 
-def _assign_default_student_role(user):
+def _assign_user_role(user, role_name='student'):
     """
-    Assign default 'Student' role to new user during onboarding.
+    Assign specified role to new user during onboarding.
+    Defaults to 'student' if role not specified or invalid.
     """
     from users.models import Role, UserRole
-    
+
+    # Map role names to ensure valid roles
+    role_mapping = {
+        'student': 'student',
+        'mentee': 'student',  # mentee maps to student role
+        'mentor': 'mentor',
+        'admin': 'admin',
+        'program_director': 'program_director',
+        'director': 'program_director',  # director maps to program_director
+        'sponsor': 'sponsor_admin',
+        'sponsor_admin': 'sponsor_admin',
+        'employer': 'employer',
+        'analyst': 'analyst',
+        'finance': 'finance',
+    }
+
+    # Get the mapped role name, default to student
+    mapped_role = role_mapping.get(role_name, 'student')
+
     try:
-        student_role = Role.objects.get(name='student')
+        role = Role.objects.get(name=mapped_role)
     except Role.DoesNotExist:
-        # Create student role if it doesn't exist
-        student_role = Role.objects.create(
-            name='student',
-            display_name='Student',
-            description='Primary user role for students in the OCH ecosystem',
-            is_system_role=True
-        )
-    
-    # Assign role with global scope
+        # Create role if it doesn't exist (fallback for student)
+        if mapped_role == 'student':
+            role = Role.objects.create(
+                name='student',
+                display_name='Student',
+                description='Primary user role for students in the OCH ecosystem',
+                is_system_role=True
+            )
+        else:
+            # For other roles, default to student if role doesn't exist
+            print(f'Warning: Role {mapped_role} not found, assigning student role')
+            role = Role.objects.get_or_create(
+                name='student',
+                defaults={
+                    'display_name': 'Student',
+                    'description': 'Primary user role for students in the OCH ecosystem',
+                    'is_system_role': True
+                }
+            )[0]
+
     UserRole.objects.get_or_create(
         user=user,
-        role=student_role,
+        role=role,
         scope='global',
         defaults={'is_active': True}
     )
+
+    print(f'Assigned role {role.name} to user {user.email}')
+
+# Backward compatibility
+def _assign_default_student_role(user):
+    """Legacy function - now uses _assign_user_role"""
+    _assign_user_role(user, 'student')
 
 
 def _log_audit_event(user, action, resource_type, result='success', metadata=None):
@@ -142,9 +179,10 @@ class SignupView(APIView):
             user.set_unusable_password()
             user.account_status = 'pending_verification'
             user.save()
-            
-            # Assign default "Student" role
-            _assign_default_student_role(user)
+
+            # Assign role based on signup data (defaults to student)
+            requested_role = data.get('role', 'student')
+            _assign_user_role(user, requested_role)
             
             # Send magic link
             code, mfa_code = create_mfa_code(user, method='magic_link', expires_minutes=10)
@@ -181,10 +219,11 @@ class SignupView(APIView):
                 career_goals=data.get('career_goals'),
                 cyber_exposure_level=data.get('cyber_exposure_level'),
             )
-            
-            # Assign default "Student" role
-            _assign_default_student_role(user)
-            
+
+            # Assign role based on signup data (defaults to student)
+            requested_role = data.get('role', 'student')
+            _assign_user_role(user, requested_role)
+
             # If invited (has cohort_id/track_key), activate immediately
             if data.get('cohort_id') or data.get('track_key'):
                 user.activate()

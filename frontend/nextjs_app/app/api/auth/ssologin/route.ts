@@ -42,7 +42,7 @@ function getDashboardForRole(role: string | null): string {
   switch (role) {
     case 'admin': return '/dashboard/admin'
     case 'program_director': return '/dashboard/director'
-    case 'mentor': return '/dashboard/mentor'
+    case 'mentor': return '/mentor/dashboard'
     case 'analyst': return '/dashboard/analyst'
     case 'sponsor_admin': return '/dashboard/sponsor'
     case 'employer': return '/dashboard/employer'

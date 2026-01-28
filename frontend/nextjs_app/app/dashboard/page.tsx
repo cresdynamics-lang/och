@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSE } from '@/hooks/useSSE';
+import type { NotificationItem } from '@/lib/control-center';
 import {
   Target,
   Bell,
@@ -27,9 +28,8 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { NextActionsSection } from '@/components/dashboard/NextActionsSection';
 import { NotificationsFeed } from '@/components/dashboard/NotificationsFeed';
-import type { ControlCenterData, NotificationItem } from '@/lib/control-center';
+import type { ControlCenterData } from '@/lib/control-center';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -78,16 +78,6 @@ export default function DashboardPage() {
           });
           break;
 
-        case 'next_actions_updated':
-          // Update next actions
-          setControlCenterData(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              next_actions: event.data
-            };
-          });
-          break;
 
         case 'summary_updated':
           // Update summary stats
@@ -158,7 +148,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Target className="w-12 h-12 text-blue-400 mx-auto mb-4 animate-pulse" />
-          <p className="text-slate-400">Loading your Control Center...</p>
+          <p className="text-slate-400">Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -178,7 +168,7 @@ export default function DashboardPage() {
     );
   }
 
-  const { next_actions, notifications, summary } = controlCenterData;
+  const { notifications, summary } = controlCenterData;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -192,9 +182,9 @@ export default function DashboardPage() {
                 <Target className="w-12 h-12 text-blue-400" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-white mb-2">🏆 Control Center</h1>
+                <h1 className="text-3xl font-bold text-white mb-2">🏆 Dashboard</h1>
                 <p className="text-slate-300 text-lg leading-relaxed">
-                  Your single source of truth for learning progress and priorities
+                  Welcome back! Here's your learning overview and recent activity
                 </p>
               </div>
             </div>
@@ -250,20 +240,75 @@ export default function DashboardPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        {/* Next Actions Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-2">🎯 Next Actions</h2>
-              <p className="text-slate-400">Your top priorities to advance your learning</p>
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 hover:border-blue-500/40 transition-colors cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-500/20 rounded-lg">
+                <BookOpen className="w-6 h-6 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-1">Continue Learning</h3>
+                <p className="text-slate-300 text-sm">Pick up where you left off in your tracks</p>
+              </div>
             </div>
-            <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              {next_actions.length} actions
-            </Badge>
-          </div>
+          </Card>
 
-          <NextActionsSection actions={next_actions} />
+          <Card className="p-6 bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 hover:border-green-500/40 transition-colors cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-500/20 rounded-lg">
+                <Target className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-1">View Missions</h3>
+                <p className="text-slate-300 text-sm">Check your active tasks and deadlines</p>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 hover:border-purple-500/40 transition-colors cursor-pointer">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-500/20 rounded-lg">
+                <Trophy className="w-6 h-6 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-1">Track Progress</h3>
+                <p className="text-slate-300 text-sm">Monitor your achievements and certificates</p>
+              </div>
+            </div>
+          </Card>
         </div>
+
+        {/* Recent Activity */}
+        <Card className="p-6 bg-slate-900/50 border border-slate-700/50 mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <Clock className="w-5 h-5 text-slate-400" />
+            <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <CheckCircle className="w-4 h-4 text-green-400" />
+              <div className="flex-1">
+                <p className="text-white text-sm">Completed log analysis fundamentals</p>
+                <p className="text-slate-400 text-xs">2 hours ago</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <Play className="w-4 h-4 text-blue-400" />
+              <div className="flex-1">
+                <p className="text-white text-sm">Started SIEM searching basics</p>
+                <p className="text-slate-400 text-xs">4 hours ago</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
+              <MessageSquare className="w-4 h-4 text-orange-400" />
+              <div className="flex-1">
+                <p className="text-white text-sm">New message from mentor</p>
+                <p className="text-slate-400 text-xs">6 hours ago</p>
+              </div>
+            </div>
+          </div>
+        </Card>
 
         {/* Notifications Feed */}
         <div>

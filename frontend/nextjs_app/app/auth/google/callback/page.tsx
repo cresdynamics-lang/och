@@ -29,6 +29,9 @@ function GoogleOAuthCallbackPageInner() {
         const state = searchParams.get('state')
         const errorParam = searchParams.get('error')
 
+        console.log('[OAuth Callback] URL parameters:', { code: code?.substring(0, 20) + '...', state, error: errorParam })
+        console.log('[OAuth Callback] Full URL:', window.location.href)
+
         // Handle OAuth errors from Google
         if (errorParam) {
           setStatus('error')
@@ -52,12 +55,21 @@ function GoogleOAuthCallbackPageInner() {
           : 'Unknown Device'
 
         // Exchange code for tokens and create/activate account
+        console.log('[OAuth Callback] Sending callback request:', {
+          code: code.substring(0, 20) + '...',
+          state,
+          device_fingerprint: deviceFingerprint,
+          device_name: deviceName
+        })
+
         const response = await googleOAuthClient.callback({
           code,
           state,
           device_fingerprint: deviceFingerprint,
           device_name: deviceName,
         })
+
+        console.log('[OAuth Callback] Backend response:', response)
 
         // Store tokens in localStorage
         if (response.access_token) {

@@ -19,7 +19,7 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
   const getLoginRouteForPath = (path: string) => {
     if (path.startsWith('/dashboard/director')) return '/login/director'
     if (path.startsWith('/dashboard/admin')) return '/login/admin'
-    if (path.startsWith('/dashboard/mentor')) return '/login/mentor'
+    if (path.startsWith('/mentor/dashboard')) return '/login/mentor'
     if (path.startsWith('/dashboard/sponsor')) return '/login/sponsor'
     if (path.startsWith('/dashboard/analyst') || path.startsWith('/dashboard/analytics')) return '/login/analyst'
     if (path.startsWith('/dashboard/employer') || path.startsWith('/dashboard/marketplace')) return '/login/employer'

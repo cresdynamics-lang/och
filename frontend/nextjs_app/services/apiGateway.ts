@@ -103,6 +103,8 @@ async function apiGatewayRequest<T>(
   const baseUrl = getBaseUrl(path);
   const fullUrl = `${baseUrl}${path}`;
 
+  console.log('[apiGateway] Path:', path);
+  console.log('[apiGateway] Base URL:', baseUrl);
   console.log('[apiGateway] Making request to:', fullUrl);
   console.log('[apiGateway] Params:', options.params);
 

@@ -24,6 +24,36 @@ CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if 
     'http://localhost:3000', 'http://127.0.0.1:3000'
 ]
 
+# CORS settings for development
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',  # In case Next.js runs on different port
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOWED_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
 # Development-specific settings
 INSTALLED_APPS = INSTALLED_APPS + [
     'django_extensions',  # Optional: for enhanced shell, etc.
@@ -36,6 +66,9 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# Use console backend for email testing in development
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Logging configuration for development
 LOGGING = {
