@@ -6,7 +6,7 @@ import AnalystClient from './analyst-client'
 export default function AnalystDashboard() {
   return (
     <RouteGuard>
-      <AnalystClient />
+      <AnalystClient userId="current-user" />
     </RouteGuard>
   )
 }

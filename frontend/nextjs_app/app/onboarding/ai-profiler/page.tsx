@@ -619,6 +619,7 @@ export default function AIProfilerPage() {
         const transformedResult: ProfilingResult = {
           user_id: resultResponse.user_id || 'unknown',
           session_id: resultResponse.session_id,
+          recommendations: resultResponse.recommendations || [],
           primary_track: resultResponse.primary_track || {
             key: 'defender',
             name: 'Cybersecurity Defender',

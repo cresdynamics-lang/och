@@ -173,3 +173,72 @@ p {
   }
 }
 
+/* Print Styles for SOC Reports */
+@media print {
+  * {
+    background: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  .analyst-workstation {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 20pt !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .sidebar,
+  .mobile-bottom-nav,
+  .progress-shelf {
+    display: none !important;
+  }
+
+  .main {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    gap: 20pt !important;
+    padding: 20pt !important;
+    overflow: visible !important;
+  }
+
+  h1, h2, h3 {
+    color: black !important;
+    page-break-after: avoid;
+  }
+
+  .task-card,
+  .alert-card,
+  .metric-card {
+    border: 1px solid #000 !important;
+    margin-bottom: 10pt;
+    page-break-inside: avoid;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th, td {
+    border: 1px solid #000;
+    padding: 8pt;
+    text-align: left;
+  }
+
+  @page {
+    margin: 1in;
+    size: letter;
+  }
+}
+
