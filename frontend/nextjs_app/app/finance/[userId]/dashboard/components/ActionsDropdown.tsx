@@ -164,7 +164,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
   const handleInvoiceSubmit = async (invoiceData: any) => {
     try {
       const result = await createInvoice(invoiceData);
-      setCompletedActions(prev => new Set([...prev, 'new-invoice']));
+      setCompletedActions(prev => new Set([...Array.from(prev), 'new-invoice']));
       showSuccessMessage(`Invoice ${result.invoice.id} created successfully for ${invoiceData.client}!`);
     } catch (error) {
       showErrorMessage('Invoice creation failed. Please try again.');
@@ -180,7 +180,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
       onClick: async () => {
         try {
           await exportCSV();
-          setCompletedActions(prev => new Set([...prev, 'csv-export']));
+          setCompletedActions(prev => new Set([...Array.from(prev), 'csv-export']));
           showSuccessMessage('CSV export completed successfully!');
         } catch (error) {
           showErrorMessage('CSV export failed. Please try again.');
@@ -195,7 +195,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
       onClick: async () => {
         try {
           await exportPDF();
-          setCompletedActions(prev => new Set([...prev, 'pdf-report']));
+          setCompletedActions(prev => new Set([...Array.from(prev), 'pdf-report']));
           showSuccessMessage('PDF report downloaded successfully!');
         } catch (error) {
           showErrorMessage('PDF report failed. Please try again.');
@@ -210,7 +210,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
       onClick: async () => {
         try {
           const result = await sendReminders();
-          setCompletedActions(prev => new Set([...prev, 'reminders']));
+          setCompletedActions(prev => new Set([...Array.from(prev), 'reminders']));
           showSuccessMessage(`${result.count} payment reminders sent successfully!`);
         } catch (error) {
           showErrorMessage('Payment reminders failed. Please try again.');
@@ -234,7 +234,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
       onClick: async () => {
         try {
           await generatePLStatement();
-          setCompletedActions(prev => new Set([...prev, 'pl-statement']));
+          setCompletedActions(prev => new Set([...Array.from(prev), 'pl-statement']));
           showSuccessMessage('P&L statement downloaded successfully!');
         } catch (error) {
           showErrorMessage('P&L statement failed. Please try again.');
@@ -249,7 +249,7 @@ export const ActionsDropdown = ({ isActive, userId }: ActionsDropdownProps) => {
       onClick: async () => {
         try {
           const result = await reconcileAccounts();
-          setCompletedActions(prev => new Set([...prev, 'reconcile']));
+          setCompletedActions(prev => new Set([...Array.from(prev), 'reconcile']));
           showSuccessMessage(`Bank reconciliation completed! ${result.reconciliation.transactionsReconciled} transactions reconciled.`);
         } catch (error) {
           showErrorMessage('Bank reconciliation failed. Please try again.');
