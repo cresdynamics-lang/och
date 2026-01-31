@@ -282,7 +282,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='enrollment',
-            constraint=models.CheckConstraint(condition=models.Q(('payment_status', 'paid'), ('status', 'pending_payment'), _negated=True), name='pending_payment_requires_pending_payment_status'),
+            constraint=models.CheckConstraint(check=models.Q(('payment_status', 'paid'), ('status', 'pending_payment'), _negated=True), name='pending_payment_requires_pending_payment_status'),
         ),
         migrations.AlterUniqueTogether(
             name='enrollment',

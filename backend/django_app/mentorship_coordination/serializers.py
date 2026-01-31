@@ -187,21 +187,21 @@ class CreateGroupSessionSerializer(serializers.Serializer):
             formats_to_try.append(('%Y-%m-%d %H:%M', clean_value.replace('T', ' ')))
         
         # Try all formats
-            for fmt, val in formats_to_try:
-                try:
-                    dt = datetime.strptime(val, fmt)
+        for fmt, val in formats_to_try:
+            try:
+                dt = datetime.strptime(val, fmt)
                 # Make timezone-aware (assume UTC if no timezone info)
-                    if django_timezone.is_naive(dt):
-                        dt = django_timezone.make_aware(dt, dt_timezone.utc)
-                    return dt
-                except ValueError:
-                    continue
-            
-            # If all parsing attempts failed
-            raise serializers.ValidationError(
-                f"Invalid datetime format: '{original_value}'. "
+                if django_timezone.is_naive(dt):
+                    dt = django_timezone.make_aware(dt, dt_timezone.utc)
+                return dt
+            except ValueError:
+                continue
+        
+        # If all parsing attempts failed
+        raise serializers.ValidationError(
+            f"Invalid datetime format: '{original_value}'. "
             f"Expected ISO 8601 format (e.g., '2026-02-02T06:00:00Z', '2026-02-02T06:00:00.000Z', or '2026-02-02T06:00')."
-            )
+        )
 
 
 class MissionReviewSerializer(serializers.Serializer):
@@ -293,6 +293,23 @@ class MentorshipMessageSerializer(serializers.ModelSerializer):
     attachments = MessageAttachmentSerializer(many=True, read_only=True)
     
     def get_sender_name(self, obj):
+        if not obj.sender:
+            return ''
+        try:
+            # Try get_full_name() if it exists, otherwise use first_name + last_name or email
+            if hasattr(obj.sender, 'get_full_name'):
+                name = obj.sender.get_full_name()
+                if name:
+                    return name
+            # Fallback to first_name + last_name
+            if hasattr(obj.sender, 'first_name') and hasattr(obj.sender, 'last_name'):
+                full_name = f"{obj.sender.first_name} {obj.sender.last_name}".strip()
+                if full_name:
+                    return full_name
+            # Final fallback to email
+            return obj.sender.email or ''
+        except Exception:
+            return obj.sender.email or ''
         if not obj.sender:
             return ''
         try:

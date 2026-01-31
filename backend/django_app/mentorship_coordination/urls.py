@@ -25,6 +25,8 @@ from .views import (
     get_student_mentor,
     get_mentorship_assignment,
     get_mentor_assignments,
+    mentor_assignments_list,
+    mentor_assigned_cohorts,
     messages_endpoint,
     mark_message_read,
     send_notification,
@@ -37,6 +39,8 @@ app_name = 'mentorship_coordination'
 urlpatterns = [
     # CRITICAL: More specific patterns MUST come first to avoid conflicts
     # The order matters - Django matches patterns in order
+    path('mentor-assignments/', mentor_assignments_list, name='mentor-assignments-list'),
+    path('mentors/<int:mentor_id>/cohorts', mentor_assigned_cohorts, name='mentor-assigned-cohorts'),
     path('mentors/<int:mentor_id>/mentees/<int:mentee_id>/talentscope/', mentor_mentee_talentscope, name='mentor-mentee-talentscope'),
     path('mentors/<int:mentor_id>/mentees/<int:mentee_id>/talentscope', mentor_mentee_talentscope, name='mentor-mentee-talentscope-no-slash'),
     path('mentors/<int:mentor_id>/missions/cohorts', mentor_cohort_missions, name='mentor-cohort-missions'),

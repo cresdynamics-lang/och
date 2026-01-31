@@ -3,6 +3,7 @@ Community module signals for updating stats, triggering notifications,
 and cache invalidation for performance optimization.
 """
 import logging
+from typing import Optional
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import F
@@ -72,7 +73,7 @@ def update_badge_stats(sender, instance, created, **kwargs):
 # AUTO-MAPPING WORKFLOW: Map students to universities by email
 # ============================================================
 
-def extract_email_domain(email: str) -> str | None:
+def extract_email_domain(email: str) -> Optional[str]:
     """Extract domain from email address."""
     if not email or '@' not in email:
         return None
@@ -94,7 +95,7 @@ def find_university_by_domain(domain: str):
         return None, None
 
 
-def auto_map_user_to_university(user: User) -> UniversityMembership | None:
+def auto_map_user_to_university(user: User) -> Optional[UniversityMembership]:
     """
     Automatically map a user to their university based on email domain.
     

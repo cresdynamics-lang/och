@@ -21,20 +21,20 @@ IN_DOCKER = os.environ.get('DB_HOST') not in ['localhost', '127.0.0.1', None]
 root_env = PROJECT_ROOT / '.env'
 if root_env.exists() and not IN_DOCKER:
     load_dotenv(root_env, override=True)
-    print(f"✅ Loaded .env from project root: {root_env}")
+    print(f"Loaded .env from project root: {root_env}")
 elif not IN_DOCKER:
     # Fallback to legacy locations for backward compatibility
     env_path = BASE_DIR / '.env'
     if env_path.exists():
         load_dotenv(env_path, override=True)
-        print(f"⚠️ Loaded .env from legacy location: {env_path}")
+        print(f"WARNING: Loaded .env from legacy location: {env_path}")
     else:
         parent_env = BASE_DIR.parent / '.env'
         if parent_env.exists():
             load_dotenv(parent_env, override=True)
-            print(f"⚠️ Loaded .env from legacy location: {parent_env}")
+            print(f"WARNING: Loaded .env from legacy location: {parent_env}")
 else:
-    print(f"🐳 Running in Docker - using container environment variables")
+    print(f"Running in Docker - using container environment variables")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
@@ -192,9 +192,9 @@ JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 
 # Log JWT configuration on startup (for debugging)
 if JWT_SECRET_KEY != SECRET_KEY:
-    print(f"✅ Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
+    print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
 else:
-    print(f"⚠️ JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
+    print(f"WARNING: JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -240,7 +240,7 @@ if USE_REDIS_CACHE:
         }
     except (ImportError, ModuleNotFoundError):
         # Fallback to dummy cache if django_redis is not available
-        print("⚠️ django_redis not available, using dummy cache backend")
+        print("WARNING: django_redis not available, using dummy cache backend")
         CACHES = {
             "default": {
                 "BACKEND": "django.core.cache.backends.dummy.DummyCache",

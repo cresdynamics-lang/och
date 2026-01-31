@@ -1727,7 +1727,7 @@ class CommunityChannel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'community_channels'
+        db_table = 'community_space_channels'
         verbose_name = 'Community Channel'
         verbose_name_plural = 'Community Channels'
         unique_together = [['space', 'slug']]
@@ -1966,7 +1966,7 @@ class CommunityModerationAction(models.Model):
     moderator = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='moderation_actions'
+        related_name='community_moderation_actions'
     )
     action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
 
