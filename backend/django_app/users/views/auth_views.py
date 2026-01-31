@@ -411,7 +411,7 @@ class LoginView(APIView):
         user_role_names = [ur.role.name for ur in user_roles]
         primary_role = user_role_names[0] if user_role_names else None
         
-        mfa_required = requires_mfa(risk_score, primary_role) or user.mfa_enabled
+        mfa_required = requires_mfa(risk_score, primary_role, user) or user.mfa_enabled
         
         # If MFA required and not verified, return MFA challenge
         if mfa_required and not device_trusted:
