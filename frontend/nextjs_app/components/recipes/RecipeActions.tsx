@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Bookmark, CheckCircle2, Star } from 'lucide-react';
@@ -19,8 +19,15 @@ interface RecipeActionsProps {
 
 export function RecipeActions({ recipe, compact = false }: RecipeActionsProps) {
   const { progress, markComplete, updateRating, bookmark, unbookmark, isBookmarked } = useRecipeProgress(recipe.slug);
-  const [rating, setRating] = useState(progress?.rating || 0);
+  const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
+
+  // Sync rating display whenever server progress updates
+  useEffect(() => {
+    if (progress?.rating) {
+      setRating(progress.rating);
+    }
+  }, [progress?.rating]);
 
   const handleComplete = async () => {
     try {

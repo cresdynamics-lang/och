@@ -243,7 +243,7 @@ export default function StudentCoachingOSPage() {
                 <p className="text-slate-400 text-sm mb-3 leading-relaxed">
                   Get personalized guidance from expert cybersecurity mentors
                 </p>
-                <Link href="/dashboard/student/coaching">
+                <Link href="/dashboard/student/mentorship">
                   <Button variant="outline" size="sm" className="w-full text-sm py-1">
                     Book Session
                   </Button>

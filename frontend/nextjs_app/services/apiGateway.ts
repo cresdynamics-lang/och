@@ -29,15 +29,21 @@ function getBaseUrl(path: string): string {
     '/profiling',  // FastAPI profiling endpoints
   ];
 
-  // Recipes routes - serve from local Next.js API
+  // Recipes: list (/recipes) and detail (/recipes/{slug}) go to Next.js local API.
+  // Action sub-routes (/recipes/{slug}/progress, /bookmark, /feedback, /related)
+  // go to Django — they are ViewSet @action endpoints.
   if (path.startsWith('/recipes')) {
-    // Check if we're in browser environment
-    if (typeof window !== 'undefined') {
-      return `${window.location.origin}/api`;
+    const segments = path.replace(/^\/recipes\/?/, '').split('/').filter(Boolean);
+    // 0 segments = list, 1 segment = detail (slug only) → Next.js
+    // 2+ segments = action sub-route (slug + action) → fall through to Django
+    if (segments.length <= 1) {
+      if (typeof window !== 'undefined') {
+        return `${window.location.origin}/api`;
+      }
+      const port = process.env.PORT || '3000';
+      return `http://localhost:${port}/api`;
     }
-    // For SSR, get the port from environment or assume default
-    const port = process.env.PORT || '3000';
-    return `http://localhost:${port}/api`;
+    // Action routes fall through to Django default below
   }
 
   // Check if path already includes /api/v1

@@ -405,43 +405,7 @@ export default function MentorClient() {
             </div>
           </Card>
 
-          <Card>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-3">Quick actions</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <Link href="/dashboard/mentor/missions">
-                  <div className="p-3 rounded-lg bg-och-midnight/50 border border-och-steel/20 hover:bg-och-midnight/70 transition-colors">
-                    <div className="text-sm text-white font-medium">Mission review</div>
-                    <div className="text-xs text-och-steel mt-1">Approve / request revision</div>
-                  </div>
-                </Link>
-                <Link href="/dashboard/mentor/mentees">
-                  <div className="p-3 rounded-lg bg-och-midnight/50 border border-och-steel/20 hover:bg-och-midnight/70 transition-colors">
-                    <div className="text-sm text-white font-medium">Mentees</div>
-                    <div className="text-xs text-och-steel mt-1">Progress & risk overview</div>
-                  </div>
-                </Link>
-                <Link href="/dashboard/mentor/sessions">
-                  <div className="p-3 rounded-lg bg-och-midnight/50 border border-och-steel/20 hover:bg-och-midnight/70 transition-colors">
-                    <div className="text-sm text-white font-medium">Sessions</div>
-                    <div className="text-xs text-och-steel mt-1">Schedule / reschedule</div>
-                  </div>
-                </Link>
-                <Link href="/dashboard/mentor/analytics">
-                  <div className="p-3 rounded-lg bg-och-midnight/50 border border-och-steel/20 hover:bg-och-midnight/70 transition-colors">
-                    <div className="text-sm text-white font-medium">Analytics</div>
-                    <div className="text-xs text-och-steel mt-1">TalentScope view</div>
-                  </div>
-                </Link>
-                <Link href="/dashboard/mentor/cohorts-tracks">
-                  <div className="p-3 rounded-lg bg-och-midnight/50 border border-och-steel/20 hover:bg-och-midnight/70 transition-colors">
-                    <div className="text-sm text-white font-medium">Cohorts & Tracks</div>
-                    <div className="text-xs text-och-steel mt-1">View & manage assigned tracks</div>
-                  </div>
-                </Link>
-              </div>
-            </div>
-          </Card>
+          {/* Quick Actions card removed - duplicates sidebar navigation */}
         </div>
       </div>
 

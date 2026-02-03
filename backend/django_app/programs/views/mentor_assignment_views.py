@@ -21,6 +21,8 @@ class MentorAssignmentViewSet(viewsets.ModelViewSet):
         """Filter assignments based on user permissions."""
         queryset = super().get_queryset()
         user = self.request.user
+
+        print(f'[MentorAssignmentViewSet] User: {user.email}, ID: {user.id}, is_mentor: {user.is_mentor}, is_staff: {user.is_staff}')
         
         # Filter by active status (default to active=True unless explicitly requested)
         active_filter = self.request.query_params.get('active')
@@ -33,8 +35,8 @@ class MentorAssignmentViewSet(viewsets.ModelViewSet):
         
         # If user is staff/admin, allow filtering by mentor ID query parameter
         if user.is_staff:
-        mentor_id = self.request.query_params.get('mentor')
-        if mentor_id:
+            mentor_id = self.request.query_params.get('mentor')
+            if mentor_id:
                 # Handle both UUID and integer mentor IDs
                 try:
                     # Try UUID first (most common case)
@@ -43,17 +45,19 @@ class MentorAssignmentViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(mentor_id=mentor_uuid)
                 except (ValueError, TypeError):
                     # Fallback to integer (for legacy support)
-            try:
-                mentor_id_int = int(mentor_id)
-                queryset = queryset.filter(mentor_id=mentor_id_int)
-            except (ValueError, TypeError):
-                pass  # Invalid mentor ID, ignore filter
+                    try:
+                        mentor_id_int = int(mentor_id)
+                        queryset = queryset.filter(mentor_id=mentor_id_int)
+                    except (ValueError, TypeError):
+                        pass  # Invalid mentor ID, ignore filter
             return queryset
         
         # If user is a mentor, show only their assignments
         # Allow query parameter only if it matches their own ID
         if user.is_mentor:
+            print('[MentorAssignmentViewSet] User is a mentor')
             mentor_id = self.request.query_params.get('mentor')
+            print(f'[MentorAssignmentViewSet] mentor_id param: {mentor_id}')
             if mentor_id:
                 # Verify the mentor_id matches the current user
                 try:
@@ -90,9 +94,9 @@ class MentorAssignmentViewSet(viewsets.ModelViewSet):
                 is_active=True
             ).exists()
             if has_director_role:
-        managed_cohorts = Cohort.objects.filter(
-            track__director=user
-        ).values_list('id', flat=True)
+                managed_cohorts = Cohort.objects.filter(
+                    track__director=user
+                ).values_list('id', flat=True)
                 return queryset.filter(cohort_id__in=managed_cohorts)
         
         # Default: return empty queryset for users without permissions

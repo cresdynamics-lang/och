@@ -790,33 +790,45 @@ def profiler_status(request):
     
     # Check if profiling is complete
     if user.profiling_complete:
+        # Try to enrich response with Django-side session data if available
         session = ProfilerSession.objects.filter(
             user=user,
             is_locked=True
         ).order_by('-completed_at').first()
-        
+
+        overall_score = None
+        track_recommendation = None
+        completed_at = None
+
         if session:
+            completed_at = session.completed_at.isoformat() if session.completed_at else None
+            if session.futureyou_persona:
+                track_recommendation = {
+                    'track_id': str(session.recommended_track_id) if session.recommended_track_id else None,
+                    'confidence': float(session.track_confidence) if session.track_confidence else None,
+                    'persona': session.futureyou_persona,
+                }
             try:
                 result = session.result
-                return Response({
-                    'status': 'completed',
-                    'completed': True,
-                    'completed_at': session.completed_at.isoformat() if session.completed_at else None,
-                    'overall_score': float(result.overall_score) if result else None,
-                    'track_recommendation': {
-                        'track_id': str(session.recommended_track_id) if session.recommended_track_id else None,
-                        'confidence': float(session.track_confidence) if session.track_confidence else None,
-                        'persona': session.futureyou_persona,
-                    } if session.futureyou_persona else None,
-                }, status=status.HTTP_200_OK)
+                overall_score = float(result.overall_score) if result else None
             except ProfilerResult.DoesNotExist:
                 pass
-    
+
+        # profiling_complete flag is authoritative — set by sync_fastapi_profiling
+        # even if no Django-side ProfilerSession exists (session lives in FastAPI)
+        return Response({
+            'status': 'completed',
+            'completed': True,
+            'completed_at': completed_at,
+            'overall_score': overall_score,
+            'track_recommendation': track_recommendation,
+        }, status=status.HTTP_200_OK)
+
     # Check for active session
     session = ProfilerSession.objects.filter(
         user=user,
         is_locked=False
-    ).order_by('-created_at').first()
+    ).order_by('-started_at').first()
     
     if not session:
         return Response({
@@ -874,29 +886,74 @@ def sync_fastapi_profiling(request):
     try:
         # Update user profiling status
         user.profiling_complete = True
-        
+
         if completed_at:
-            from dateutil.parser import parse
-            user.profiling_completed_at = parse(completed_at)
-        
+            from datetime import datetime
+            from django.utils import timezone as tz
+            try:
+                parsed_dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                if parsed_dt.tzinfo is None:
+                    parsed_dt = tz.make_aware(parsed_dt)
+                user.profiling_completed_at = parsed_dt
+            except (ValueError, AttributeError):
+                user.profiling_completed_at = tz.now()
+
         if session_id:
             try:
                 import uuid
                 user.profiling_session_id = uuid.UUID(session_id)
             except Exception as e:
                 logger.warning(f"Failed to set profiling_session_id: {e}")
-        
+
         user.save()
-        
-        # Log the sync
+
+        # Enroll user in their profiled curriculum track
+        enrolled_track_code = None
+        if primary_track:
+            from curriculum.models import CurriculumTrack, UserTrackProgress
+            # Map profiler track keys to curriculum track codes
+            track_code_map = {
+                'defender': 'CYBERDEF',
+                'offensive': 'OFFENSIVE_2',
+                'grc': 'GRC_2',
+                'innovation': 'INNOVATION_2',
+                'leadership': 'LEADERSHIP_2',
+            }
+            track_code = track_code_map.get(primary_track.lower(), primary_track.upper())
+            try:
+                curriculum_track = CurriculumTrack.objects.get(code=track_code)
+            except CurriculumTrack.DoesNotExist:
+                # Specific track not seeded yet — fall back to any active beginner track
+                logger.warning(f"Curriculum track '{track_code}' does not exist, trying fallback")
+                curriculum_track = CurriculumTrack.objects.filter(
+                    is_active=True, tier=2
+                ).first() or CurriculumTrack.objects.filter(is_active=True).first()
+                if curriculum_track:
+                    logger.info(f"Falling back to track '{curriculum_track.code}' for enrollment")
+
+            try:
+                if curriculum_track:
+                    progress, created = UserTrackProgress.objects.get_or_create(
+                        user=user,
+                        track=curriculum_track,
+                    )
+                    enrolled_track_code = curriculum_track.code
+                    if created:
+                        logger.info(f"Enrolled user {user.id} in curriculum track {curriculum_track.code}")
+                else:
+                    logger.warning("No active curriculum tracks exist, skipping enrollment")
+            except Exception as e:
+                logger.warning(f"Failed to enroll user in curriculum track: {e}")
+
         logger.info(f"Synced profiling completion from FastAPI for user {user.id}, session {session_id}")
-        
+
         return Response({
             'status': 'synced',
             'message': 'Profiling completion synced successfully',
             'user_id': user.id,
             'profiling_complete': user.profiling_complete,
             'completed_at': user.profiling_completed_at.isoformat() if user.profiling_completed_at else None,
+            'enrolled_track': enrolled_track_code,
         }, status=status.HTTP_200_OK)
         
     except Exception as e:
@@ -958,7 +1015,7 @@ def get_future_you_by_mentee(request, mentee_id):
     session = ProfilerSession.objects.filter(
         user=mentee,
         status='finished'
-    ).order_by('-created_at').first()
+    ).order_by('-started_at').first()
     
     # If no completed session, check user's futureyou_persona field
     if not session or not session.futureyou_persona:

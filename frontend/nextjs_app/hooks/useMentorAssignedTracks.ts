@@ -54,7 +54,8 @@ export function useMentorAssignedTracks(mentorId: string | undefined) {
       // Filter to only active assignments
       const activeAssignments = (assignments as MentorAssignment[]).filter(a => {
         const isActive = a.active !== false
-        console.log(`[useMentorAssignedTracks] Assignment ${a.id}: mentor=${a.mentor}, cohort=${a.cohort}, active=${a.active}, isActive=${isActive}`)
+        // API returns mentor_id and cohort_id fields
+        console.log(`[useMentorAssignedTracks] Assignment ${a.id}: mentor=${(a as any).mentor_id || a.mentor}, cohort=${(a as any).cohort_id || a.cohort}, active=${a.active}, isActive=${isActive}`)
         return isActive
       })
       
@@ -69,7 +70,8 @@ export function useMentorAssignedTracks(mentorId: string | undefined) {
       }
 
       // Get unique cohort IDs from assignments
-      const cohortIds = Array.from(new Set(activeAssignments.map(a => String(a.cohort))))
+      // API returns cohort_id field, not cohort
+      const cohortIds = Array.from(new Set(activeAssignments.map(a => String((a as any).cohort_id || a.cohort))))
       console.log('[useMentorAssignedTracks] Cohort IDs to fetch:', cohortIds)
       
       // Fetch cohort details in parallel

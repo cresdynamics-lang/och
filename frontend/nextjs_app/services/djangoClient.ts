@@ -111,6 +111,13 @@ export const djangoClient = {
     },
 
     /**
+     * Change password (for authenticated users)
+     */
+    async changePassword(data: { current_password: string; new_password: string }): Promise<{ detail: string }> {
+      return apiGateway.post('/auth/change-password', data);
+    },
+
+    /**
      * Enroll in MFA
      */
     async enrollMFA(data: { method: 'totp' | 'sms'; phone_number?: string }): Promise<{

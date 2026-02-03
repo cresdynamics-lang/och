@@ -74,6 +74,9 @@ urlpatterns = [
     
     # API Versioning
     path('api/v1/', include('api.urls')),
+    
+    # Frontend compatibility - API without version prefix
+    path('api/', include('api.urls')),
 ]
 
 # Serve media files in development

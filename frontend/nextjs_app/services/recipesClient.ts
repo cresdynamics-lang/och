@@ -128,21 +128,8 @@ export const recipesClient = {
     slug: string,
     progress: RecipeProgressUpdate
   ): Promise<UserRecipeProgress> {
-    const result = await apiGateway.post<UserRecipeProgress>(`/recipes/${slug}/progress/`, progress);
-
-    // Also submit feedback if rating is provided (for self-improving loops)
-    if (progress.rating && progress.rating > 0) {
-      try {
-        await apiGateway.post(`/recipes/${slug}/feedback/`, {
-          rating: progress.rating,
-          helpful_for: progress.helpful_for
-        });
-      } catch (error) {
-        console.warn('Feedback submission failed, but progress was updated:', error);
-      }
-    }
-
-    return result;
+    // progress action already persists rating and recalculates avg_rating server-side
+    return apiGateway.post<UserRecipeProgress>(`/recipes/${slug}/progress/`, progress);
   },
 
   /**

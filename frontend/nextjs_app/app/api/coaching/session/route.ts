@@ -125,10 +125,14 @@ interface StudentState {
   complexity?: number;
 }
 
-async function getStudentState(userId: string): Promise<StudentState> {
+async function getStudentState(userId: string, accessToken: string = ''): Promise<StudentState> {
   try {
-    // Fetch data from Django PostgreSQL APIs instead of Supabase
-    const djangoApiUrl = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://django:8000';
+    // Fetch data from Django PostgreSQL APIs
+    const djangoApiUrl = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
+    const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (accessToken) {
+      authHeaders['Authorization'] = `Bearer ${accessToken}`;
+    }
 
     const [
       analyticsResponse,
@@ -138,42 +142,12 @@ async function getStudentState(userId: string): Promise<StudentState> {
       communityResponse,
       mentorshipResponse
     ] = await Promise.all([
-      fetch(`${djangoApiUrl}/api/v1/coaching/student-analytics`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/recipe-progress`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/track-progress`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/mission-progress`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/community-activity`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/mentorship-sessions`, {
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      fetch(`${djangoApiUrl}/api/v1/coaching/student-analytics`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/coaching/recipe-progress`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/coaching/track-progress`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/coaching/mission-progress`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/coaching/community-activity`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/coaching/mentorship-sessions`, { headers: authHeaders })
     ]);
 
     // Parse responses (handle 404s gracefully)
@@ -323,9 +297,9 @@ CRITICAL RULES:
 3. Suggest 1-3 next actions MAX
 4. Track-aware: tailor to ${studentState.track_code}
 5. Data-driven: use provided analytics
-6. Output STRICT JSON only
+6. MUST RETURN VALID JSON ONLY - NO MARKDOWN, NO CODE BLOCKS, NO EXPLANATORY TEXT
 
-SCHEMA:
+RESPONSE FORMAT - OUTPUT ONLY THIS JSON STRUCTURE:
 {
   "greeting": "Warm, personal opener",
   "diagnosis": "Current state summary (1-2 sentences)",
@@ -346,7 +320,9 @@ SCHEMA:
       "payload": {}
     }
   ]
-}`
+}
+
+DO NOT wrap the JSON in markdown code blocks. Return ONLY the raw JSON object.`
     },
     {
       role: "user",
@@ -355,7 +331,8 @@ SCHEMA:
   ], {
     model: "grok-4-latest",
     temperature: 0.3,
-    max_tokens: 2000
+    max_tokens: 2000,
+    response_format: { type: "json_object" } as any  // Request JSON mode if available
   });
 
   return response;
@@ -389,6 +366,8 @@ Provide detailed coaching with:
 2. Skill gap analysis
 3. Timeline recommendations
 4. Track-specific advice
+
+IMPORTANT: Return ONLY valid JSON. NO markdown code blocks, NO explanatory text.
 
 Output JSON:
 {
@@ -437,8 +416,9 @@ CRITICAL RULES:
 3. Suggest 1-2 next actions MAX
 4. Tie advice to Future-You alignment score
 5. Be concise (max 150 tokens)
+6. MUST RETURN VALID JSON ONLY - NO MARKDOWN, NO CODE BLOCKS, NO EXPLANATORY TEXT
 
-SCHEMA:
+RESPONSE FORMAT - OUTPUT ONLY THIS JSON STRUCTURE:
 {
   "greeting": "Warm, personal opener",
   "diagnosis": "Current state summary (1-2 sentences)",
@@ -459,7 +439,9 @@ SCHEMA:
       "payload": {}
     }
   ]
-}`
+}
+
+DO NOT wrap the JSON in markdown code blocks. Return ONLY the raw JSON object.`
     },
     {
       role: "user",
@@ -467,7 +449,8 @@ SCHEMA:
     }
   ], {
     temperature: 0.3,
-    max_tokens: 1000  // Smaller for faster inference
+    max_tokens: 1000,  // Smaller for faster inference
+    response_format: { type: "json_object" } as any  // Request JSON mode if available
   });
 
   return response;
@@ -486,14 +469,25 @@ function parseCoachingResponse(response: any, modelName: string) {
     const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/```\n([\s\S]*?)\n```/);
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
+    // Try parsing as JSON
     const parsed = JSON.parse(jsonStr);
     return parsed;
   } catch (error) {
     console.error('Failed to parse coaching response:', error);
-    // Return fallback structure
+    console.error('Raw response:', response);
+
+    // Try to extract content as plain text and convert to fallback structure
+    let content = '';
+    if (modelName === 'grok3' || modelName === 'groq-llama' || modelName === 'groq-mixtral') {
+      content = response.choices?.[0]?.message?.content || '';
+    } else if (modelName === 'claude-sonnet') {
+      content = response.content?.[0]?.text || '';
+    }
+
+    // Return fallback structure with raw content as diagnosis
     return {
       greeting: "Hello! Let's continue your cybersecurity journey.",
-      diagnosis: "Ready to help you progress.",
+      diagnosis: content.substring(0, 200) || "Ready to help you progress.",
       priorities: [],
       encouragement: "You've got this!",
       actions: []
@@ -518,34 +512,68 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'user_id required' }, { status: 400 });
     }
 
-    // 1. Aggregate student state
-    const studentState = await getStudentState(user_id);
+    // 1. Aggregate student state (forward user's JWT from cookie)
+    const accessToken = request.cookies.get('access_token')?.value || '';
+    const studentState = await getStudentState(user_id, accessToken);
 
-    // 2. Route to correct model
-    const model = selectModel(trigger, studentState.complexity || 0.5);
-
-    if (!model.client) {
-      return NextResponse.json({ 
-        error: `${model.name} API not configured`,
-        model: model.name
-      }, { status: 500 });
+    // 2. Route to correct model (may be null if no keys configured)
+    let model: { name: string; client: any } | null = null;
+    try {
+      model = selectModel(trigger, studentState.complexity || 0.5);
+    } catch {
+      // No AI models configured — fall through to static fallback
     }
 
-    // 3. Generate coaching response
-    let coachingResponse;
-    if (model.name === 'grok3') {
-      coachingResponse = await grokCoachingPrompt(studentState, context);
-    } else if (model.name === 'groq-llama' || model.name === 'groq-mixtral') {
-      const useSecondary = model.name === 'groq-mixtral';
-      coachingResponse = await groqCoachingPrompt(studentState, context, useSecondary);
-    } else if (model.name === 'claude-sonnet') {
-      coachingResponse = await claudeCoachingPrompt(studentState, context);
+    let parsedAdvice: any;
+
+    if (model?.client) {
+      // 3. Generate coaching response via AI
+      let coachingResponse;
+      if (model.name === 'grok3') {
+        coachingResponse = await grokCoachingPrompt(studentState, context);
+      } else if (model.name === 'groq-llama' || model.name === 'groq-mixtral') {
+        const useSecondary = model.name === 'groq-mixtral';
+        coachingResponse = await groqCoachingPrompt(studentState, context, useSecondary);
+      } else if (model.name === 'claude-sonnet') {
+        coachingResponse = await claudeCoachingPrompt(studentState, context);
+      } else {
+        throw new Error(`Unsupported model: ${model.name}`);
+      }
+
+      // 4. Parse & validate response
+      parsedAdvice = parseCoachingResponse(coachingResponse, model.name);
     } else {
-      throw new Error(`Unsupported model: ${model.name}`);
-    }
+      // Static fallback when no AI model is available
+      const missionsDone = studentState.mission_stats?.completed || 0;
+      const recipesPercent = studentState.recipe_coverage?.percentage?.toFixed(0) || '0';
+      const trackCode = studentState.track_code || 'your track';
 
-    // 4. Parse & validate response
-    const parsedAdvice = parseCoachingResponse(coachingResponse, model.name);
+      parsedAdvice = {
+        greeting: "Welcome back to your cybersecurity journey!",
+        diagnosis: `You're on the ${trackCode} track. ${missionsDone} mission${missionsDone !== 1 ? 's' : ''} completed, recipe coverage at ${recipesPercent}%.`,
+        priorities: [
+          {
+            priority: 'high',
+            action: 'Continue your next mission',
+            reason: 'Missions are the fastest way to build hands-on skills',
+            recipes: [],
+            deadline: null
+          },
+          {
+            priority: 'medium',
+            action: 'Explore recipes for your track',
+            reason: `Recipes reinforce the concepts needed for ${trackCode}`,
+            recipes: [],
+            deadline: null
+          }
+        ],
+        encouragement: "Every expert was once a beginner. Keep going!",
+        actions: [
+          { type: 'send_nudge', target: 'missions', payload: {} },
+          { type: 'send_nudge', target: 'recipes', payload: {} }
+        ]
+      };
+    }
 
     // 5. Execute actions
     if (parsedAdvice.actions && Array.isArray(parsedAdvice.actions)) {
@@ -554,19 +582,18 @@ export async function POST(request: NextRequest) {
 
     // 6. Save session to Django PostgreSQL (always try)
     try {
-      const djangoApiUrl = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://django:8000';
+      const djangoApiUrl = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
+      const saveHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) saveHeaders['Authorization'] = `Bearer ${accessToken}`;
       await fetch(`${djangoApiUrl}/api/v1/coaching/sessions`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.DJANGO_API_KEY || ''}`,
-          'Content-Type': 'application/json'
-        },
+        headers: saveHeaders,
         body: JSON.stringify({
           user_id,
           trigger,
           context,
           advice: parsedAdvice,
-          model_used: model.name,
+          model_used: model?.name || 'static-fallback',
           complexity_score: studentState.complexity
         })
       });
@@ -577,7 +604,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       session: { user_id, trigger, context },
       advice: parsedAdvice,
-      model: model.name
+      model: model?.name || 'static-fallback'
     });
 
   } catch (error: any) {

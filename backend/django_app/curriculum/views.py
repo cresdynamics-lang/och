@@ -56,7 +56,7 @@ def get_user_subscription_tier(user):
 class CurriculumTrackViewSet(viewsets.ModelViewSet):
     """
     ViewSet for curriculum tracks.
-    
+
     Endpoints:
     - GET /tracks/ - List all active tracks
     - GET /tracks/{code}/ - Get track details with modules
@@ -66,6 +66,7 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
     queryset = CurriculumTrack.objects.filter(is_active=True)
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]  # Allow browsing without auth
     lookup_field = 'code'
+    pagination_class = None  # Disable pagination - return plain array
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -80,11 +81,11 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        
-        # Order by tier and code for consistent API responses
-        # This ensures all tier 2-5 tracks appear in the API list
+
+        # Order by order_number and code for consistent API responses
+        # This ensures all tracks appear in the API list in the correct order
         if self.action == 'list':
-            queryset = queryset.order_by('tier', 'code')
+            queryset = queryset.order_by('order_number', 'code')
         
         if self.action == 'retrieve':
             # Prefetch modules with lessons and missions
@@ -110,7 +111,7 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
             user=user,
             track=track,
             defaults={
-                'current_module': track.modules.filter(is_active=True).order_by('order_index').first()
+                'current_module': CurriculumModule.objects.filter(track_key=track.code, is_active=True).order_by('order_index').first()
             }
         )
         
@@ -1112,7 +1113,7 @@ class CrossTrackProgramDetailView(APIView):
                 'title': module.title,
                 'description': module.description,
                 'order_index': module.order_index,
-                'estimated_time_minutes': module.estimated_time_minutes,
+                'estimated_time_minutes': module.estimated_duration_minutes,
                 'lesson_count': module.lesson_count,
                 'lessons': [
                     {

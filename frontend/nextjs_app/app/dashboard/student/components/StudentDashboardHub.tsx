@@ -212,8 +212,8 @@ export function StudentDashboardHub() {
       try {
         // Make all API calls in parallel for better performance
         const [dashboardResponse, actionsResponse, missionsResponse] = await Promise.allSettled([
-          apiGateway.get<any>('/dashboard/overview').catch(() => null),
-          apiGateway.get<any[]>('/dashboard/next-actions').catch(() => []),
+          apiGateway.get<any>('/student/dashboard/overview').catch(() => null),
+          apiGateway.get<any[]>('/student/dashboard/next-actions').catch(() => []),
           apiGateway.get<any>('/student/missions', {
             params: { status: 'in_progress', page_size: 3 }
           }).catch(() => ({ results: [] }))
@@ -225,12 +225,14 @@ export function StudentDashboardHub() {
           if (dashboardData?.readiness) {
             setReadinessScore(dashboardData.readiness.score || 0);
           }
-          if (dashboardData?.gamification) {
-            setStreak(dashboardData.gamification.streak || 0);
-            setPoints(dashboardData.gamification.points || 0);
-            setBadges(dashboardData.gamification.badges || 0);
-            setRank(dashboardData.gamification.rank || 'Bronze');
-            setLevel(dashboardData.gamification.level || '1');
+          // Backend returns gamification data under 'quick_stats'
+          const gamificationData = dashboardData?.gamification || dashboardData?.quick_stats;
+          if (gamificationData) {
+            setStreak(gamificationData.streak || 0);
+            setPoints(gamificationData.points || 0);
+            setBadges(gamificationData.badges || 0);
+            setRank(gamificationData.rank || 'Bronze');
+            setLevel(gamificationData.level || '1');
           }
           if (dashboardData?.subscription) {
             setSubscriptionTier(dashboardData.subscription.tier || 'free');
@@ -359,11 +361,40 @@ export function StudentDashboardHub() {
       }
 
       try {
-        const trackCode = `${profiledTrack.toUpperCase()}_2`;
-        const progress = await curriculumClient.getTrackProgress(trackCode);
-        setCurriculumProgress(progress);
+        // Map frontend track names to backend track codes
+        const trackMapping: Record<string, string> = {
+          'defender': 'CYBERDEF',
+          'offensive': 'OFFENSIVE_2',
+          'grc': 'GRC_2',
+          'innovation': 'INNOVATION_2',
+          'leadership': 'LEADERSHIP_2',
+        };
+
+        const trackKey = profiledTrack.toLowerCase();
+        const trackCode = trackMapping[trackKey] || `${profiledTrack.toUpperCase()}_2`;
+
+        try {
+          const progressResponse = await curriculumClient.getTrackProgress(trackCode);
+
+          // Check if response indicates user is not enrolled
+          if (progressResponse && (progressResponse as any).enrolled === false) {
+            // User not enrolled - this is expected, they need to complete profiling first
+            console.log('User not enrolled in track yet - awaiting profiling completion');
+            setCurriculumProgress(null);
+          } else if ((progressResponse as any).progress) {
+            // User is enrolled, set progress from nested object
+            setCurriculumProgress((progressResponse as any).progress);
+          } else {
+            // Direct progress object
+            setCurriculumProgress(progressResponse);
+          }
+        } catch (apiError) {
+          console.error('Track progress API error:', apiError);
+          setCurriculumProgress(null);
+        }
       } catch (error) {
         console.error('Failed to fetch curriculum progress:', error);
+        setCurriculumProgress(null);
       } finally {
         setLoadingCurriculum(false);
       }
@@ -504,7 +535,9 @@ export function StudentDashboardHub() {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <div className={`text-lg font-black ${getTrackColorClasses('text')}`}>
-                    {curriculumProgress ? Math.round(curriculumProgress.completion_percentage) : 0}%
+                    {curriculumProgress && curriculumProgress.completion_percentage !== null && curriculumProgress.completion_percentage !== undefined
+                      ? Math.round(curriculumProgress.completion_percentage)
+                      : 0}%
                   </div>
                   <div className="text-xs text-och-steel">Progress</div>
                 </div>
@@ -748,33 +781,35 @@ export function StudentDashboardHub() {
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-och-steel">Progress</span>
                           <span className={`font-bold ${getTrackColorClasses('text')}`}>
-                            {Math.round(curriculumProgress.completion_percentage)}%
+                            {curriculumProgress?.completion_percentage !== null && curriculumProgress?.completion_percentage !== undefined
+                              ? Math.round(curriculumProgress.completion_percentage)
+                              : 0}%
                           </span>
                         </div>
                         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                           <motion.div
                             className={`h-full ${getTrackColorClasses('bg')} rounded-full`}
                             initial={{ width: 0 }}
-                            animate={{ width: `${curriculumProgress.completion_percentage}%` }}
+                            animate={{ width: `${curriculumProgress?.completion_percentage || 0}%` }}
                             transition={{ duration: 1 }}
                           />
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                           <div>
                             <div className={`text-sm font-black ${getTrackColorClasses('text')}`}>
-                              {curriculumProgress.modules_completed}
+                              {curriculumProgress?.modules_completed || 0}
                             </div>
                             <div className="text-xs text-och-steel">Modules</div>
                           </div>
                           <div>
                             <div className={`text-sm font-black ${getTrackColorClasses('text')}`}>
-                              {curriculumProgress.lessons_completed}
+                              {curriculumProgress?.lessons_completed || 0}
                             </div>
                             <div className="text-xs text-och-steel">Lessons</div>
                           </div>
                           <div>
                             <div className={`text-sm font-black ${getTrackColorClasses('text')}`}>
-                              {curriculumProgress.missions_completed}
+                              {curriculumProgress?.missions_completed || 0}
                             </div>
                             <div className="text-xs text-och-steel">Missions</div>
                           </div>
@@ -1020,14 +1055,16 @@ export function StudentDashboardHub() {
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-bold text-white">Overall Completion</span>
                         <span className={`text-xs font-bold ${getTrackColorClasses('text')}`}>
-                          {Math.round(curriculumProgress.completion_percentage)}%
+                          {curriculumProgress?.completion_percentage !== null && curriculumProgress?.completion_percentage !== undefined
+                            ? Math.round(curriculumProgress.completion_percentage)
+                            : 0}%
                         </span>
                       </div>
                       <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                         <motion.div
                           className={`h-full ${getTrackColorClasses('bg')} rounded-full`}
                           initial={{ width: 0 }}
-                          animate={{ width: `${curriculumProgress.completion_percentage}%` }}
+                          animate={{ width: `${curriculumProgress?.completion_percentage || 0}%` }}
                           transition={{ duration: 1 }}
                         />
                       </div>
@@ -1036,25 +1073,25 @@ export function StudentDashboardHub() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <div className="text-center p-2 rounded bg-white/5">
                         <div className={`text-lg font-black ${getTrackColorClasses('text')} mb-0.5`}>
-                          {curriculumProgress.modules_completed}
+                          {curriculumProgress?.modules_completed || 0}
                         </div>
                         <div className="text-xs text-och-steel">Modules</div>
                       </div>
                       <div className="text-center p-2 rounded bg-white/5">
                         <div className={`text-lg font-black ${getTrackColorClasses('text')} mb-0.5`}>
-                          {curriculumProgress.lessons_completed}
+                          {curriculumProgress?.lessons_completed || 0}
                         </div>
                         <div className="text-xs text-och-steel">Lessons</div>
                       </div>
                       <div className="text-center p-2 rounded bg-white/5">
                         <div className={`text-lg font-black ${getTrackColorClasses('text')} mb-0.5`}>
-                          {curriculumProgress.missions_completed}
+                          {curriculumProgress?.missions_completed || 0}
                         </div>
                         <div className="text-xs text-och-steel">Missions</div>
                       </div>
                       <div className="text-center p-2 rounded bg-white/5">
                         <div className={`text-lg font-black ${getTrackColorClasses('text')} mb-0.5`}>
-                          {Math.round((curriculumProgress.total_time_spent_minutes || 0) / 60)}h
+                          {Math.round((curriculumProgress?.total_time_spent_minutes || 0) / 60)}h
                         </div>
                         <div className="text-xs text-och-steel">Time</div>
                       </div>

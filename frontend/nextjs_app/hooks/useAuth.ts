@@ -109,37 +109,20 @@ export function useAuth() {
         throw error;
       }
       
-      const { user, access_token } = responseData;
-      
+      const { user, access_token, refresh_token } = responseData;
+
       // Store access token in localStorage for client-side requests
-      // Refresh token is already in HttpOnly cookie
       if (!access_token) {
         console.error('No access_token in login response:', responseData);
         throw new Error('No access token received from login response');
       }
-      
-      // Store token immediately and verify it's stored
+
+      // Store tokens immediately
       localStorage.setItem('access_token', access_token);
-      // Backwards-compat for older clients in this repo still using `auth_token`
-      localStorage.setItem('auth_token', access_token);
-      
-      // Verify token is stored (with retry)
-      let storedToken = localStorage.getItem('access_token');
-      let retries = 0;
-      while (!storedToken && retries < 3) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        localStorage.setItem('access_token', access_token);
-        localStorage.setItem('auth_token', access_token);
-        storedToken = localStorage.getItem('access_token');
-        retries++;
+      localStorage.setItem('auth_token', access_token); // backwards-compat
+      if (refresh_token) {
+        localStorage.setItem('refresh_token', refresh_token);
       }
-      
-      if (!storedToken || storedToken !== access_token) {
-        console.error('Failed to store access token in localStorage');
-        throw new Error('Failed to store authentication token');
-      }
-      
-      console.log('✅ Access token stored successfully in localStorage');
       
       // Fetch full user profile with roles from /auth/me
       // Retry logic to ensure we get the full user profile

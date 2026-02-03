@@ -3,7 +3,7 @@ URL configuration for users app - Authentication endpoints.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password
+from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password
 from .views.auth_views import (
     SignupView,
     LoginView,
@@ -76,6 +76,8 @@ urlpatterns = [
     path('auth/password/reset/request/', PasswordResetRequestView.as_view(), name='password-reset-request-slash'),
     path('auth/password/reset/confirm', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('auth/password/reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm-slash'),
+    path('auth/change-password', change_password, name='change-password'),
+    path('auth/change-password/', change_password, name='change-password-slash'),
 
     # Account activation endpoints
     path('auth/register/', register_user, name='register'),

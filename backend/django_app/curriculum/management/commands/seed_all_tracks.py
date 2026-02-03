@@ -81,9 +81,10 @@ class Command(BaseCommand):
                 track, created = CurriculumTrack.objects.update_or_create(
                     code=track_code,
                     defaults={
+                        'slug': track_info['code'].lower(),
                         'name': track_name,
+                        'title': track_name,
                         'description': f"{tier_name} level training for {track_info['name']}. {track_info['description']}",
-                        'level': level_choice,
                         'tier': tier_num,
                         'icon': track_info['icon'],
                         'color': track_info['color'],

@@ -96,10 +96,11 @@ export async function POST(request: NextRequest) {
     // Use the Django response data
     const loginResponse = djangoData;
 
-    // Create the response
+    // Create the response (include refresh_token so client can store it for auto-refresh)
     const nextResponse = NextResponse.json({
       user: loginResponse.user,
       access_token: loginResponse.access_token,
+      refresh_token: loginResponse.refresh_token,
     });
 
     // Set RBAC cookies for middleware enforcement (HttpOnly so client can't tamper)
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest) {
         httpOnly: false, // Allow client-side access for Authorization header
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 15, // 15 minutes
+        maxAge: 60 * 60 * 24 * 30, // 30 days (matches refresh token)
         path: '/',
       });
     }

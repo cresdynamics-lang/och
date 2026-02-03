@@ -10,6 +10,7 @@ import { programsClient } from '@/services/programsClient'
 import { useAuth } from '@/hooks/useAuth'
 import type { User, UserRole } from '@/services/types'
 import { MentorSupportAndHelp } from '@/components/mentor/MentorSupportAndHelp'
+import toast, { Toaster } from 'react-hot-toast'
 
 interface ProfileData extends User {
   roles?: UserRole[]
@@ -65,6 +66,12 @@ export default function MentorProfilePage() {
   const [availabilityDay, setAvailabilityDay] = useState('')
   const [availabilityStart, setAvailabilityStart] = useState('')
   const [availabilityEnd, setAvailabilityEnd] = useState('')
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    current: '',
+    new: '',
+    confirm: '',
+  })
   
   // Student data from assigned cohorts
   const [studentStats, setStudentStats] = useState<{
@@ -76,6 +83,7 @@ export default function MentorProfilePage() {
     assignedCohorts: 0,
     loading: true,
   })
+
 
   useEffect(() => {
     loadProfile()
@@ -176,12 +184,62 @@ export default function MentorProfilePage() {
       await reloadUser()
       await loadProfile()
       setIsEditing(false)
-      alert('Profile updated successfully!')
+      toast.success('Profile updated successfully!')
     } catch (err: any) {
       console.error('Error saving profile:', err)
-      alert(err.message || 'Failed to save profile. Please try again.')
+
+      // Parse validation errors from API
+      if (err.errorData && typeof err.errorData === 'object') {
+        const errors = Object.entries(err.errorData)
+          .map(([field, messages]) => {
+            const msgArray = Array.isArray(messages) ? messages : [messages]
+            return `${field}: ${msgArray.join(', ')}`
+          })
+          .join('\n')
+        toast.error(`Validation errors:\n${errors}`, { duration: 6000 })
+      } else {
+        toast.error(err.message || 'Failed to save profile. Please try again.')
+      }
     } finally {
       setSaving(false)
+    }
+  }
+
+
+  const handlePasswordChange = async () => {
+    if (passwordData.new !== passwordData.confirm) {
+      toast.error('New passwords do not match')
+      return
+    }
+
+    if (passwordData.new.length < 8) {
+      toast.error('Password must be at least 8 characters')
+      return
+    }
+
+    if (!passwordData.current) {
+      toast.error('Please enter your current password')
+      return
+    }
+
+    try {
+      await djangoClient.auth.changePassword({
+        current_password: passwordData.current,
+        new_password: passwordData.new,
+      })
+      toast.success('Password changed successfully!')
+      setPasswordData({ current: '', new: '', confirm: '' })
+      setIsChangingPassword(false)
+    } catch (err: any) {
+      console.error('Password change failed:', err)
+
+      // Parse error message from backend
+      if (err.errorData && typeof err.errorData === 'object') {
+        const errorMsg = err.errorData.error || Object.values(err.errorData).flat().join(', ')
+        toast.error(errorMsg)
+      } else {
+        toast.error(err.message || 'Failed to change password')
+      }
     }
   }
 
@@ -291,6 +349,7 @@ export default function MentorProfilePage() {
 
   return (
     <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
+      <Toaster position="top-right" />
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -720,18 +779,234 @@ export default function MentorProfilePage() {
       )}
 
       {/* Account Tab */}
-      {activeTab === 'account' && (
+      {activeTab === 'account' && profile && (
         <Card>
-          <h2 className="text-2xl font-bold mb-4 text-white">Account Management</h2>
-          <p className="text-och-steel mb-6">Account management features coming soon...</p>
+          <h2 className="text-2xl font-bold mb-6 text-white">Account Information</h2>
+
+          <div className="space-y-6">
+            {/* Account Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  Email Address
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white">
+                  {profile.email}
+                </div>
+                <p className="text-xs text-och-steel mt-1">
+                  Your email is used for login and notifications
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  Email Verification
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  {profile.email_verified ? (
+                    <Badge variant="mint">Verified</Badge>
+                  ) : (
+                    <Badge variant="steel">Not Verified</Badge>
+                  )}
+                </div>
+                {profile.email_verified_at && (
+                  <p className="text-xs text-och-steel mt-1">
+                    Verified on {new Date(profile.email_verified_at).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  User ID
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white font-mono text-sm">
+                  {profile.id}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  Member Since
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white">
+                  {profile.date_joined ? new Date(profile.date_joined).toLocaleDateString() : 'N/A'}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  Account Status
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  {profile.is_active ? (
+                    <Badge variant="mint">Active</Badge>
+                  ) : (
+                    <Badge variant="steel">Inactive</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">
+                  Last Login
+                </label>
+                <div className="px-4 py-3 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white">
+                  {profile.last_login ? new Date(profile.last_login).toLocaleString() : 'Never'}
+                </div>
+              </div>
+            </div>
+          </div>
         </Card>
       )}
 
       {/* Security Tab */}
-      {activeTab === 'security' && (
+      {activeTab === 'security' && profile && (
         <Card>
-          <h2 className="text-2xl font-bold mb-4 text-white">Security Settings</h2>
-          <p className="text-och-steel mb-6">Security settings coming soon...</p>
+          <h2 className="text-2xl font-bold mb-6 text-white">Security Settings</h2>
+
+          <div className="space-y-6">
+            {/* Password Management */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-white">Password</h3>
+              <div className="p-4 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                {!isChangingPassword ? (
+                  <>
+                    <p className="text-sm text-och-steel mb-4">
+                      Manage your account password
+                    </p>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsChangingPassword(true)}
+                      >
+                        Change Password
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          router.push('/forgot-password')
+                        }}
+                      >
+                        Forgot Password?
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-och-steel mb-2">
+                        Current Password
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordData.current}
+                        onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
+                        className="w-full px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-och-defender"
+                        placeholder="Enter current password"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-och-steel mb-2">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordData.new}
+                        onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
+                        className="w-full px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-och-defender"
+                        placeholder="Enter new password (min 8 characters)"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-och-steel mb-2">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordData.confirm}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                        className="w-full px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-och-defender"
+                        placeholder="Confirm new password"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="defender"
+                        onClick={handlePasswordChange}
+                        disabled={!passwordData.current || !passwordData.new || !passwordData.confirm}
+                      >
+                        Update Password
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsChangingPassword(false)
+                          setPasswordData({ current: '', new: '', confirm: '' })
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Login Information */}
+            <div className="pt-6 border-t border-och-steel/20">
+              <h3 className="text-lg font-semibold mb-4 text-white">Login Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  <p className="text-xs text-och-steel mb-1">Last Login</p>
+                  <p className="text-sm font-medium text-white">
+                    {profile.last_login ? new Date(profile.last_login).toLocaleString() : 'Never'}
+                  </p>
+                </div>
+                <div className="p-4 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  <p className="text-xs text-och-steel mb-1">Account Created</p>
+                  <p className="text-sm font-medium text-white">
+                    {profile.date_joined ? new Date(profile.date_joined).toLocaleString() : 'N/A'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Account Status */}
+            <div className="pt-6 border-t border-och-steel/20">
+              <h3 className="text-lg font-semibold mb-4 text-white">Account Status</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-white">Email Verified</p>
+                    <p className="text-xs text-och-steel">
+                      {profile.email_verified
+                        ? `Verified on ${profile.email_verified_at ? new Date(profile.email_verified_at).toLocaleDateString() : 'N/A'}`
+                        : 'Your email address needs verification'}
+                    </p>
+                  </div>
+                  {profile.email_verified ? (
+                    <Badge variant="mint">Verified</Badge>
+                  ) : (
+                    <Badge variant="steel">Not Verified</Badge>
+                  )}
+                </div>
+                <div className="flex items-center justify-between p-4 bg-och-midnight/50 border border-och-steel/20 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-white">Account Status</p>
+                    <p className="text-xs text-och-steel">
+                      {profile.is_active ? 'Your account is in good standing' : 'Your account is inactive'}
+                    </p>
+                  </div>
+                  {profile.is_active ? (
+                    <Badge variant="mint">Active</Badge>
+                  ) : (
+                    <Badge variant="steel">Inactive</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </Card>
       )}
 

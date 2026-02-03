@@ -9,7 +9,7 @@ from .views import (
     MilestoneViewSet, ModuleViewSet,
     MentorshipCycleViewSet,
     DirectorProgramRuleViewSet, ProgramManagementViewSet,
-    # MentorAssignmentViewSet,  # Temporarily disabled due to syntax errors
+    MentorAssignmentViewSet,
     director_dashboard
 )
 from .views.calendar_views import CalendarEventViewSet
@@ -29,7 +29,7 @@ router.register(r'modules', ModuleViewSet, basename='module')
 router.register(r'cohorts', CohortViewSet, basename='cohort')
 router.register(r'rules', ProgramRuleViewSet, basename='rule')
 router.register(r'certificates', CertificateViewSet, basename='certificate')
-# router.register(r'mentor-assignments', MentorAssignmentViewSet, basename='mentor-assignment')  # Temporarily disabled due to syntax errors
+router.register(r'mentor-assignments', MentorAssignmentViewSet, basename='mentor-assignment')
 router.register(r'mentorship-cycles', MentorshipCycleViewSet, basename='mentorship-cycle')
 # Calendar events (must come after cohorts to avoid URL conflicts)
 router.register(r'calendar-events', CalendarEventViewSet, basename='calendar-event')

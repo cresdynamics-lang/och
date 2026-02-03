@@ -21,7 +21,7 @@ except ImportError:
 def get_s3_client():
     """Get S3 client if configured."""
     if not S3_AVAILABLE:
-        return None
+        return None, None
     
     aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
     aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
@@ -29,14 +29,15 @@ def get_s3_client():
     s3_bucket = os.environ.get('S3_MISSIONS_BUCKET')
     
     if not all([aws_access_key, aws_secret_key, s3_bucket]):
-        return None
+        return None, None
     
-    return boto3.client(
+    client = boto3.client(
         's3',
         aws_access_key_id=aws_access_key,
         aws_secret_access_key=aws_secret_key,
         region_name=aws_region
-    ), s3_bucket
+    )
+    return client, s3_bucket
 
 
 def generate_presigned_upload_url(submission_id: str, filename: str, content_type: str, max_size_mb: int = 10):

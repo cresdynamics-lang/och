@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-// import { motion } from 'framer-motion';
 import {
   Shield,
   Zap,
@@ -18,12 +17,14 @@ import {
   Play,
   TrendingUp,
   Target,
-  Map as MapIcon
+  Map as MapIcon,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-// import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
+import { curriculumClient } from '@/services/curriculumClient';
 import Link from 'next/link';
 
 interface CurriculumTrack {
@@ -198,89 +199,63 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
 }
 
 export default function CurriculumHubPage() {
+  const { user, isAuthenticated } = useAuth();
   const [tracks, setTracks] = useState<CurriculumTrack[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [recommendedTrack, setRecommendedTrack] = useState<string | null>(null);
 
   useEffect(() => {
     const loadTracks = async () => {
+      if (!isAuthenticated) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // For now, use mock data. Replace with actual API call
-        const mockTracks: CurriculumTrack[] = [
-          {
-            id: 'defender-track',
-            slug: 'defender',
-            title: 'Defender Track',
-            description: 'Master cybersecurity defense from fundamentals to advanced threat hunting',
-            thumbnail_url: 'https://placeholder.com/defender.jpg',
-            order_number: 1,
-            levels_count: 4,
-            total_duration_hours: 48,
-            user_enrollment: {
-              enrolled: true,
-              current_level: 'beginner',
-              progress_percent: 75
-            }
-          },
-          {
-            id: 'offensive-track',
-            slug: 'offensive',
-            title: 'Offensive Security Track',
-            description: 'Master penetration testing and red team operations',
-            thumbnail_url: 'https://placeholder.com/offensive.jpg',
-            order_number: 2,
-            levels_count: 4,
-            total_duration_hours: 50,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'grc-track',
-            slug: 'grc',
-            title: 'Governance, Risk & Compliance Track',
-            description: 'Master GRC frameworks and compliance management',
-            thumbnail_url: 'https://placeholder.com/grc.jpg',
-            order_number: 3,
-            levels_count: 4,
-            total_duration_hours: 40,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'innovation-track',
-            slug: 'innovation',
-            title: 'Innovation & Cloud Security Track',
-            description: 'Master cloud security and innovative security solutions',
-            thumbnail_url: 'https://placeholder.com/innovation.jpg',
-            order_number: 4,
-            levels_count: 4,
-            total_duration_hours: 48,
-            user_enrollment: { enrolled: false }
-          },
-          {
-            id: 'leadership-track',
-            slug: 'leadership',
-            title: 'Cyber Leadership Track',
-            description: 'Develop executive cybersecurity leadership skills',
-            thumbnail_url: 'https://placeholder.com/leadership.jpg',
-            order_number: 5,
-            levels_count: 4,
-            total_duration_hours: 56,
-            user_enrollment: { enrolled: false }
+        setLoading(true);
+        setError(null);
+
+        // Load tracks from API
+        const tracksData = await curriculumClient.getTracks();
+
+        // Transform API data to match component format
+        const formattedTracks: CurriculumTrack[] = tracksData.map((track: any) => ({
+          id: track.id || track.code,
+          slug: track.code || track.slug,
+          title: track.name || track.title,
+          description: track.description || '',
+          thumbnail_url: track.thumbnail_url || '',
+          order_number: track.order || track.order_number || 0,
+          levels_count: track.levels_count || 4,
+          total_duration_hours: track.total_duration_hours || 40,
+          user_enrollment: {
+            enrolled: track.is_enrolled || false,
+            current_level: track.current_level || 'beginner',
+            progress_percent: track.progress_percentage || track.progress_percent || 0
           }
-        ];
+        }));
 
-        setTracks(mockTracks);
+        setTracks(formattedTracks);
 
-        // Mock recommended track logic
-        setRecommendedTrack('defender');
-      } catch (error) {
-        console.error('Failed to load tracks:', error);
+        // Set recommended track from user profile or first enrolled track
+        const enrolledTrack = formattedTracks.find(t => t.user_enrollment.enrolled);
+        if (enrolledTrack) {
+          setRecommendedTrack(enrolledTrack.slug);
+        } else if (formattedTracks.length > 0) {
+          setRecommendedTrack(formattedTracks[0].slug);
+        }
+
+      } catch (err: any) {
+        console.error('Failed to load tracks:', err);
+        setError('Failed to load curriculum tracks. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
     loadTracks();
-  }, []);
+  }, [isAuthenticated]);
 
   // All tracks are freely available
   const enrolledTracks = tracks.filter(track => track.user_enrollment.enrolled);
@@ -290,9 +265,43 @@ export default function CurriculumHubPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <BookOpen className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-pulse" />
+          <Loader2 className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-spin" />
           <p className="text-slate-400">Loading Curriculum Hub...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <Card className="p-8 max-w-md text-center">
+          <Lock className="w-12 h-12 mx-auto mb-4 text-slate-500" />
+          <h2 className="text-2xl font-bold mb-2 text-white">Authentication Required</h2>
+          <p className="text-slate-400 mb-6">
+            Please log in to access the curriculum
+          </p>
+          <Button onClick={() => window.location.href = '/login/student'} variant="defender">
+            Log In
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <Card className="p-8 max-w-md text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-white">Error Loading Tracks</h2>
+          <p className="text-slate-400 mb-6">{error}</p>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            Retry
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -318,15 +327,15 @@ export default function CurriculumHubPage() {
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-slate-400">
               <div className="flex items-center gap-2">
                 <Shield className="w-4 h-4" />
-                <span>5 Specialized Tracks</span>
+                <span>{tracks.length} Specialized Tracks</span>
               </div>
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4" />
-                <span>20 Comprehensive Levels</span>
+                <span>{tracks.reduce((acc, t) => acc + t.levels_count, 0)} Comprehensive Levels</span>
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4" />
-                <span>240+ Hours of Content</span>
+                <span>{tracks.reduce((acc, t) => acc + t.total_duration_hours, 0)}+ Hours of Content</span>
               </div>
             </div>
           </div>
@@ -380,25 +389,27 @@ export default function CurriculumHubPage() {
         )}
 
         {/* All Available Tracks */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <MapIcon className="w-4 h-4 text-indigo-400" />
-            <h2 className="text-xl font-bold text-white">Explore All Tracks</h2>
-            <Badge variant="outline" className="text-slate-400 border-slate-600 text-xs">
-              {availableTracks.length} Available
-            </Badge>
-          </div>
+        {availableTracks.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <MapIcon className="w-4 h-4 text-indigo-400" />
+              <h2 className="text-xl font-bold text-white">Explore All Tracks</h2>
+              <Badge variant="outline" className="text-slate-400 border-slate-600 text-xs">
+                {availableTracks.length} Available
+              </Badge>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {availableTracks.map((track) => (
-              <TrackCard
-                key={track.id}
-                track={track}
-                isRecommended={track.slug === recommendedTrack}
-              />
-            ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {availableTracks.map((track) => (
+                <TrackCard
+                  key={track.id}
+                  track={track}
+                  isRecommended={track.slug === recommendedTrack}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Stats Summary */}
         <div className="text-center">
@@ -415,7 +426,9 @@ export default function CurriculumHubPage() {
               </div>
               <div>
                 <div className="text-lg font-bold text-blue-400">
-                  {Math.round(enrolledTracks.reduce((acc, track) => acc + (track.user_enrollment.progress_percent || 0), 0) / Math.max(enrolledTracks.length, 1))}%
+                  {enrolledTracks.length > 0
+                    ? Math.round(enrolledTracks.reduce((acc, track) => acc + (track.user_enrollment.progress_percent || 0), 0) / enrolledTracks.length)
+                    : 0}%
                 </div>
                 <div className="text-xs text-slate-400 uppercase tracking-wide">Avg Progress</div>
               </div>

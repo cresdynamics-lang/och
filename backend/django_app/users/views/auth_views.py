@@ -1364,6 +1364,61 @@ def reset_password(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def change_password(request):
+    """
+    POST /api/v1/auth/change-password
+    Change password for authenticated user.
+    """
+    user = request.user
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+
+    if not current_password or not new_password:
+        return Response(
+            {'error': 'Both current_password and new_password are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Verify current password
+    if not user.check_password(current_password):
+        return Response(
+            {'error': 'Current password is incorrect'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate new password length
+    if len(new_password) < 8:
+        return Response(
+            {'error': 'New password must be at least 8 characters long'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Set new password
+    user.set_password(new_password)
+    user.save()
+
+    # Log the password change
+    AuditLog.objects.create(
+        user=user,
+        actor_type='user',
+        actor_identifier=user.email,
+        action='password_change',
+        resource_type='user',
+        resource_id=str(user.id),
+        ip_address=request.META.get('REMOTE_ADDR'),
+        user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        metadata={'timestamp': timezone.now().isoformat()},
+        result='success'
+    )
+
+    return Response(
+        {'detail': 'Password changed successfully'},
+        status=status.HTTP_200_OK
+    )
+
+
 class SessionsView(APIView):
     """
     GET /api/v1/auth/sessions

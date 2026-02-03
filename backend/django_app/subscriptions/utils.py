@@ -20,9 +20,11 @@ def has_access(user_tier: str, required_tier: str) -> bool:
     """Check if user tier has access to required tier."""
     tier_hierarchy = {
         'free': 0,
+        'starter_3': 1,
         'starter_normal': 1,
         'starter_enhanced': 2,
         'premium': 3,
+        'professional_7': 4,
     }
     
     user_level = tier_hierarchy.get(user_tier, 0)
