@@ -59,13 +59,19 @@ INSTALLED_APPS = INSTALLED_APPS + [
     'django_extensions',  # Optional: for enhanced shell, etc.
 ]
 
-# Use SQLite for development (easier setup)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Use PostgreSQL for development (consistent with production)
+# Override with environment variables if needed
+if os.environ.get('USE_SQLITE', 'false').lower() == 'true':
+    # Fallback to SQLite only if explicitly requested
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    # Use PostgreSQL configuration from base.py
+    pass  # DATABASES already configured in base.py
 
 # Use console backend for email testing in development
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useDirectorDashboard, useCohorts, usePrograms } from '@/hooks/usePrograms'
 import { useAuth } from '@/hooks/useAuth'
 import { TrackDistributionChart } from '@/components/admin/TrackDistributionChart'
+import { Plus, Calendar } from 'lucide-react'
 
 interface PendingAction {
   id: string
@@ -168,10 +169,10 @@ export default function OverviewClient() {
     <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 text-och-defender">
+        <h1 className="text-3xl font-bold mb-2 text-white">
           Welcome back{user?.first_name ? `, ${user.first_name}` : ''}!
         </h1>
-        <p className="text-och-steel">Command center for programs, cohorts, and mentorship orchestration</p>
+        <p className="text-och-steel">Program management and oversight dashboard</p>
       </div>
 
       {/* High Priority Alerts */}
@@ -195,13 +196,10 @@ export default function OverviewClient() {
       )}
 
       {/* Priority Actions Section */}
-      <Card className="mb-6 border-och-orange/50">
+      <Card className="mb-6 border-och-orange/30">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚡</span>
-              <h2 className="text-2xl font-bold text-white">Priority Actions</h2>
-            </div>
+            <h2 className="text-2xl font-bold text-white">Priority Actions</h2>
             <Badge variant="orange" className="text-sm">High Priority</Badge>
           </div>
           
@@ -239,25 +237,23 @@ export default function OverviewClient() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-och-steel/20">
             <Link href="/dashboard/director/cohorts/new">
               <Button variant="defender" className="w-full flex items-center justify-center gap-2">
-                <span className="text-xl">📅</span>
+                <Calendar className="w-4 h-4" />
                 <span>Create Cohort</span>
               </Button>
             </Link>
             <Link href="/dashboard/director/programs/new">
               <Button variant="defender" className="w-full flex items-center justify-center gap-2">
-                <span className="text-xl">➕</span>
+                <Plus className="w-4 h-4" />
                 <span>Create Program</span>
               </Button>
             </Link>
             <Link href="/dashboard/director/enrollment">
               <Button variant="defender" className="w-full flex items-center justify-center gap-2">
-                <span className="text-xl">✅</span>
                 <span>Approve Enrollments</span>
               </Button>
             </Link>
             <Link href="/dashboard/director/mentors">
               <Button variant="defender" className="w-full flex items-center justify-center gap-2">
-                <span className="text-xl">👥</span>
                 <span>Assign Mentors</span>
               </Button>
             </Link>
@@ -378,12 +374,9 @@ export default function OverviewClient() {
       )}
 
       {/* Program Management Guidelines */}
-      <Card className="border-och-defender/30">
+      <Card className="border-och-steel/20">
         <div className="p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-            <span>📋</span>
-            Program Director Guidelines
-          </h3>
+          <h3 className="text-xl font-bold text-white mb-4">Program Director Guidelines</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <h4 className="text-och-defender font-semibold mb-2">Program & Cohort Management</h4>

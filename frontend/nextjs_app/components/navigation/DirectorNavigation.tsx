@@ -7,6 +7,11 @@ import clsx from 'clsx'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigation } from '@/hooks/useNavigation'
 import { getPrimaryRole } from '@/utils/rbac'
+import { 
+  LayoutDashboard, Target, CheckCircle, Handshake, BookOpen, TrendingUp, 
+  Calendar, Settings, Route, Plus, Users, Clock, RefreshCw, Ticket, 
+  Shuffle, Star, RotateCcw, Grid3X3, Rocket, BarChart3, FileText 
+} from 'lucide-react'
 
 // Helper function to get role display name
 function getRoleDisplayName(role: string | null): string {
@@ -30,66 +35,66 @@ function getRoleDisplayName(role: string | null): string {
 interface NavItem {
   label: string
   href: string
-  icon: string
+  icon: React.ComponentType<{ className?: string }>
   badge?: number
   children?: NavItem[]
   priority?: 'high' | 'medium' | 'low'
 }
 
 const navItems: NavItem[] = [
-  { label: 'Overview', href: '/dashboard/director', icon: '📊', priority: 'high' },
-  { label: 'Manage Programs', href: '/dashboard/director/programs', icon: '📋', priority: 'high' },
+  { label: 'Overview', href: '/dashboard/director', icon: LayoutDashboard, priority: 'high' },
   { 
     label: 'Programs & Cohorts', 
     href: '/dashboard/director/programs', 
-    icon: '🎯',
+    icon: Target,
     priority: 'high',
     children: [
-      { label: 'All Programs', href: '/dashboard/director/programs', icon: '📋' },
-      { label: 'All Tracks', href: '/dashboard/director/tracks', icon: '🛤️' },
-      { label: 'Create Program', href: '/dashboard/director/programs/new', icon: '➕' },
-      { label: 'Create Cohort', href: '/dashboard/director/cohorts/new', icon: '📅' },
-      { label: 'Manage Cohorts', href: '/dashboard/director/cohorts', icon: '👥' },
+      { label: 'All Programs', href: '/dashboard/director/programs', icon: BookOpen },
+      { label: 'All Tracks', href: '/dashboard/director/tracks', icon: Route },
+      { label: 'Create Program', href: '/dashboard/director/programs/new', icon: Plus },
+      { label: 'Create Cohort', href: '/dashboard/director/cohorts/new', icon: Calendar },
+      { label: 'Manage Cohorts', href: '/dashboard/director/cohorts', icon: Users },
+      { label: 'Assign Cohort to Track', href: '/dashboard/director/programs/assign', icon: Shuffle },
     ]
   },
   { 
     label: 'Enrollment & Placement', 
     href: '/dashboard/director/enrollment', 
-    icon: '✅',
+    icon: CheckCircle,
     priority: 'high',
     children: [
-      { label: 'Pending Approvals', href: '/dashboard/director/enrollment', icon: '⏳' },
-      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: '🔄' },
-      { label: 'Seat Allocation', href: '/dashboard/director/enrollment/seats', icon: '🎫' },
+      { label: 'Pending Approvals', href: '/dashboard/director/enrollment', icon: Clock },
+      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw },
+      { label: 'Seat Allocation', href: '/dashboard/director/enrollment/seats', icon: Ticket },
     ]
   },
   { 
     label: 'Mentorship Management', 
     href: '/dashboard/director/mentorship', 
-    icon: '🤝',
+    icon: Handshake,
     priority: 'high',
     children: [
-      { label: 'View All Mentors', href: '/dashboard/director/mentors', icon: '👥' },
-      { label: 'Auto-Matching', href: '/dashboard/director/mentorship/matching', icon: '🔀' },
-      { label: 'Mentor Reviews', href: '/dashboard/director/mentorship/reviews', icon: '⭐' },
-      { label: 'Cycle Configuration', href: '/dashboard/director/mentorship/cycles', icon: '🔄' },
+      { label: 'View All Mentors', href: '/dashboard/director/mentors', icon: Users },
+      { label: 'Auto-Matching', href: '/dashboard/director/mentorship/matching', icon: Shuffle },
+      { label: 'Mentor Reviews', href: '/dashboard/director/mentorship/reviews', icon: Star },
+      { label: 'Cycle Configuration', href: '/dashboard/director/mentorship/cycles', icon: RotateCcw },
     ]
   },
   { 
     label: 'Curriculum & Missions', 
     href: '/dashboard/director/curriculum', 
-    icon: '📚',
+    icon: BookOpen,
     priority: 'medium',
     children: [
-      { label: 'Define Structure', href: '/dashboard/director/curriculum', icon: '📐' },
-      { label: 'Manage Missions', href: '/dashboard/director/curriculum/missions', icon: '🚀' },
-      { label: 'Scoring Rules', href: '/dashboard/director/curriculum/scoring', icon: '📊' },
-      { label: 'Assessment Windows', href: '/dashboard/director/curriculum/assessments', icon: '📝' },
+      { label: 'Define Structure', href: '/dashboard/director/curriculum', icon: Grid3X3 },
+      { label: 'Manage Missions', href: '/dashboard/director/curriculum/missions', icon: Rocket },
+      { label: 'Scoring Rules', href: '/dashboard/director/curriculum/scoring', icon: BarChart3 },
+      { label: 'Assessment Windows', href: '/dashboard/director/curriculum/assessments', icon: FileText },
     ]
   },
-  { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: '📈', priority: 'medium' },
-  { label: 'Calendar & Milestones', href: '/dashboard/director/calendar', icon: '📆', priority: 'medium' },
-  { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: '⚙️', priority: 'low' },
+  { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: TrendingUp, priority: 'medium' },
+  { label: 'Calendar & Milestones', href: '/dashboard/director/calendar', icon: Calendar, priority: 'medium' },
+  { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: Settings, priority: 'low' },
 ]
 
 export function DirectorNavigation() {
@@ -277,7 +282,7 @@ export function DirectorNavigation() {
         {/* Logo/Brand */}
         <div className="p-6 border-b border-och-steel/20">
           <Link href="/dashboard/director" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
-            <span className="text-2xl">🎯</span>
+            <Target className="w-6 h-6 text-och-defender" />
             <span className="text-xl font-bold text-och-defender">Program Director</span>
           </Link>
         </div>
@@ -315,24 +320,6 @@ export function DirectorNavigation() {
           </div>
         </div>
 
-        {/* Expand/Collapse Controls */}
-        {!searchQuery && (
-          <div className="px-4 py-2 border-b border-och-steel/20 flex gap-2">
-            <button
-              onClick={handleExpandAll}
-              className="flex-1 px-3 py-1.5 text-xs bg-och-defender/20 text-och-defender rounded hover:bg-och-defender/30 transition-colors"
-            >
-              Expand All
-            </button>
-            <button
-              onClick={handleCollapseAll}
-              className="flex-1 px-3 py-1.5 text-xs bg-och-steel/20 text-och-steel rounded hover:bg-och-steel/30 transition-colors"
-            >
-              Collapse All
-            </button>
-          </div>
-        )}
-
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           {/* High Priority Section */}
@@ -347,6 +334,7 @@ export function DirectorNavigation() {
                 const active = isActive(item.href)
                 const hasChildren = item.children && item.children.length > 0
                 const isExpanded = expandedItems.has(item.label)
+                const IconComponent = item.icon
 
                 return (
                   <div key={item.href}>
@@ -363,7 +351,7 @@ export function DirectorNavigation() {
                           )}
                         >
                           <div className="flex items-center gap-3">
-                            <span className="text-xl">{item.icon}</span>
+                            <IconComponent className="w-5 h-5" />
                             <span className="font-medium">{item.label}</span>
                           </div>
                           <span className="text-och-steel">
@@ -379,11 +367,11 @@ export function DirectorNavigation() {
                           >
                             {item.children?.map((child) => {
                               const childActive = isActive(child.href)
+                              const ChildIcon = child.icon
                               return (
                                 <Link
                                   key={child.href}
                                   href={child.href}
-                                  onClick={() => setIsMobileMenuOpen(false)}
                                   className={clsx(
                                     'flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm',
                                     'hover:bg-och-defender/20 hover:text-och-mint',
@@ -392,7 +380,7 @@ export function DirectorNavigation() {
                                       : 'text-och-steel'
                                   )}
                                 >
-                                  <span className="text-lg">{child.icon}</span>
+                                  <ChildIcon className="w-4 h-4" />
                                   <span>{child.label}</span>
                                 </Link>
                               )
@@ -412,7 +400,7 @@ export function DirectorNavigation() {
                             : 'text-och-steel'
                         )}
                       >
-                        <span className="text-xl">{item.icon}</span>
+                        <IconComponent className="w-5 h-5" />
                         <span className="font-medium">{item.label}</span>
                         {item.badge !== undefined && item.badge > 0 && (
                           <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">
@@ -434,6 +422,7 @@ export function DirectorNavigation() {
               const active = isActive(item.href)
               const hasChildren = item.children && item.children.length > 0
               const isExpanded = expandedItems.has(item.label)
+              const IconComponent = item.icon
 
               return (
                 <div key={item.href}>
@@ -450,7 +439,7 @@ export function DirectorNavigation() {
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-xl">{item.icon}</span>
+                          <IconComponent className="w-5 h-5" />
                           <span className="font-medium">{item.label}</span>
                         </div>
                         <span className="text-och-steel">
@@ -466,11 +455,11 @@ export function DirectorNavigation() {
                         >
                           {item.children.map((child) => {
                             const childActive = isActive(child.href)
+                            const ChildIcon = child.icon
                             return (
                               <Link
                                 key={child.href}
                                 href={child.href}
-                                onClick={() => setIsMobileMenuOpen(false)}
                                 className={clsx(
                                   'flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm',
                                   'hover:bg-och-defender/20 hover:text-och-mint',
@@ -479,7 +468,7 @@ export function DirectorNavigation() {
                                     : 'text-och-steel'
                                 )}
                               >
-                                <span className="text-lg">{child.icon}</span>
+                                <ChildIcon className="w-4 h-4" />
                                 <span>{child.label}</span>
                               </Link>
                             )
@@ -499,7 +488,7 @@ export function DirectorNavigation() {
                           : 'text-och-steel'
                       )}
                     >
-                      <span className="text-xl">{item.icon}</span>
+                      <IconComponent className="w-5 h-5" />
                       <span className="font-medium">{item.label}</span>
                       {item.badge !== undefined && item.badge > 0 && (
                         <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">
@@ -511,87 +500,6 @@ export function DirectorNavigation() {
                 </div>
               )
             })}
-            </div>
-          )}
-          {/* Show all filtered items when searching */}
-          {searchQuery && (
-            <div className="space-y-1">
-              {filteredNavItems
-                .filter((item) => item.priority !== 'high')
-                .map((item) => {
-                  const active = isActive(item.href)
-                  const hasChildren = item.children && item.children.length > 0
-                  const isExpanded = expandedItems.has(item.label)
-
-                  return (
-                    <div key={item.href}>
-                      {hasChildren ? (
-                        <>
-                          <button
-                            onClick={() => toggleExpanded(item.label)}
-                            className={clsx(
-                              'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-all duration-200',
-                              'hover:bg-och-defender/20 hover:text-och-mint',
-                              active
-                                ? 'bg-och-defender/30 text-och-mint border-l-4 border-och-mint'
-                                : 'text-och-steel'
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-xl">{item.icon}</span>
-                              <span className="font-medium">{item.label}</span>
-                            </div>
-                            <span className="text-och-steel">{isExpanded ? '▼' : '▶'}</span>
-                          </button>
-                          {isExpanded && item.children && (
-                            <div
-                              className={clsx(
-                                'ml-4 mt-1 space-y-1 border-l border-och-steel/20 pl-4 overflow-hidden transition-all duration-300',
-                                isExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'
-                              )}
-                            >
-                              {item.children.map((child) => {
-                                const childActive = isActive(child.href)
-                                return (
-                                  <Link
-                                    key={child.href}
-                                    href={child.href}
-                                    onClick={() => setIsMobileMenuOpen(false)}
-                                    className={clsx(
-                                      'flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm',
-                                      'hover:bg-och-defender/20 hover:text-och-mint',
-                                      childActive
-                                        ? 'bg-och-defender/30 text-och-mint'
-                                        : 'text-och-steel'
-                                    )}
-                                  >
-                                    <span className="text-lg">{child.icon}</span>
-                                    <span>{child.label}</span>
-                                  </Link>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <Link
-                          href={item.href}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className={clsx(
-                            'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200',
-                            'hover:bg-och-defender/20 hover:text-och-mint',
-                            active
-                              ? 'bg-och-defender/30 text-och-mint border-l-4 border-och-mint'
-                              : 'text-och-steel'
-                          )}
-                        >
-                          <span className="text-xl">{item.icon}</span>
-                          <span className="font-medium">{item.label}</span>
-                        </Link>
-                      )}
-                    </div>
-                  )
-                })}
             </div>
           )}
         </nav>
@@ -652,4 +560,3 @@ export function DirectorNavigation() {
     </>
   )
 }
-

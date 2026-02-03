@@ -13,6 +13,12 @@ class User(AbstractUser):
     """
     Enhanced User model with ABAC attributes and account lifecycle management.
     """
+    # Use UUID string as primary key
+    id = models.CharField(max_length=36, primary_key=True, default=lambda: str(uuid.uuid4()), editable=False)
+    
+    # Separate UUID field for foreign key references
+    uuid_id = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    
     # Override email to make it unique and indexed (AbstractUser has email but not unique by default)
     email = models.EmailField(unique=True, db_index=True)
     

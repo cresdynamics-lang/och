@@ -1,0 +1,528 @@
+{
+  "info": {
+    "name": "OCH SMP API - Testing Flow",
+    "description": "Numbered API testing flow matching OCH SMP Technical Specifications",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "program_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "track_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cohort_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "certificate_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rule_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Login Director",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('auth_token', response.access);",
+              "    pm.test('✅ Login successful', () => {",
+              "        pm.expect(response.access).to.exist;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"email\": \"director@gmail.com\",\n    \"password\": \"testpass123\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "auth", "login", ""]
+        }
+      }
+    },
+    {
+      "name": "02. Create Program",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('program_id', response.id);",
+              "    pm.test('✅ Program created', () => {",
+              "        pm.expect(response.id).to.exist;",
+              "        pm.expect(response.name).to.exist;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"name\": \"Cybersecurity Leadership Program\",\n    \"category\": \"technical\",\n    \"categories\": [\"technical\", \"leadership\"],\n    \"description\": \"Comprehensive cybersecurity leadership development program\",\n    \"duration_months\": 6,\n    \"default_price\": 2500.00,\n    \"currency\": \"USD\",\n    \"outcomes\": [\n        \"Master advanced threat detection\",\n        \"Lead security teams effectively\",\n        \"Develop incident response strategies\"\n    ],\n    \"structure\": {\n        \"modules\": 12,\n        \"milestones\": 4,\n        \"capstone_required\": true\n    },\n    \"missions_registry_link\": \"https://missions.och.edu/cybersec-leadership\",\n    \"status\": \"active\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/programs/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "programs", ""]
+        }
+      }
+    },
+    {
+      "name": "03. List Programs",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/programs/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "programs", ""]
+        }
+      }
+    },
+    {
+      "name": "04. View Program",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/programs/{{program_id}}/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "programs", "{{program_id}}", ""]
+        }
+      }
+    },
+    {
+      "name": "05. Create Track",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('track_id', response.id);",
+              "    pm.test('✅ Track created', () => {",
+              "        pm.expect(response.id).to.exist;",
+              "        pm.expect(response.name).to.exist;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"program\": \"{{program_id}}\",\n    \"name\": \"Defensive Security Track\",\n    \"key\": \"defensive-security\",\n    \"track_type\": \"primary\",\n    \"description\": \"Focus on defensive cybersecurity strategies\",\n    \"competencies\": {\n        \"core\": [\"Threat Detection\", \"Incident Response\"],\n        \"advanced\": [\"Threat Hunting\", \"Forensics\"]\n    },\n    \"missions\": [\"mission-001\", \"mission-002\"]\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/tracks/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "tracks", ""]
+        }
+      }
+    },
+    {
+      "name": "06. List Tracks",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/tracks/?program_id={{program_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "tracks", ""],
+          "query": [
+            {
+              "key": "program_id",
+              "value": "{{program_id}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "07. View Track",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/tracks/{{track_id}}/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "tracks", "{{track_id}}", ""]
+        }
+      }
+    },
+    {
+      "name": "08. Create Cohort",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('cohort_id', response.id);",
+              "    pm.test('✅ Cohort created', () => {",
+              "        pm.expect(response.id).to.exist;",
+              "        pm.expect(response.name).to.exist;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"track\": \"{{track_id}}\",\n    \"name\": \"CyberSec Leadership Cohort Spring 2024\",\n    \"start_date\": \"2024-03-01\",\n    \"end_date\": \"2024-09-01\",\n    \"mode\": \"hybrid\",\n    \"seat_cap\": 30,\n    \"mentor_ratio\": 0.15,\n    \"seat_pool\": {\n        \"paid\": 20,\n        \"scholarship\": 5,\n        \"sponsored\": 5\n    },\n    \"status\": \"active\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", ""]
+        }
+      }
+    },
+    {
+      "name": "09. List Cohorts",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", ""]
+        }
+      }
+    },
+    {
+      "name": "10. Create Calendar Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"type\": \"orientation\",\n    \"title\": \"Program Orientation\",\n    \"description\": \"Welcome and program overview session\",\n    \"start_ts\": \"2024-03-01T09:00:00Z\",\n    \"end_ts\": \"2024-03-01T12:00:00Z\",\n    \"timezone\": \"America/New_York\",\n    \"location\": \"Virtual - Zoom\",\n    \"link\": \"https://zoom.us/j/123456789\",\n    \"completion_tracked\": true,\n    \"status\": \"scheduled\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/calendar/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "calendar", ""]
+        }
+      }
+    },
+    {
+      "name": "11. View Cohort Calendar",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/calendar/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "calendar", ""]
+        }
+      }
+    },
+    {
+      "name": "12. Enroll Student",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"user\": \"student@example.com\",\n    \"enrollment_type\": \"director\",\n    \"seat_type\": \"paid\",\n    \"payment_status\": \"pending\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/enrollments/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "enrollments", ""]
+        }
+      }
+    },
+    {
+      "name": "13. List Cohort Members",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/enrollments/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "enrollments", ""]
+        }
+      }
+    },
+    {
+      "name": "14. Assign Mentor",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"mentor\": \"mentor-user-id\",\n    \"role\": \"primary\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/mentors/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "mentors", ""]
+        }
+      }
+    },
+    {
+      "name": "15. List Assigned Mentors",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/mentors/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "mentors", ""]
+        }
+      }
+    },
+    {
+      "name": "16. Create Program Rule",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const response = pm.response.json();",
+              "    pm.collectionVariables.set('rule_id', response.id);",
+              "    pm.test('✅ Rule created', () => {",
+              "        pm.expect(response.id).to.exist;",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"program\": \"{{program_id}}\",\n    \"rule\": {\n        \"criteria\": {\n            \"attendance_percent\": 80,\n            \"portfolio_approved\": true,\n            \"feedback_score\": 4.0,\n            \"payment_complete\": true\n        },\n        \"thresholds\": {\n            \"min_sessions_attended\": 15,\n            \"min_assignments_completed\": 10\n        }\n    },\n    \"version\": 1,\n    \"active\": true\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/rules/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "rules", ""]
+        }
+      }
+    },
+    {
+      "name": "17. List Program Rules",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/rules/?program_id={{program_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "rules", ""],
+          "query": [
+            {
+              "key": "program_id",
+              "value": "{{program_id}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "18. Auto-Graduate Cohort",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"rule_id\": \"{{rule_id}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/auto_graduate/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "auto_graduate", ""]
+        }
+      }
+    },
+    {
+      "name": "19. View Waitlist",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/waitlist/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "waitlist", ""]
+        }
+      }
+    },
+    {
+      "name": "20. Export Cohort Report (JSON)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/export/?format=json",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "export", ""],
+          "query": [
+            {
+              "key": "format",
+              "value": "json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "21. Export Cohort Report (CSV)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/export/?format=csv",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "export", ""],
+          "query": [
+            {
+              "key": "format",
+              "value": "csv"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "22. Cohort Dashboard Data",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/cohorts/{{cohort_id}}/dashboard/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "cohorts", "{{cohort_id}}", "dashboard", ""]
+        }
+      }
+    },
+    {
+      "name": "23. Director Dashboard Summary",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/director/dashboard/summary/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "director", "dashboard", "summary", ""]
+        }
+      }
+    },
+    {
+      "name": "24. Director Cohorts List",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/director/dashboard/cohorts/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "director", "dashboard", "cohorts", ""]
+        }
+      }
+    },
+    {
+      "name": "25. Download Certificate",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{base_url}}/api/v1/certificates/{{certificate_id}}/",
+          "host": ["{{base_url}}"],
+          "path": ["api", "v1", "certificates", "{{certificate_id}}", ""]
+        }
+      }
+    }
+  ]
+}

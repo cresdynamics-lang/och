@@ -623,18 +623,31 @@ class CohortViewSet(viewsets.ModelViewSet):
         
         elif request.method == 'POST':
             # Use EnrollmentService for validation and waitlist handling
-            user_id = request.data.get('user', request.user.id)
+            user_id = request.data.get('user')
             enrollment_type = request.data.get('enrollment_type', 'self')
             seat_type = request.data.get('seat_type', 'paid')
             org_id = request.data.get('org')
             
+            # If no user_id provided, return error (directors must specify user)
+            if not user_id:
+                return Response(
+                    {'error': 'User field is required for enrollment'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
             from django.contrib.auth import get_user_model
             User = get_user_model()
             try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
+                # Handle both UUID string and email lookup
+                if '@' in str(user_id):
+                    # Email lookup
+                    user = User.objects.get(email=user_id)
+                else:
+                    # UUID lookup
+                    user = User.objects.get(id=user_id)
+            except (User.DoesNotExist, ValueError):
                 return Response(
-                    {'error': 'User not found'},
+                    {'error': f'User not found: {user_id}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             

@@ -14,6 +14,18 @@ from .views import (
 )
 from .views.calendar_views import CalendarEventViewSet
 from .views.director_views import DirectorCohortViewSet
+from .views.director_management_views import (
+    DirectorProgramManagementViewSet,
+    DirectorTrackManagementViewSet,
+    DirectorCohortManagementViewSet,
+    DirectorMentorManagementViewSet
+)
+from .views.director_calendar_views import DirectorCalendarViewSet
+from .views.director_lifecycle_views import DirectorCohortLifecycleViewSet
+from .views.director_rules_views import DirectorProgramRulesViewSet
+from .views.director_reports_views import DirectorReportsViewSet
+from .views.director_advanced_analytics_views import DirectorAdvancedAnalyticsViewSet
+from .views.director_certificate_views import DirectorCertificateViewSet
 from .director_dashboard_views import (
     director_dashboard_summary,
     director_cohorts_list,
@@ -35,15 +47,18 @@ router.register(r'mentorship-cycles', MentorshipCycleViewSet, basename='mentorsh
 router.register(r'calendar-events', CalendarEventViewSet, basename='calendar-event')
 
 # Director-specific endpoints
-# Note: Director ViewSets are currently handled via director_dashboard_views.py
-# If ViewSets are needed, they should be created in director_views.py
 director_router = DefaultRouter()
-# director_router.register(r'programs', DirectorProgramViewSet, basename='director-program')
-# director_router.register(r'tracks', DirectorTrackViewSet, basename='director-track')
+director_router.register(r'programs', DirectorProgramManagementViewSet, basename='director-program')
+director_router.register(r'tracks', DirectorTrackManagementViewSet, basename='director-track')
+director_router.register(r'cohorts-management', DirectorCohortManagementViewSet, basename='director-cohort-management')
 director_router.register(r'cohorts', DirectorCohortViewSet, basename='director-cohort')
-# director_router.register(r'mentors', DirectorMentorViewSet, basename='director-mentor')
-director_router.register(r'rules', DirectorProgramRuleViewSet, basename='director-rule')
-# director_router.register(r'dashboard', DirectorDashboardViewSet, basename='director-dashboard')
+director_router.register(r'cohorts-lifecycle', DirectorCohortLifecycleViewSet, basename='director-cohort-lifecycle')
+director_router.register(r'mentors', DirectorMentorManagementViewSet, basename='director-mentor')
+director_router.register(r'calendar', DirectorCalendarViewSet, basename='director-calendar')
+director_router.register(r'rules', DirectorProgramRulesViewSet, basename='director-rule')
+director_router.register(r'reports', DirectorReportsViewSet, basename='director-reports')
+director_router.register(r'advanced-analytics', DirectorAdvancedAnalyticsViewSet, basename='director-advanced-analytics')
+director_router.register(r'certificates', DirectorCertificateViewSet, basename='director-certificates')
 
 urlpatterns = [
     # Legacy director dashboard endpoint (kept for backward compatibility)
@@ -53,16 +68,6 @@ urlpatterns = [
     path('director/dashboard/summary/', director_dashboard_summary, name='director-dashboard-summary'),
     path('director/dashboard/cohorts/', director_cohorts_list, name='director-cohorts-list'),
     path('director/dashboard/cohorts/<uuid:cohort_id>/', director_cohort_detail, name='director-cohort-detail'),
-    
-    # Tracks under programs path: /api/v1/programs/tracks/
-    # Must use a specific path pattern to avoid conflicting with /programs/{id}/
-    path('programs/tracks/', TrackViewSet.as_view({'get': 'list', 'post': 'create'}), name='program-tracks-list'),
-    path('programs/tracks/<uuid:pk>/', TrackViewSet.as_view({
-        'get': 'retrieve',
-        'put': 'update',
-        'patch': 'partial_update',
-        'delete': 'destroy'
-    }), name='program-track-detail'),
     
     # All other routes (includes /programs/ and /programs/{id}/ for ProgramViewSet)
     path('', include(router.urls)),

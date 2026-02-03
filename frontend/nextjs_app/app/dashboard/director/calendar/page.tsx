@@ -1,24 +1,15 @@
 'use client'
 
 import { RouteGuard } from '@/components/auth/RouteGuard'
-import CalendarClient from './calendar-client'
+import { DirectorLayout } from '@/components/director/DirectorLayout'
+import CalendarManagementClient from '@/components/director/CalendarManagementClient'
 
 export default function CalendarPage() {
   return (
     <RouteGuard>
-      <CalendarClient />
+      <DirectorLayout>
+        <CalendarManagementClient />
+      </DirectorLayout>
     </RouteGuard>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,24 +1,15 @@
 'use client'
 
 import { RouteGuard } from '@/components/auth/RouteGuard'
-import ReportsClient from './reports-client'
+import { DirectorLayout } from '@/components/director/DirectorLayout'
+import ReportsAnalyticsClient from '@/components/director/ReportsAnalyticsClient'
 
 export default function ReportsPage() {
   return (
     <RouteGuard>
-      <ReportsClient />
+      <DirectorLayout>
+        <ReportsAnalyticsClient />
+      </DirectorLayout>
     </RouteGuard>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-

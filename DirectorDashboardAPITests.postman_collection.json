@@ -1,0 +1,805 @@
+{
+  "info": {
+    "name": "Director Dashboard API Tests",
+    "description": "Comprehensive API testing for Director Dashboard features",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "program_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "track_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cohort_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login Director",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('auth_token', response.access);",
+                  "    pm.test('Login successful', () => {",
+                  "        pm.expect(response.access).to.exist;",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Login failed', () => {",
+                  "        pm.expect.fail('Login should succeed');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"director@gmail.com\",\n    \"password\": \"testpass123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "High Priority - Program Management",
+      "item": [
+        {
+          "name": "Create Program",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('program_id', response.id);",
+                  "    pm.test('Program created successfully', () => {",
+                  "        pm.expect(response.name).to.eql('Test Cybersecurity Program');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Test Cybersecurity Program\",\n    \"category\": \"technical\",\n    \"description\": \"Test program for API testing\",\n    \"duration_months\": 6,\n    \"default_price\": \"1500.00\",\n    \"currency\": \"USD\",\n    \"outcomes\": [\"Security Analysis\", \"Risk Assessment\"],\n    \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/programs/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "programs", ""]
+            }
+          }
+        },
+        {
+          "name": "List Programs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Programs list retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.results).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/programs/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "programs", ""]
+            }
+          }
+        },
+        {
+          "name": "Create Track",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('track_id', response.id);",
+                  "    pm.test('Track created successfully', () => {",
+                  "        pm.expect(response.name).to.eql('Defensive Security Track');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"program\": \"{{program_id}}\",\n    \"name\": \"Defensive Security Track\",\n    \"key\": \"defensive\",\n    \"description\": \"Focus on defensive cybersecurity techniques\",\n    \"competencies\": {\"core\": [\"Network Security\", \"Incident Response\"]},\n    \"missions\": [\"mission-1\", \"mission-2\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/tracks/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "tracks", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "High Priority - Cohort Management",
+      "item": [
+        {
+          "name": "Create Cohort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.collectionVariables.set('cohort_id', response.id);",
+                  "    pm.test('Cohort created successfully', () => {",
+                  "        pm.expect(response.name).to.eql('Test Cohort 2024');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"track\": \"{{track_id}}\",\n    \"name\": \"Test Cohort 2024\",\n    \"start_date\": \"2024-02-01\",\n    \"end_date\": \"2024-08-01\",\n    \"mode\": \"virtual\",\n    \"seat_cap\": 25,\n    \"mentor_ratio\": 0.2,\n    \"seat_pool\": {\"paid\": 20, \"scholarship\": 3, \"sponsored\": 2},\n    \"status\": \"draft\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/cohorts-management/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "cohorts-management", ""]
+            }
+          }
+        },
+        {
+          "name": "List Cohorts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cohorts list retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.results).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/cohorts/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "cohorts", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Cohort Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cohort status updated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.status).to.eql('active');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/cohorts-lifecycle/{{cohort_id}}/transition_status/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "cohorts-lifecycle", "{{cohort_id}}", "transition_status", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "High Priority - Calendar Management",
+      "item": [
+        {
+          "name": "Create Calendar Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Calendar event created', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.title).to.eql('Orientation Session');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cohort_id\": \"{{cohort_id}}\",\n    \"type\": \"orientation\",\n    \"title\": \"Orientation Session\",\n    \"description\": \"Welcome and program overview\",\n    \"start_ts\": \"2024-02-01T10:00:00Z\",\n    \"end_ts\": \"2024-02-01T12:00:00Z\",\n    \"timezone\": \"UTC\",\n    \"location\": \"Virtual\",\n    \"completion_tracked\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/calendar/create_event/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "calendar", "create_event", ""]
+            }
+          }
+        },
+        {
+          "name": "List Calendar Events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Calendar events retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.events).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/calendar/cohort_calendar/?cohort_id={{cohort_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "calendar", "cohort_calendar", ""],
+              "query": [
+                {
+                  "key": "cohort_id",
+                  "value": "{{cohort_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "High Priority - Mentor Assignment",
+      "item": [
+        {
+          "name": "List Available Mentors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Mentors list retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.mentors).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/mentors/available_mentors/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "mentors", "available_mentors", ""]
+            }
+          }
+        },
+        {
+          "name": "Assign Mentor to Cohort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Mentor assigned successfully', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.role).to.eql('primary');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"cohort_id\": \"{{cohort_id}}\",\n    \"mentor_email\": \"mentor@example.com\",\n    \"role\": \"primary\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/mentors/assign_mentor/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "mentors", "assign_mentor", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Medium Priority - Program Rules",
+      "item": [
+        {
+          "name": "Create Program Rule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Program rule created', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.active).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"program_id\": \"{{program_id}}\",\n    \"rule\": {\n        \"criteria\": {\n            \"attendance_percent\": 80,\n            \"portfolio_approved\": true,\n            \"feedback_score\": 4.0,\n            \"payment_complete\": true\n        },\n        \"thresholds\": {\n            \"min_missions_completed\": 10,\n            \"min_peer_reviews\": 3\n        }\n    },\n    \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/rules/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "rules", ""]
+            }
+          }
+        },
+        {
+          "name": "List Program Rules",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Program rules retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.rules).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/rules/list_rules/?program_id={{program_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "rules", "list_rules", ""],
+              "query": [
+                {
+                  "key": "program_id",
+                  "value": "{{program_id}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Medium Priority - Reports",
+      "item": [
+        {
+          "name": "Generate Enrollment Report",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Enrollment report generated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.report_data).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/reports/enrollment_report/?start_date=2024-01-01&end_date=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "reports", "enrollment_report", ""],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2024-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Report CSV",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('CSV export successful', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/reports/export_csv/?report_type=enrollment&start_date=2024-01-01&end_date=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "reports", "export_csv", ""],
+              "query": [
+                {
+                  "key": "report_type",
+                  "value": "enrollment"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2024-12-31"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Low Priority - Advanced Analytics",
+      "item": [
+        {
+          "name": "Enrollment Funnel Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Enrollment funnel data retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.funnel).to.be.an('array');",
+                  "    pm.expect(response.conversion_rates).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/advanced-analytics/enrollment_funnel/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "advanced-analytics", "enrollment_funnel", ""]
+            }
+          }
+        },
+        {
+          "name": "Cohort Comparison Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cohort comparison data retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.cohorts).to.be.an('array');",
+                  "    pm.expect(response.benchmarks).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/advanced-analytics/cohort_comparison/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "advanced-analytics", "cohort_comparison", ""]
+            }
+          }
+        },
+        {
+          "name": "Mentor Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Mentor analytics retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.mentors).to.be.an('array');",
+                  "    pm.expect(response.summary).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/advanced-analytics/mentor_analytics/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "advanced-analytics", "mentor_analytics", ""]
+            }
+          }
+        },
+        {
+          "name": "Predictive Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Predictive analytics retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.predictions).to.be.an('array');",
+                  "    pm.expect(response.trend_analysis).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/advanced-analytics/predictive_analytics/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "advanced-analytics", "predictive_analytics", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Low Priority - Certificate Management",
+      "item": [
+        {
+          "name": "List Certificates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Certificates list retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.certificates).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/certificates/list_certificates/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "certificates", "list_certificates", ""]
+            }
+          }
+        },
+        {
+          "name": "Certificate Statistics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Certificate statistics retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.summary).to.exist;",
+                  "    pm.expect(response.program_statistics).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/certificates/statistics/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "certificates", "statistics", ""]
+            }
+          }
+        },
+        {
+          "name": "Certificate Templates",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Certificate templates retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.technical).to.exist;",
+                  "    pm.expect(response.leadership).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/certificates/certificate_templates/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "certificates", "certificate_templates", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard Summary",
+      "item": [
+        {
+          "name": "Director Dashboard Summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Dashboard summary retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response.hero_metrics).to.exist;",
+                  "    pm.expect(response.cohort_table).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/programs/director/dashboard/summary/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "programs", "director", "dashboard", "summary", ""]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

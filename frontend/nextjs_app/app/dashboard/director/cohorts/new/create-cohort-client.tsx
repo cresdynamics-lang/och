@@ -181,17 +181,17 @@ export default function CreateCohortClient() {
     
     // Validate required fields
     if (!selectedTrackId || !formData.name || !formData.start_date || !formData.end_date) {
-      alert('Please fill in all required fields: Program, Track, Cohort Name, Start Date, and End Date')
+      setStep('core')
       return
     }
 
     if (!selectedProgramId) {
-      alert('Please select a program')
+      setStep('core')
       return
     }
 
     if (!selectedTrackId) {
-      alert('Please select a track')
+      setStep('core')
       return
     }
 

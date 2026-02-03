@@ -267,8 +267,8 @@ class ProgramsClient {
   }
 
   async createProgram(data: Partial<Program>): Promise<Program> {
-    // Use program-management endpoint for full structure support
-    return apiGateway.post('/programs-management/', data)
+    // Use director program endpoint for full structure support
+    return apiGateway.post('/director/programs/', data)
   }
 
   async updateProgram(id: string, data: Partial<Program>): Promise<Program> {
@@ -580,6 +580,27 @@ class ProgramsClient {
     return apiGateway.post(`/director/cohorts/${cohortId}/bulk_create_enrollments/`, data)
   }
 
+  // Certificates
+  async getCertificate(id: string): Promise<any> {
+    return apiGateway.get(`/certificates/${id}/`)
+  }
+
+  async downloadCertificate(id: string): Promise<Blob> {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000'}/api/v1/certificates/${id}/download/`,
+      {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('auth_token') || ''}`,
+        },
+      }
+    )
+    if (!response.ok) {
+      throw new Error('Certificate download failed')
+    }
+    return response.blob()
+  }
+
+  // Waitlist Management
   async getCohortWaitlist(cohortId: string): Promise<any[]> {
     return apiGateway.get(`/cohorts/${cohortId}/waitlist/`)
   }

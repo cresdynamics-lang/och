@@ -8,6 +8,24 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useDirectorDashboard } from '@/hooks/usePrograms'
 import { auditClient, type AuditLog } from '@/services/auditClient'
+import AdvancedAnalytics from './advanced-analytics'
+
+export default function AnalyticsPage() {
+  const { dashboard, isLoading: dashboardLoading, error: dashboardError, reload: reloadDashboard } = useDirectorDashboard()
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year' | 'custom'>('month')
+  const [actionFilter, setActionFilter] = useState<string>('all')
+  const [resourceFilter, setResourceFilter] = useState<string>('all')
+  const [resultFilter, setResultFilter] = useState<string>('all')
+  const [actorFilter, setActorFilter] = useState<string>('')
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(25)
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const [showAdvancedAnalytics, setShowAdvancedAnalytics] = useState(false)
 
 export default function AnalyticsPage() {
   const { dashboard, isLoading: dashboardLoading, error: dashboardError, reload: reloadDashboard } = useDirectorDashboard()
@@ -256,6 +274,9 @@ export default function AnalyticsPage() {
               <p className="text-och-steel">Track director actions, view reports, and export data</p>
             </div>
             <div className="flex gap-3">
+              <Button variant="defender" onClick={() => setShowAdvancedAnalytics(true)}>
+                Advanced Analytics
+              </Button>
               <Button variant="outline" size="sm" onClick={exportToCSV} disabled={filteredLogs.length === 0}>
                 Export CSV
               </Button>
@@ -765,6 +786,11 @@ export default function AnalyticsPage() {
             </Card>
           ) : null}
         </div>
+        
+        {/* Advanced Analytics Modal */}
+        {showAdvancedAnalytics && (
+          <AdvancedAnalytics onClose={() => setShowAdvancedAnalytics(false)} />
+        )}
       </DirectorLayout>
     </RouteGuard>
   )

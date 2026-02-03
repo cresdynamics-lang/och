@@ -10,6 +10,7 @@ import { ActionCenter } from '@/components/dashboard/ActionCenter'
 import { CreateProgramView } from '@/components/dashboard/CreateProgramView'
 import { ViewProgramsView } from '@/components/dashboard/ViewProgramsView'
 import { DirectorAnalytics } from '@/components/dashboard/DirectorAnalytics'
+import { Plus, BookOpen, BarChart3, Calendar } from 'lucide-react'
 import {
   useDirectorDashboard,
   useCohorts,
@@ -18,7 +19,7 @@ import {
 import { programsClient } from '@/services/programsClient'
 import type { DirectorAlert } from '@/services/programsClient'
 
-type ViewType = 'dashboard' | 'create-program' | 'view-programs' | 'analytics'
+type ViewType = 'dashboard' | 'view-programs' | 'analytics'
 
 interface PendingRequest {
   id: string
@@ -158,8 +159,6 @@ export default function DirectorDashboardClient() {
   // Render main content based on active view
   const renderMainContent = () => {
     switch (activeView) {
-      case 'create-program':
-        return <CreateProgramView />
       case 'view-programs':
         return <ViewProgramsView />
       case 'analytics':
@@ -169,11 +168,11 @@ export default function DirectorDashboardClient() {
         return (
           <div className="space-y-6">
             {/* Welcome Header */}
-            <div>
-              <h1 className="text-4xl font-bold mb-2 text-och-mint">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold mb-2 text-white">
                 Welcome back{user?.first_name ? `, ${user.first_name}` : ''}!
               </h1>
-              <p className="text-och-steel">Command center for programs, cohorts, and outcomes</p>
+              <p className="text-och-steel">Program management and oversight dashboard</p>
             </div>
 
             {/* Hero Metrics - Compact */}
@@ -236,18 +235,15 @@ export default function DirectorDashboardClient() {
             />
 
             {/* Quick Actions */}
-            <Card className="border-och-defender/30">
-              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <span>⚡</span>
-                Quick Actions
-              </h3>
+            <Card className="border-och-steel/20">
+              <h3 className="text-xl font-bold text-white mb-4">Quick Actions</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Button
                   variant="defender"
                   className="flex items-center justify-center gap-2 py-4"
-                  onClick={() => setActiveView('create-program')}
+                  onClick={() => window.location.href = '/dashboard/director/programs/new'}
                 >
-                  <span className="text-xl">➕</span>
+                  <Plus className="w-4 h-4" />
                   <span>Create Program</span>
                 </Button>
                 <Button
@@ -255,7 +251,7 @@ export default function DirectorDashboardClient() {
                   className="flex items-center justify-center gap-2 py-4"
                   onClick={() => setActiveView('view-programs')}
                 >
-                  <span className="text-xl">📋</span>
+                  <BookOpen className="w-4 h-4" />
                   <span>View Programs</span>
                 </Button>
                 <Button
@@ -263,7 +259,7 @@ export default function DirectorDashboardClient() {
                   className="flex items-center justify-center gap-2 py-4"
                   onClick={() => setActiveView('analytics')}
                 >
-                  <span className="text-xl">📈</span>
+                  <BarChart3 className="w-4 h-4" />
                   <span>Analytics</span>
                 </Button>
                 <Button
@@ -271,7 +267,7 @@ export default function DirectorDashboardClient() {
                   className="flex items-center justify-center gap-2 py-4"
                   onClick={() => window.location.href = '/dashboard/director/cohorts/new'}
                 >
-                  <span className="text-xl">📅</span>
+                  <Calendar className="w-4 h-4" />
                   <span>Create Cohort</span>
                 </Button>
               </div>

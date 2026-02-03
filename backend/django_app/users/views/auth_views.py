@@ -324,6 +324,10 @@ class SimpleLoginView(APIView):
             )
 
 
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+@method_decorator(csrf_exempt, name='dispatch')
 class LoginView(APIView):
     """
     POST /api/v1/auth/login

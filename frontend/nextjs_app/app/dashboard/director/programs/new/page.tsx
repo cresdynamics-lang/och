@@ -1,24 +1,15 @@
 'use client'
 
 import { RouteGuard } from '@/components/auth/RouteGuard'
-import CreateProgramClient from './create-program-client'
+import { DirectorLayout } from '@/components/director/DirectorLayout'
+import CreateProgramForm from '@/components/director/CreateProgramForm'
 
 export default function CreateProgramPage() {
   return (
     <RouteGuard>
-      <CreateProgramClient />
+      <DirectorLayout>
+        <CreateProgramForm />
+      </DirectorLayout>
     </RouteGuard>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-

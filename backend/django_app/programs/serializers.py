@@ -148,7 +148,6 @@ class ProgramSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Ensure either category or categories is provided."""
-        # Validate name field - check for empty strings
         name = data.get('name')
         if not name or (isinstance(name, str) and name.strip() == ''):
             raise serializers.ValidationError({'name': 'This field may not be blank.'})
@@ -156,13 +155,10 @@ class ProgramSerializer(serializers.ModelSerializer):
         categories = data.get('categories', [])
         category = data.get('category')
         
-        # If categories provided but no category, set category from first
         if categories and not category:
             data['category'] = categories[0]
-        # If category provided but no categories, set categories from category
         elif category and not categories:
             data['categories'] = [category]
-        # If neither provided, use default
         elif not category and not categories:
             data['category'] = 'technical'
             data['categories'] = ['technical']
@@ -177,19 +173,16 @@ class ProgramSerializer(serializers.ModelSerializer):
         categories = validated_data.pop('categories', None)
         category = validated_data.get('category')
         
-        # If categories provided, use first as primary category for backward compatibility
         if categories:
             validated_data['category'] = categories[0]
             program = super().create(validated_data)
             program.categories = categories
             program.save()
-        # If only category provided (backward compatibility), populate categories array
         elif category:
             program = super().create(validated_data)
             program.categories = [category]
             program.save()
         else:
-            # Default to empty categories if neither provided
             program = super().create(validated_data)
             program.categories = []
             program.save()

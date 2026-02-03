@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     console.log('[Login API] Received login attempt:', { email, passwordLength: password?.length });
 
     // Forward authentication to Django backend
-    const djangoUrl = `${process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8002'}/api/v1/auth/login`;
+    const djangoUrl = `${process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000'}/api/v1/auth/login`;
     console.log('[Login API] Forwarding to Django URL:', djangoUrl);
 
     const djangoResponse = await fetch(djangoUrl, {

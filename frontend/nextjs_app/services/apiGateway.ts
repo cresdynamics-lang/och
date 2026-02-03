@@ -13,7 +13,7 @@ import type {
   RefreshTokenResponse,
 } from './types';
 
-const DJANGO_API_URL = process.env.NEXT_PUBLIC_DJANGO_API_URL || '';
+const DJANGO_API_URL = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
 const FASTAPI_API_URL = process.env.NEXT_PUBLIC_FASTAPI_API_URL || '';
 
 /**
@@ -105,8 +105,8 @@ async function apiGatewayRequest<T>(
 
   console.log('[apiGateway] Path:', path);
   console.log('[apiGateway] Base URL:', baseUrl);
+  console.log('[apiGateway] DJANGO_API_URL:', DJANGO_API_URL);
   console.log('[apiGateway] Making request to:', fullUrl);
-  console.log('[apiGateway] Params:', options.params);
 
   try {
     const result = await fetcher<T>(fullUrl, options);

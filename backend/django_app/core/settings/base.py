@@ -15,26 +15,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 PROJECT_ROOT = BASE_DIR.parent.parent  # /home/caleb/kiptoo/och/ongozaCyberHub
 
 # Check if running in Docker (don't override env vars if they're already set properly)
-IN_DOCKER = os.environ.get('DB_HOST') not in ['localhost', '127.0.0.1', None]
+# Force local development for now
+IN_DOCKER = False
 
-# Try loading from project root first (primary location)
-root_env = PROJECT_ROOT / '.env'
-if root_env.exists() and not IN_DOCKER:
-    load_dotenv(root_env, override=True)
-    print(f"✅ Loaded .env from project root: {root_env}")
-elif not IN_DOCKER:
-    # Fallback to legacy locations for backward compatibility
-    env_path = BASE_DIR / '.env'
-    if env_path.exists():
-        load_dotenv(env_path, override=True)
-        print(f"⚠️ Loaded .env from legacy location: {env_path}")
-    else:
-        parent_env = BASE_DIR.parent / '.env'
-        if parent_env.exists():
-            load_dotenv(parent_env, override=True)
-            print(f"⚠️ Loaded .env from legacy location: {parent_env}")
+# Always load local .env files for development
+env_path = BASE_DIR / '.env'
+if env_path.exists():
+    load_dotenv(env_path, override=True)
+    print(f"Loaded .env from django_app: {env_path}")
 else:
-    print(f"🐳 Running in Docker - using container environment variables")
+    root_env = PROJECT_ROOT / '.env'
+    if root_env.exists():
+        load_dotenv(root_env, override=True)
+        print(f"Loaded .env from project root: {root_env}")
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
@@ -92,7 +85,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # Disabled for API endpoints
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -194,9 +187,9 @@ JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 
 # Log JWT configuration on startup (for debugging)
 if JWT_SECRET_KEY != SECRET_KEY:
-    print(f"✅ Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
+    print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
 else:
-    print(f"⚠️ JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
+    print(f"JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -215,6 +208,12 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF Settings for API
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 # Redis Configuration
 # Use Redis service name in Docker, localhost for local development
