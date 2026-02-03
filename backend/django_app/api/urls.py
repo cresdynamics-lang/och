@@ -44,7 +44,10 @@ urlpatterns = [
     
     # Mentorship Coordination Engine (must come FIRST to avoid URL conflicts with programs router)
     path('', include('mentorship_coordination.urls')),
-    
+
+    # Mentor Dashboard (must come before mentorship to avoid URL conflicts)
+    path('mentors/', include('mentors.urls')),
+
     # Mentorship endpoints
     path('', include('mentorship.urls')),
     
@@ -60,6 +63,9 @@ urlpatterns = [
     
     # Sponsor Dashboard
     path('sponsor/', include('sponsor_dashboard.urls')),
+
+    # Sponsors Management
+    path('sponsors/', include('sponsors.urls')),
     
     # Director Dashboard (must come after programs.urls to avoid URL conflicts with director router)
     # Note: director_dashboard.urls only registers 'dashboard' routes, so it won't conflict with 'cohorts'

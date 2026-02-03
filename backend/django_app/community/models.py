@@ -1043,9 +1043,9 @@ class Channel(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
-        db_table = 'community_channels'
+        db_table = 'university_channels'
         unique_together = ['university', 'slug']
         ordering = ['-member_count', 'name']
         indexes = [

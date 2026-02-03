@@ -79,6 +79,7 @@ export default function MarketplaceProfilePage() {
         setContactRequests([
           {
             id: 'mock-contact-1',
+            employer_id: 'mock-employer-1',
             employer: {
               id: 'mock-employer-1',
               company_name: 'CyberTech Solutions',
@@ -91,12 +92,34 @@ export default function MarketplaceProfilePage() {
               created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
               updated_at: new Date(Date.now() - 86400000).toISOString()
             },
+            profile_id: 'mock-profile-1',
+            profile: {
+              id: 'mock-profile-1',
+              mentee_id: 'mock-user-1',
+              mentee_name: 'John Doe',
+              mentee_email: 'john.doe@example.com',
+              tier: 'professional',
+              readiness_score: 85,
+              job_fit_score: 90,
+              hiring_timeline_days: 30,
+              profile_status: 'job_ready',
+              primary_role: 'Cybersecurity Specialist',
+              primary_track_key: 'defender',
+              skills: ['Network Security', 'Penetration Testing'],
+              portfolio_depth: 'deep',
+              is_visible: true,
+              employer_share_consent: true,
+              updated_at: new Date(Date.now() - 86400000).toISOString()
+            },
+            action: 'contact_request',
+            metadata: {},
             subject: 'Interest in Your Profile',
             message: 'We are impressed with your cybersecurity skills and would like to discuss potential opportunities at our company. Your background in network security and incident response aligns well with our current openings.',
             created_at: new Date(Date.now() - 86400000).toISOString() // 1 day ago
           },
           {
             id: 'mock-contact-2',
+            employer_id: 'mock-employer-2',
             employer: {
               id: 'mock-employer-2',
               company_name: 'SecureNet Inc.',
@@ -109,6 +132,27 @@ export default function MarketplaceProfilePage() {
               created_at: new Date(Date.now() - 86400000 * 45).toISOString(),
               updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
             },
+            profile_id: 'mock-profile-1',
+            profile: {
+              id: 'mock-profile-1',
+              mentee_id: 'mock-user-1',
+              mentee_name: 'John Doe',
+              mentee_email: 'john.doe@example.com',
+              tier: 'professional',
+              readiness_score: 85,
+              job_fit_score: 90,
+              hiring_timeline_days: 30,
+              profile_status: 'job_ready',
+              primary_role: 'Cybersecurity Specialist',
+              primary_track_key: 'defender',
+              skills: ['Network Security', 'Penetration Testing'],
+              portfolio_depth: 'deep',
+              is_visible: true,
+              employer_share_consent: true,
+              updated_at: new Date(Date.now() - 86400000).toISOString()
+            },
+            action: 'contact_request',
+            metadata: {},
             subject: 'Junior Security Analyst Position',
             message: 'Your portfolio demonstrates strong foundational skills in cybersecurity. We have an opening for a Junior Security Analyst that matches your experience level and career goals.',
             created_at: new Date(Date.now() - 172800000).toISOString() // 2 days ago
@@ -119,6 +163,7 @@ export default function MarketplaceProfilePage() {
         setContactRequests([
           {
             id: 'mock-contact-1',
+            employer_id: 'mock-employer-1',
             employer: {
               id: 'mock-employer-1',
               company_name: 'CyberTech Solutions',
@@ -131,6 +176,27 @@ export default function MarketplaceProfilePage() {
               created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
               updated_at: new Date(Date.now() - 86400000).toISOString()
             },
+            profile_id: 'mock-profile-1',
+            profile: {
+              id: 'mock-profile-1',
+              mentee_id: 'mock-user-1',
+              mentee_name: 'John Doe',
+              mentee_email: 'john.doe@example.com',
+              tier: 'professional',
+              readiness_score: 85,
+              job_fit_score: 90,
+              hiring_timeline_days: 30,
+              profile_status: 'job_ready',
+              primary_role: 'Cybersecurity Specialist',
+              primary_track_key: 'defender',
+              skills: ['Network Security', 'Penetration Testing'],
+              portfolio_depth: 'deep',
+              is_visible: true,
+              employer_share_consent: true,
+              updated_at: new Date(Date.now() - 86400000).toISOString()
+            },
+            action: 'contact_request',
+            metadata: {},
             subject: 'Interest in Your Profile',
             message: 'We are impressed with your cybersecurity skills and would like to discuss potential opportunities at our company. Your background in network security and incident response aligns well with our current openings.',
             created_at: new Date(Date.now() - 86400000).toISOString() // 1 day ago
@@ -253,10 +319,9 @@ export default function MarketplaceProfilePage() {
             salary_min: 65000,
             salary_max: 85000,
             salary_currency: 'USD',
-            match_score: 85,
-            has_applied: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            is_active: true,
+            application_deadline: null,
+            posted_at: new Date().toISOString()
           },
           {
             id: 'mock-job-2',
@@ -280,10 +345,9 @@ export default function MarketplaceProfilePage() {
             salary_min: 20000,
             salary_max: 25000,
             salary_currency: 'CAD',
-            match_score: 78,
-            has_applied: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            is_active: true,
+            application_deadline: null,
+            posted_at: new Date().toISOString()
           },
           {
             id: 'mock-job-3',
@@ -307,10 +371,9 @@ export default function MarketplaceProfilePage() {
             salary_min: 55000,
             salary_max: 75000,
             salary_currency: 'GBP',
-            match_score: 92,
-            has_applied: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            is_active: true,
+            application_deadline: null,
+            posted_at: new Date().toISOString()
           }
         ]
 
@@ -351,10 +414,9 @@ export default function MarketplaceProfilePage() {
             salary_min: 65000,
             salary_max: 85000,
             salary_currency: 'USD',
-            match_score: 85,
-            has_applied: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
+            is_active: true,
+            application_deadline: null,
+            posted_at: new Date().toISOString()
           }
         ]
 

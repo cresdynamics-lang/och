@@ -131,6 +131,7 @@ export default function RoleSignupPage() {
         last_name: formData.last_name.trim(),
         timezone: formData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         language: formData.language || 'en',
+        role: role,  // Include the role from URL parameter
       };
 
       if (formData.password?.trim()) {
@@ -157,7 +158,7 @@ export default function RoleSignupPage() {
           // For other roles, redirect to role-specific dashboard or onboarding
           switch (role) {
             case 'mentor':
-              router.push('/dashboard/mentor');
+              router.push('/mentor/dashboard');
               break;
             case 'director':
             case 'program_director':

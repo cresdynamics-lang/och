@@ -172,6 +172,12 @@ class SignupSerializer(serializers.Serializer):
     invite_token = serializers.CharField(required=False)  # For invite flow
     cohort_id = serializers.CharField(required=False)
     track_key = serializers.CharField(required=False)
+    # Role assignment for signup
+    role = serializers.ChoiceField(
+        choices=['student', 'mentor', 'admin', 'program_director', 'sponsor_admin', 'employer', 'analyst', 'finance'],
+        default='student',
+        required=False
+    )
     
     # Student onboarding profile fields (optional during signup, can be completed later)
     preferred_learning_style = serializers.ChoiceField(

@@ -69,7 +69,7 @@ export function isRoleDashboardPath(path: string, role: string): boolean {
   const roleMap: Record<string, string> = {
     'student': '/dashboard/student',
     'mentee': '/dashboard/student',
-    'mentor': '/dashboard/mentor',
+    'mentor': '/mentor/dashboard',
     'admin': '/dashboard/admin',
     'program_director': '/dashboard/director',
     'director': '/dashboard/director',
@@ -90,7 +90,7 @@ export function isRoleDashboardPath(path: string, role: string): boolean {
 export function getDashboardContextFromPath(pathname: string): string | null {
   const dashboardPatterns = [
     '/dashboard/student',
-    '/dashboard/mentor',
+    '/mentor/dashboard',
     '/dashboard/admin',
     '/dashboard/director',
     '/dashboard/sponsor',

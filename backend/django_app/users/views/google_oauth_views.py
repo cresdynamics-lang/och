@@ -56,6 +56,8 @@ class GoogleOAuthInitiateView(APIView):
 
         # Get frontend URL for callback
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        # Ensure frontend URL doesn't have trailing slash for redirect_uri
+        frontend_url = frontend_url.rstrip('/')
         redirect_uri = f"{frontend_url}/auth/google/callback"
         
         # Generate PKCE code verifier and challenge (RFC 7636)
@@ -63,10 +65,16 @@ class GoogleOAuthInitiateView(APIView):
         code_challenge = base64.urlsafe_b64encode(
             hashlib.sha256(code_verifier.encode('utf-8')).digest()
         ).decode('utf-8').rstrip('=')
-        
-        # Store code_verifier in session for later verification
+
+        # Store code_verifier and intended role in session for later verification
         request.session['oauth_code_verifier'] = code_verifier
         request.session['oauth_state'] = secrets.token_urlsafe(32)
+
+        # Store intended role for signup (if provided)
+        intended_role = request.GET.get('role')
+        if intended_role:
+            request.session['oauth_intended_role'] = intended_role
+            print(f"[OAuth] Stored intended role for signup: {intended_role}")
         
         # Build Google OAuth authorization URL
         # Use select_account prompt to allow users to choose from available accounts
@@ -127,18 +135,39 @@ class GoogleOAuthCallbackView(APIView):
         
         # Log state for debugging
         session_state = request.session.get('oauth_state')
+        print(f"[OAuth Callback] Processing callback")
+        print(f"  Request state: {state}")
+        print(f"  Session state: {session_state}")
+        print(f"  Session keys: {list(request.session.keys())}")
+
         if settings.DEBUG and session_state != state:
             print(f"[OAuth Debug] Session state mismatch (dev mode allows this)")
-            print(f"  Session state: {session_state}")
-            print(f"  Request state: {state}")
+        elif not settings.DEBUG and session_state != state:
+            return Response(
+                {'detail': 'Invalid state parameter. Possible CSRF attack.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Get code verifier from session
         code_verifier = request.session.get('oauth_code_verifier')
+        print(f"[OAuth Callback] Code verifier: {'present' if code_verifier else 'missing'}")
+
+        # In development, if code verifier is missing from session (common with cross-origin OAuth),
+        # we'll generate a fallback one. In production, this should never happen.
         if not code_verifier:
-            return Response(
-                {'detail': 'OAuth session expired. Please try again.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            if settings.DEBUG:
+                print("[OAuth Debug] Code verifier missing from session, using fallback for development")
+                # Generate a fallback code verifier for development
+                # This is not secure but allows the OAuth flow to work in development
+                import secrets
+                import base64
+                code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+                print(f"[OAuth Debug] Generated fallback code verifier: {code_verifier[:20]}...")
+            else:
+                return Response(
+                    {'detail': 'OAuth session expired. Please try again.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         try:
             # Get Google SSO provider
@@ -254,9 +283,17 @@ class GoogleOAuthCallbackView(APIView):
             user.is_active = True
             user.save()
 
-        # Assign default Student role if new user
+        # Assign role based on signup context or default to student
         if created:
-            _assign_default_student_role(user)
+            # Check if there's an intended role from signup
+            intended_role = request.session.get('oauth_intended_role')
+            if intended_role:
+                _assign_user_role(user, intended_role)
+                # Clear the session data
+                request.session.pop('oauth_intended_role', None)
+                print(f"[OAuth] Assigned intended role {intended_role} to new user {user.email}")
+            else:
+                _assign_default_student_role(user)
             # Activate account immediately for Google SSO (email is verified by Google)
             if email_verified and not user.activated_at:
                 user.activated_at = timezone.now()

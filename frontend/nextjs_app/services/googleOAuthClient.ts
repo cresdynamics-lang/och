@@ -5,6 +5,10 @@
 
 import { apiGateway } from './apiGateway'
 
+export interface GoogleOAuthInitiateRequest {
+  role?: string
+}
+
 export interface GoogleOAuthInitiateResponse {
   auth_url: string
   state: string
@@ -32,8 +36,9 @@ export const googleOAuthClient = {
    * GET /api/v1/auth/google/initiate
    * Returns the Google authorization URL to redirect user to
    */
-  async initiate(): Promise<GoogleOAuthInitiateResponse> {
-    return apiGateway.get('/auth/google/initiate', { skipAuth: true })
+  async initiate(data?: GoogleOAuthInitiateRequest): Promise<GoogleOAuthInitiateResponse> {
+    const params = data?.role ? { role: data.role } : {}
+    return apiGateway.get('/auth/google/initiate', { skipAuth: true, params })
   },
 
   /**

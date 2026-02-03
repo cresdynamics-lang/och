@@ -30,12 +30,12 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/subscription', roles: ['mentee', 'student'] },
   
   // Mentor routes
-  { path: '/dashboard/mentor', roles: ['mentor'] },
-  { path: '/dashboard/mentor/profile', roles: ['mentor'] },
-  { path: '/dashboard/mentor/sessions', roles: ['mentor'] },
-  { path: '/dashboard/mentor/missions', roles: ['mentor'] },
-  { path: '/dashboard/mentor/scoring', roles: ['mentor'] },
-  { path: '/dashboard/mentor/talentscope', roles: ['mentor'] },
+  { path: '/mentor/dashboard', roles: ['mentor'] },
+  { path: '/mentor/dashboard/profile', roles: ['mentor'] },
+  { path: '/mentor/dashboard/sessions', roles: ['mentor'] },
+  { path: '/mentor/dashboard/missions', roles: ['mentor'] },
+  { path: '/mentor/dashboard/scoring', roles: ['mentor'] },
+  { path: '/mentor/dashboard/talentscope', roles: ['mentor'] },
   
   // Program Director routes - accessible by program_director and admin
   { path: '/dashboard/director', roles: ['program_director', 'admin'] },
@@ -107,6 +107,16 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/finance/rewards', roles: ['finance'] },
   { path: '/dashboard/finance/security', roles: ['finance'] },
   { path: '/dashboard/finance/profile', roles: ['finance'] },
+
+  // New finance dashboard routes
+  { path: '/finance', roles: ['finance'] },
+  { path: '/finance/[userId]/dashboard', roles: ['finance'] },
+
+  // Organizations routes (accessible by admins and program directors)
+  { path: '/dashboard/organizations', roles: ['admin', 'program_director'] },
+
+  // Recommendations routes (accessible by students, mentors, and admins)
+  { path: '/dashboard/recommendations', roles: ['mentee', 'student', 'mentor', 'admin'] },
 ]
 
 /**
@@ -286,7 +296,7 @@ export function getDashboardRoute(role: Role | null): string {
   const routeMap: Record<Role, string> = {
     'student': '/dashboard/student',           // Student role → Student Dashboard
     'mentee': '/dashboard/student',            // Mentee role → Student Dashboard
-    'mentor': '/dashboard/mentor',              // Mentor role → Mentor Dashboard
+    'mentor': '/mentor/dashboard',              // Mentor role → Mentor Dashboard
     'admin': '/dashboard/admin',               // Admin role → Admin Dashboard
     'program_director': '/dashboard/director', // Program Director role → Director Dashboard
     'sponsor_admin': '/dashboard/sponsor',     // Sponsor/Employer Admin → Sponsor Dashboard

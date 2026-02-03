@@ -1,32 +1,53 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import clsx from 'clsx'
 
 interface NavItem {
   label: string
-  href: string
+  hash: string
   badge?: number
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard/analyst' },
-  { label: 'Analytics', href: '/dashboard/analyst/analytics' },
-  { label: 'Reports', href: '/dashboard/analyst/reports' },
-  { label: 'Data Sources', href: '/dashboard/analyst/data-sources' },
+  { label: 'METRICS', hash: 'metrics' },
+  { label: 'LEARNING', hash: 'learning' },
+  { label: 'SIEM', hash: 'lab' },
+  { label: 'TOOLS', hash: 'tools' },
+  { label: 'REPORTS', hash: 'reports' },
+  { label: 'CAREER', hash: 'career' },
 ]
 
 export function AnalystNavigation() {
   const pathname = usePathname()
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [currentHash, setCurrentHash] = useState('')
 
-  const isActive = (href: string) => {
-    if (href === '/dashboard/analyst') {
-      return pathname === href
+  // Track hash changes
+  useEffect(() => {
+    const updateHash = () => {
+      setCurrentHash(window.location.hash.replace('#', ''))
     }
-    return pathname?.startsWith(href)
+
+    updateHash()
+    window.addEventListener('hashchange', updateHash)
+    return () => window.removeEventListener('hashchange', updateHash)
+  }, [])
+
+  const isActive = (hash: string) => {
+    return pathname === '/dashboard/analyst' && currentHash === hash
+  }
+
+  const handleNavClick = (hash: string) => {
+    if (pathname !== '/dashboard/analyst') {
+      router.push('/dashboard/analyst')
+    }
+    window.location.hash = hash
+    setCurrentHash(hash)
+    setIsMobileMenuOpen(false)
   }
 
   return (
@@ -75,14 +96,13 @@ export function AnalystNavigation() {
           {/* Navigation Items */}
           <nav className="flex-1 overflow-y-auto p-4 space-y-2">
             {navItems.map((item) => {
-              const active = isActive(item.href)
+              const active = isActive(item.hash)
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                <button
+                  key={item.hash}
+                  onClick={() => handleNavClick(item.hash)}
                   className={clsx(
-                    'flex items-center px-4 py-3 rounded-lg transition-all duration-200',
+                    'flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 text-left',
                     'hover:bg-och-mint/20 hover:text-och-mint',
                     active
                       ? 'bg-och-mint/30 text-och-mint border-l-4 border-och-mint'
@@ -95,7 +115,7 @@ export function AnalystNavigation() {
                       {item.badge}
                     </span>
                   )}
-                </Link>
+                </button>
               )
             })}
           </nav>

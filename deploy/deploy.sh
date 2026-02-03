@@ -158,15 +158,69 @@ fi
 
 # Step 4: Check for .env file
 echo -e "${GREEN}Step 4: Checking environment variables...${NC}"
-ENV_FILE="$PROJECT_DIR/frontend/nextjs_app/.env.production"
-if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${YELLOW}Warning: .env.production file not found!${NC}"
-    echo "Creating template .env.production file..."
-    cat > "$ENV_FILE" << EOF
-# Next.js Environment Variables
-NEXT_PUBLIC_DJANGO_API_URL=http://localhost:8000
-NEXT_PUBLIC_FASTAPI_API_URL=http://localhost:8001
+
+# Backend environment file
+BACKEND_ENV_FILE="$PROJECT_DIR/.env"
+if [ ! -f "$BACKEND_ENV_FILE" ]; then
+    echo -e "${YELLOW}Warning: Backend .env file not found!${NC}"
+    echo "Creating template backend .env file..."
+    cat > "$BACKEND_ENV_FILE" << 'EOF'
+# Django Production Settings
+DJANGO_SECRET_KEY=your-super-secret-key-change-this-in-production
+JWT_SECRET_KEY=your-jwt-secret-key-change-this-too
+DEBUG=False
+ALLOWED_HOSTS=ongozacyberhub.com,www.ongozacyberhub.com,your-server-ip
+
+# Frontend URL for CORS and OAuth callbacks
+FRONTEND_URL=https://ongozacyberhub.com
+CSRF_TRUSTED_ORIGINS=https://ongozacyberhub.com,https://www.ongozacyberhub.com
+CORS_ALLOWED_ORIGINS=https://ongozacyberhub.com,https://www.ongozacyberhub.com
+
+# Database (PostgreSQL for production)
+DB_NAME=ongozacyberhub_prod
+DB_USER=postgres
+DB_PASSWORD=your-secure-db-password
+DB_HOST=localhost
+DB_PORT=5432
+
+# Redis (for caching and sessions)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# FastAPI
+FASTAPI_BASE_URL=http://localhost:8001
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+
+# Email Configuration
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+
+# Optional: SSL Settings
+SECURE_SSL_REDIRECT=True
+EOF
+    echo -e "${YELLOW}Backend .env file created. Please edit with your actual values.${NC}"
+fi
+
+# Frontend environment file
+FRONTEND_ENV_FILE="$PROJECT_DIR/frontend/nextjs_app/.env.production"
+if [ ! -f "$FRONTEND_ENV_FILE" ]; then
+    echo -e "${YELLOW}Warning: Frontend .env.production file not found!${NC}"
+    echo "Creating template frontend .env.production file..."
+    cat > "$FRONTEND_ENV_FILE" << EOF
+# Next.js Production Environment Variables
+NEXT_PUBLIC_DJANGO_API_URL=https://ongozacyberhub.com/api
+NEXT_PUBLIC_FASTAPI_API_URL=https://ongozacyberhub.com/ai
 NEXT_PUBLIC_FRONTEND_URL=https://ongozacyberhub.com
+
+# Internal URLs (for server-side operations)
+DJANGO_INTERNAL_URL=http://localhost:8000
+FASTAPI_INTERNAL_URL=http://localhost:8001
 
 # Optional: AI Services
 # GROK_API_KEY=your_grok_api_key_here
@@ -175,8 +229,14 @@ NEXT_PUBLIC_FRONTEND_URL=https://ongozacyberhub.com
 # Optional: Supabase
 # SUPABASE_URL=your_supabase_url
 # SUPABASE_SERVICE_KEY=your_supabase_service_key
+
+# Optional: Analytics
+# GOOGLE_ANALYTICS_ID=your_ga_id
+
+# Optional: Monitoring
+# SENTRY_DSN=your_sentry_dsn
 EOF
-    echo -e "${YELLOW}.env.production file created.${NC}"
+    echo -e "${YELLOW}Frontend .env.production file created.${NC}"
 fi
 
 # Step 5: Create missing files before build

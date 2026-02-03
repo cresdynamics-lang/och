@@ -139,7 +139,7 @@ const mockOffensiveCurriculum = {
       }
     },
     {
-      slug': 'mastery',
+      slug: 'mastery',
       title: 'Mastery',
       description: 'Red team operations and advanced adversary emulation',
       order_number: 4,

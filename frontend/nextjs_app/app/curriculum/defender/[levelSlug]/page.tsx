@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
-import { useDefenderLevel, useAuth, useContentProgress } from '@/hooks/useCurriculum';
+import { useDefenderLevel, useContentProgress } from '@/hooks/useCurriculum';
+import { useAuth } from '@/hooks/useAuth';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
 import { Users, Hash, MessageSquare, ExternalLink } from 'lucide-react';
 

@@ -122,7 +122,7 @@ export default function QuizContentPage() {
   const quizSlug = params.quizSlug as string;
 
   const { user } = useAuth();
-  const { updateProgress, updating } = useContentProgress(user?.id);
+  const { updateProgress, updating } = useContentProgress(user?.id?.toString());
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -208,7 +208,7 @@ export default function QuizContentPage() {
       // Emit coaching event
       if (user?.id) {
         await emitCurriculumQuizCompleted(
-          user.id,
+          user.id.toString(),
           'defender',
           levelSlug,
           moduleSlug,

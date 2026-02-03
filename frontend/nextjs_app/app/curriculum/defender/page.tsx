@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
-import { useDefenderCurriculum, useDefenderProgress, useAuth } from '@/hooks/useCurriculum';
+import { useDefenderCurriculum, useDefenderProgress } from '@/hooks/useCurriculum';
+import { useAuth } from '@/hooks/useAuth';
 import AiCoachStrip from '@/components/curriculum/AiCoachStrip';
+import { AICoachRecommendations } from '@/components/coaching/AICoachRecommendations';
 import { Users, Hash, MessageSquare } from 'lucide-react';
 
 const LEVEL_CONFIGS = {
@@ -149,7 +151,7 @@ function LevelCard({ level, progress }: { level: any, progress?: any }) {
 export default function DefenderTrackPage() {
   const { data: levels, loading, error } = useDefenderCurriculum();
   const { user } = useAuth();
-  const { progress } = useDefenderProgress(user?.id);
+  const { progress } = useDefenderProgress(user?.id?.toString());
 
   if (loading) {
     return (
@@ -317,6 +319,11 @@ export default function DefenderTrackPage() {
       {/* AI Coach Strip */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <AiCoachStrip trackSlug="defender" />
+      </div>
+
+      {/* AI Coach Recommendations */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <AICoachRecommendations trackSlug="defender" />
       </div>
 
       {/* Levels Grid */}

@@ -20,8 +20,9 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
-      NEXT_PUBLIC_DJANGO_API_URL: 'http://localhost:8000',
-      NEXT_PUBLIC_FRONTEND_URL: 'http://localhost'
+      NEXT_PUBLIC_DJANGO_API_URL: 'https://ongozacyberhub.com/api',
+      NEXT_PUBLIC_FASTAPI_API_URL: 'https://ongozacyberhub.com/ai',
+      NEXT_PUBLIC_FRONTEND_URL: 'https://ongozacyberhub.com'
     },
     error_file: path.join(homeDir, '.pm2', 'logs', 'ongoza-nextjs-error.log'),
     out_file: path.join(homeDir, '.pm2', 'logs', 'ongoza-nextjs-out.log'),
@@ -38,7 +39,7 @@ module.exports = {
     max_memory_restart: '1G',
     env: {
       PYTHONPATH: backendDir,
-      DJANGO_SETTINGS_MODULE: 'core.settings.sqlite_settings'
+      DJANGO_SETTINGS_MODULE: 'core.settings.production'
     },
     error_file: path.join(homeDir, '.pm2', 'logs', 'ongoza-django-error.log'),
     out_file: path.join(homeDir, '.pm2', 'logs', 'ongoza-django-out.log'),

@@ -9,7 +9,7 @@ from django.utils.html import strip_tags
 logger = logging.getLogger(__name__)
 
 try:
-    from resend import Resend
+    from resend.emails._emails import Emails
     RESEND_AVAILABLE = True
 except ImportError:
     RESEND_AVAILABLE = False
@@ -30,7 +30,10 @@ class EmailService:
         
         if RESEND_AVAILABLE and self.resend_api_key:
             try:
-                self.resend = Resend(api_key=self.resend_api_key)
+                # Set the API key globally for resend
+                import resend
+                resend.api_key = self.resend_api_key
+                self.emails_client = Emails()
                 self.use_resend = True
             except Exception as e:
                 logger.warning(f"Failed to initialize Resend client: {str(e)}")
@@ -45,18 +48,35 @@ class EmailService:
     def _execute_send(self, to_email: str, subject: str, html_content: str, email_type: str = "transactional") -> bool:
         """
         Internal method to send email via Resend or fallback to Django.
-        
+
         Args:
             to_email: Recipient email address
             subject: Email subject
             html_content: HTML email content
             email_type: Type of email (for logging)
-            
+
         Returns:
             bool: True if email sent successfully, False otherwise
         """
         try:
-            if self.use_resend:
+            # Check if we're in development mode with console backend
+            email_backend = getattr(settings, 'EMAIL_BACKEND', '')
+            if email_backend == 'django.core.mail.backends.console.EmailBackend':
+                # Use console backend for development
+                from django.core.mail import send_mail
+                plain_message = strip_tags(html_content)
+
+                send_mail(
+                    subject=subject,
+                    message=plain_message,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', self.from_email),
+                    recipient_list=[to_email],
+                    html_message=html_content,
+                    fail_silently=False,
+                )
+                logger.info(f"Email sent to console (development mode) (type: {email_type})")
+                return True
+            elif self.use_resend:
                 # Send via Resend API
                 params = {
                     "from": f"{self.from_name} <{self.from_email}>",
@@ -64,10 +84,10 @@ class EmailService:
                     "subject": subject,
                     "html": html_content,
                 }
-                
+
                 logger.info(f"Attempting to send email via Resend to {to_email} (type: {email_type})")
-                result = self.resend.emails.send(params)
-                
+                result = self.emails_client.send(params)
+
                 if result and hasattr(result, 'id'):
                     logger.info(f"Email sent successfully via Resend (type: {email_type}, id: {result.id}, to: {to_email})")
                     return True
@@ -81,7 +101,7 @@ class EmailService:
                 # Fallback to Django's send_mail
                 from django.core.mail import send_mail
                 plain_message = strip_tags(html_content)
-                
+
                 send_mail(
                     subject=subject,
                     message=plain_message,
@@ -92,7 +112,7 @@ class EmailService:
                 )
                 logger.info(f"Email sent successfully via Django send_mail (type: {email_type})")
                 return True
-                
+
         except Exception as e:
             import traceback
             logger.error(f"Failed to send email (type: {email_type}, to: {to_email}): {str(e)}")

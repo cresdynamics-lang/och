@@ -32,7 +32,7 @@ function getLoginRouteForPath(pathname: string) {
   // Map dashboard routes to their corresponding login routes
   if (pathname.startsWith('/dashboard/director')) return '/login/director'
   if (pathname.startsWith('/dashboard/admin')) return '/login/admin'
-  if (pathname.startsWith('/dashboard/mentor')) return '/login/mentor'
+  if (pathname.startsWith('/mentor/dashboard')) return '/login/mentor'
   if (pathname.startsWith('/dashboard/sponsor')) return '/login/sponsor'
   if (pathname.startsWith('/dashboard/analyst') || pathname.startsWith('/dashboard/analytics')) return '/login/analyst'
   if (pathname.startsWith('/dashboard/employer') || pathname.startsWith('/dashboard/marketplace')) return '/login/employer'
@@ -88,7 +88,7 @@ function dashboardForRole(role: string | null): string {
   switch (role) {
     case 'admin': return '/dashboard/admin'
     case 'program_director': return '/dashboard/director'
-    case 'mentor': return '/dashboard/mentor'
+    case 'mentor': return '/mentor/dashboard'
     case 'analyst': return '/dashboard/analyst'
     case 'sponsor_admin': return '/dashboard/sponsor'
     case 'employer': return '/dashboard/employer'
@@ -113,7 +113,7 @@ function canAccess(pathname: string, roles: string[]): boolean {
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
     if (pathname.startsWith('/dashboard/director')) return roles.includes('program_director')
     if (pathname.startsWith('/dashboard/admin')) return roles.includes('admin')
-    if (pathname.startsWith('/dashboard/mentor')) return roles.includes('mentor')
+    if (pathname.startsWith('/mentor/dashboard')) return roles.includes('mentor')
     if (pathname.startsWith('/dashboard/sponsor')) return roles.includes('sponsor_admin')
     if (pathname.startsWith('/dashboard/sponsor/marketplace')) return roles.includes('sponsor_admin')
     if (pathname.startsWith('/dashboard/analyst')) return roles.includes('analyst')

@@ -90,34 +90,27 @@ export function AdminRecipeEditor({
         description: recipe.description || '',
         track_codes: recipe.track_codes || ['defender'],
         skill_codes: recipe.skill_codes || [''],
-        level: recipe.level || 'beginner',
         difficulty: recipe.difficulty || 'beginner',
-        source_type: recipe.source_type || 'manual',
-        expected_duration_minutes: recipe.expected_duration_minutes || 20,
         prerequisites: recipe.prerequisites || [],
-        tools_and_environment: recipe.tools_and_environment || [],
-        inputs: recipe.inputs || [],
-        steps: recipe.steps || [],
-        tags: recipe.tags || [],
-        validation_checks: recipe.validation_checks || [],
       });
     } else {
       // Reset form for new recipe
       setFormData({
         title: '',
+        slug: '',
+        summary: '',
         description: '',
-        track_codes: 'defender',
+        track_codes: ['defender'],
         skill_codes: [''],
-        level: 'beginner',
         difficulty: 'beginner',
-        source_type: 'manual',
-        expected_duration_minutes: 20,
+        estimated_minutes: 20,
+        tools_used: [],
         prerequisites: [],
-        tools_and_environment: [],
-        inputs: [],
-        steps: [],
-        tags: [],
-        validation_checks: [],
+        content: {
+          sections: []
+        },
+        mentor_curated: false,
+        is_active: true,
       });
     }
     setErrors({});

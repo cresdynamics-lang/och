@@ -7,71 +7,79 @@ from django.db import migrations
 def add_missing_columns(apps, schema_editor):
     """Add missing email verification and token columns if they don't exist."""
     db_table = 'users'
-    
-    columns_to_add = [
-        ('email_verification_token', 'VARCHAR(255) NULL'),
-        ('verification_hash', 'VARCHAR(64) NULL'),
-        ('token_expires_at', 'TIMESTAMP WITH TIME ZONE NULL'),
-        ('password_reset_token', 'VARCHAR(255) NULL'),
-        ('password_reset_token_created', 'TIMESTAMP WITH TIME ZONE NULL'),
-    ]
-    
+    db_engine = schema_editor.connection.vendor
+
+    if db_engine == 'postgresql':
+        columns_to_add = [
+            ('email_verification_token', 'VARCHAR(255) NULL'),
+            ('verification_hash', 'VARCHAR(64) NULL'),
+            ('token_expires_at', 'TIMESTAMP WITH TIME ZONE NULL'),
+            ('password_reset_token', 'VARCHAR(255) NULL'),
+            ('password_reset_token_created', 'TIMESTAMP WITH TIME ZONE NULL'),
+        ]
+    elif db_engine == 'sqlite':
+        columns_to_add = [
+            ('email_verification_token', 'VARCHAR(255) NULL'),
+            ('verification_hash', 'VARCHAR(64) NULL'),
+            ('token_expires_at', 'DATETIME NULL'),
+            ('password_reset_token', 'VARCHAR(255) NULL'),
+            ('password_reset_token_created', 'DATETIME NULL'),
+        ]
+    else:
+        print(f"⚠️ Unsupported database engine: {db_engine}, skipping column operations")
+        return
+
     with schema_editor.connection.cursor() as cursor:
-        for column_name, column_def in columns_to_add:
-            # Check if column exists
+        # Get existing columns based on database type
+        if db_engine == 'postgresql':
             cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = %s AND column_name = %s
-            """, [db_table, column_name])
-            
-            if cursor.fetchone() is None:
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s
+            """, [db_table])
+            existing_columns = [row[0] for row in cursor.fetchall()]
+        elif db_engine == 'sqlite':
+            cursor.execute("PRAGMA table_info(users)")
+            existing_columns = [row[1] for row in cursor.fetchall()]  # column name is at index 1
+
+        for column_name, column_def in columns_to_add:
+            if column_name not in existing_columns:
                 # Column doesn't exist, add it
                 cursor.execute(f"""
-                    ALTER TABLE {db_table} 
+                    ALTER TABLE {db_table}
                     ADD COLUMN {column_name} {column_def}
                 """)
                 print(f"✅ Added '{column_name}' column to {db_table} table")
             else:
                 print(f"✅ Column '{column_name}' already exists")
-        
-        # Add indexes if columns exist and indexes don't
-        # Check for verification_hash index
-        cursor.execute("""
-            SELECT indexname 
-            FROM pg_indexes 
-            WHERE tablename = %s AND indexname LIKE %s
-        """, [db_table, '%verification_hash%'])
-        
-        if not cursor.fetchone():
+
+        # Skip index creation for SQLite as it's not critical for development
+        if db_engine == 'postgresql':
+            # Add indexes if columns exist and indexes don't
+            # Check for verification_hash index
             cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = %s AND column_name = 'verification_hash'
-            """, [db_table])
-            if cursor.fetchone():
+                SELECT indexname
+                FROM pg_indexes
+                WHERE tablename = %s AND indexname LIKE %s
+            """, [db_table, '%verification_hash%'])
+
+            if not cursor.fetchone() and 'verification_hash' in existing_columns:
                 cursor.execute(f"""
-                    CREATE INDEX IF NOT EXISTS users_verification_hash_idx 
+                    CREATE INDEX IF NOT EXISTS users_verification_hash_idx
                     ON {db_table} (verification_hash)
                 """)
                 print("✅ Added index on 'verification_hash' column")
-        
-        # Check for token_expires_at index
-        cursor.execute("""
-            SELECT indexname 
-            FROM pg_indexes 
-            WHERE tablename = %s AND indexname LIKE %s
-        """, [db_table, '%token_expires_at%'])
-        
-        if not cursor.fetchone():
+
+            # Check for token_expires_at index
             cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = %s AND column_name = 'token_expires_at'
-            """, [db_table])
-            if cursor.fetchone():
+                SELECT indexname
+                FROM pg_indexes
+                WHERE tablename = %s AND indexname LIKE %s
+            """, [db_table, '%token_expires_at%'])
+
+            if not cursor.fetchone() and 'token_expires_at' in existing_columns:
                 cursor.execute(f"""
-                    CREATE INDEX IF NOT EXISTS users_token_expires_at_idx 
+                    CREATE INDEX IF NOT EXISTS users_token_expires_at_idx
                     ON {db_table} (token_expires_at)
                 """)
                 print("✅ Added index on 'token_expires_at' column")

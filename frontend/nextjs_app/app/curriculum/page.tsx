@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
-import { useCurriculumTracks } from '@/hooks/useCurriculum';
+import { useCurriculumTracks, CurriculumTrack } from '@/hooks/useCurriculum';
 import Link from 'next/link';
 
 // CurriculumTrack interface is now imported from useCurriculum hook
@@ -38,14 +38,6 @@ const TRACK_CONFIGS = {
     borderColor: 'border-red-500/30',
     textColor: 'text-red-400',
     bgColor: 'bg-red-500/20'
-  },
-  offensive: {
-    icon: Zap,
-    color: 'orange',
-    gradient: 'from-orange-500/20 via-orange-600/10 to-slate-900/30',
-    borderColor: 'border-orange-500/30',
-    textColor: 'text-orange-400',
-    bgColor: 'bg-orange-500/20'
   },
   grc: {
     icon: FileText,

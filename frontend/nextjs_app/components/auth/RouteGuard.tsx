@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { hasRouteAccess } from '@/utils/rbac'
@@ -15,15 +15,21 @@ interface RouteGuardProps {
 export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGuardProps) {
   const { user, isLoading, isAuthenticated } = useAuth()
   const router = useRouter()
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Prevent hydration mismatch by ensuring consistent server/client rendering
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   const getLoginRouteForPath = (path: string) => {
     if (path.startsWith('/dashboard/director')) return '/login/director'
     if (path.startsWith('/dashboard/admin')) return '/login/admin'
-    if (path.startsWith('/dashboard/mentor')) return '/login/mentor'
+    if (path.startsWith('/mentor/dashboard')) return '/login/mentor'
     if (path.startsWith('/dashboard/sponsor')) return '/login/sponsor'
     if (path.startsWith('/dashboard/analyst') || path.startsWith('/dashboard/analytics')) return '/login/analyst'
     if (path.startsWith('/dashboard/employer') || path.startsWith('/dashboard/marketplace')) return '/login/employer'
-    if (path.startsWith('/dashboard/finance')) return '/login/finance'
+    if (path.startsWith('/dashboard/finance') || path.startsWith('/finance/')) return '/login/finance'
     return '/login/student'
   }
 
@@ -93,10 +99,11 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
     }
   }, [user, isLoading, isAuthenticated, router])
 
-  if (isLoading) {
+  // Prevent hydration mismatch - always show loading on server and until hydrated
+  if (!isHydrated || isLoading) {
     return (
       <div className="min-h-screen bg-och-midnight flex items-center justify-center">
-        <div className="text-och-steel">Loading...</div>
+        <div className="text-och-steel animate-pulse">Loading OCH Dashboard...</div>
       </div>
     )
   }
@@ -104,19 +111,19 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
   // If not authenticated but token exists, show loading (auth state might be updating)
   if (!isAuthenticated || !user) {
     const hasToken = typeof window !== 'undefined' && (
-      localStorage.getItem('access_token') || 
+      localStorage.getItem('access_token') ||
       document.cookie.includes('access_token=')
     )
-    
+
     if (hasToken) {
       // Token exists but user not loaded - show loading
       return (
         <div className="min-h-screen bg-och-midnight flex items-center justify-center">
-          <div className="text-och-steel">Loading...</div>
+          <div className="text-och-steel animate-pulse">Authenticating...</div>
         </div>
       )
     }
-    
+
     return null
   }
 

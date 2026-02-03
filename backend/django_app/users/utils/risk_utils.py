@@ -55,27 +55,25 @@ def calculate_risk_score(user, ip_address, device_fingerprint, user_agent):
     return min(risk_score, 1.0)  # Cap at 1.0
 
 
-def requires_mfa(risk_score, user_role=None):
+def requires_mfa(risk_score, user_role=None, user=None):
     """
     Determine if MFA is required based on risk score and role.
     Finance/Admin roles always require MFA.
     """
     from django.conf import settings
-    
-    # In development, skip MFA for test users if DEBUG is True
-    if settings.DEBUG:
-        # Allow bypassing MFA for test users in development
-        # This can be overridden by user.mfa_enabled flag
-        pass
-    
+
+    # In development, skip MFA for ALL test users (including finance/admin)
+    if settings.DEBUG and user and user.email.endswith('@test.com'):
+        return False  # Skip MFA for ALL test users in development
+
     # Role-based MFA requirement
     if user_role in ['finance', 'admin']:
         return True
-    
+
     # Risk-based MFA requirement
     if risk_score >= 0.5:
         return True
-    
+
     return False
 
 

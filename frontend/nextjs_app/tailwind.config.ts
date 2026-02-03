@@ -9,18 +9,26 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Primary Palette (Cyber + Mission Tone)
+        // OCH Design System - Exact Palette from Spec
         och: {
-          midnight: '#0A0A0C',      // OCH Midnight Black - Backgrounds, dashboards
-          defender: '#0648A8',      // Defender Blue - Primary CTA, brand strength
-          mint: '#33FFC1',          // Cyber Mint - Highlights, success, data pulses
-          orange: '#F55F28',        // Signal Orange - Alerts, warnings, mission urgency
-          steel: '#A8B0B8',         // Steel Grey - Secondary text, outlines
+          'midnight-black': '#0A0A0C', // OCH Midnight Black - Backgrounds, dashboards
+          'steel-grey': '#1A1A1E',     // Steel Grey - Secondary text, outlines, sidebars
+          'defender-blue': '#0648A8',  // Defender Blue - Primary CTA, brand strength
+          'cyber-mint': '#33FFC1',     // Cyber Mint - Highlights, success, data pulses
+          'sahara-gold': '#C89C15',    // Sahara Gold - Leadership elements
+          'signal-orange': '#F55F28',  // Signal Orange - Alerts, warnings, mission urgency
+
+          // Primary Palette (Cyber + Mission Tone) - Legacy support
+          midnight: '#0A0A0C',
+          defender: '#0648A8',
+          mint: '#33FFC1',
+          orange: '#F55F28',
+          steel: '#A8B0B8',
           // Secondary Palette (Africa-inspired)
-          gold: '#C89C15',          // Sahara Gold - Leadership elements
-          'desert-clay': '#E36F46', // Desert Clay - Entrepreneurship accents
-          'savanna-green': '#4FAF47', // Savanna Green - Growth, progression indicators
-          'night-sky': '#213A7F',   // Night Sky Blue - Background gradients
+          gold: '#C89C15',
+          'desert-clay': '#E36F46',
+          'savanna-green': '#4FAF47',
+          'night-sky': '#213A7F',
           // Legacy/supporting colors
           slate: {
             50: '#F8F9FA',

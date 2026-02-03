@@ -27,7 +27,7 @@ export function GoogleSignInButton({ role = 'student' }: GoogleSignInButtonProps
       // Initiate Google OAuth flow
       // Backend will return auth_url with prompt=select_account
       // This allows users to choose from available Google accounts or add new one
-      const response = await googleOAuthClient.initiate()
+      const response = await googleOAuthClient.initiate({ role })
 
       // Redirect user to Google authorization page
       if (response.auth_url) {

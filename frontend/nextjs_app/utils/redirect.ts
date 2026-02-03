@@ -71,7 +71,7 @@ export function getRedirectRoute(user: User | null): string {
 export const ROLE_DASHBOARD_MAP = {
   'student': '/dashboard/student',
   'mentee': '/dashboard/student',
-  'mentor': '/dashboard/mentor',
+  'mentor': '/mentor/dashboard',
   'admin': '/dashboard/admin',
   'program_director': '/dashboard/director',
   'sponsor_admin': '/dashboard/sponsor',
@@ -130,7 +130,7 @@ export function testRoutingLogic(): void {
   const testUsers = [
     { roles: [{ role: 'admin' }], expected: '/dashboard/admin' },
     { roles: [{ role: 'program_director' }], expected: '/dashboard/director' },
-    { roles: [{ role: 'mentor' }], expected: '/dashboard/mentor' },
+    { roles: [{ role: 'mentor' }], expected: '/mentor/dashboard' },
     { roles: [{ role: 'analyst' }], expected: '/dashboard/analyst' },
     { roles: [{ role: 'sponsor_admin' }], expected: '/dashboard/sponsor' },
     { roles: [{ role: 'employer' }], expected: '/dashboard/employer' },

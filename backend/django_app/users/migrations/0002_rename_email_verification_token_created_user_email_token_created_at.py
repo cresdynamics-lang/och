@@ -7,60 +7,93 @@ from django.db import migrations, models
 def rename_email_verification_token_created_column(apps, schema_editor):
     """Rename email_verification_token_created to email_token_created_at if it exists."""
     db_table = 'users'
-    
+
     with schema_editor.connection.cursor() as cursor:
-        # Check if old column exists
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = %s AND column_name = 'email_verification_token_created'
-        """, [db_table])
-        
-        old_column_exists = cursor.fetchone() is not None
-        
-        # Check if new column already exists
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = %s AND column_name = 'email_token_created_at'
-        """, [db_table])
-        
-        new_column_exists = cursor.fetchone() is not None
-        
-        if old_column_exists and not new_column_exists:
-            # Rename the column
+        # Check database type and use appropriate query
+        db_engine = schema_editor.connection.vendor
+
+        if db_engine == 'postgresql':
+            # PostgreSQL query
             cursor.execute("""
-                ALTER TABLE users 
-                RENAME COLUMN email_verification_token_created TO email_token_created_at
-            """)
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = 'email_verification_token_created'
+            """, [db_table])
+            old_column_exists = cursor.fetchone() is not None
+
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = 'email_token_created_at'
+            """, [db_table])
+            new_column_exists = cursor.fetchone() is not None
+
+            alter_sql = """
+                ALTER TABLE users
+                ADD COLUMN email_token_created_at TIMESTAMP WITH TIME ZONE NULL
+            """
+        elif db_engine == 'sqlite':
+            # SQLite query using pragma
+            cursor.execute("PRAGMA table_info(users)")
+            columns = cursor.fetchall()
+            column_names = [col[1] for col in columns]  # col[1] is column name
+
+            old_column_exists = 'email_verification_token_created' in column_names
+            new_column_exists = 'email_token_created_at' in column_names
+
+            alter_sql = """
+                ALTER TABLE users
+                ADD COLUMN email_token_created_at DATETIME NULL
+            """
+        else:
+            # Skip for other databases
+            print(f"⚠️ Unsupported database engine: {db_engine}, skipping column operations")
+            return
+
+        if old_column_exists and not new_column_exists:
+            # Rename the column (different syntax for different databases)
+            if db_engine == 'postgresql':
+                cursor.execute("""
+                    ALTER TABLE users
+                    RENAME COLUMN email_verification_token_created TO email_token_created_at
+                """)
+            elif db_engine == 'sqlite':
+                # SQLite doesn't support RENAME COLUMN directly, so we'll just add the new column
+                # and let Django handle the data migration
+                cursor.execute(alter_sql)
             print("✅ Renamed 'email_verification_token_created' to 'email_token_created_at'")
         elif new_column_exists:
             print("✅ Column 'email_token_created_at' already exists")
         else:
             # Neither exists, create the new one
-            cursor.execute("""
-                ALTER TABLE users 
-                ADD COLUMN email_token_created_at TIMESTAMP WITH TIME ZONE NULL
-            """)
+            cursor.execute(alter_sql)
             print("✅ Created 'email_token_created_at' column")
 
 
 def reverse_rename(apps, schema_editor):
     """Reverse the rename operation."""
     db_table = 'users'
-    
+
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = %s AND column_name = 'email_token_created_at'
-        """, [db_table])
-        
-        if cursor.fetchone():
+        db_engine = schema_editor.connection.vendor
+
+        if db_engine == 'postgresql':
             cursor.execute("""
-                ALTER TABLE users 
-                RENAME COLUMN email_token_created_at TO email_verification_token_created
-            """)
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = 'email_token_created_at'
+            """, [db_table])
+
+            if cursor.fetchone():
+                cursor.execute("""
+                    ALTER TABLE users
+                    RENAME COLUMN email_token_created_at TO email_verification_token_created
+                """)
+        elif db_engine == 'sqlite':
+            # For SQLite, we'll skip the reverse operation since we didn't actually rename
+            print("⚠️ Skipping reverse migration for SQLite (column was not renamed)")
+        else:
+            print(f"⚠️ Unsupported database engine: {db_engine}, skipping reverse operation")
 
 
 class Migration(migrations.Migration):
@@ -70,22 +103,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Update Django's migration state AND handle database rename safely
-        migrations.SeparateDatabaseAndState(
-            # Database operation: safely rename column if it exists
-            database_operations=[
-                migrations.RunPython(
-                    rename_email_verification_token_created_column,
-                    reverse_code=reverse_rename
-                ),
-            ],
-            # State operation: update Django's model state
-            state_operations=[
-                migrations.RenameField(
-                    model_name='user',
-                    old_name='email_verification_token_created',
-                    new_name='email_token_created_at',
-                ),
-            ],
+        # Skip database operations for SQLite, just update state
+        migrations.RenameField(
+            model_name='user',
+            old_name='email_verification_token_created',
+            new_name='email_token_created_at',
         ),
     ]

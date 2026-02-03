@@ -47,7 +47,7 @@ interface University {
 
 // Mock data for profile settings when API is not available
 const MOCK_PROFILE_DATA: ProfileData = {
-  id: 'mock-user-1',
+  id: 1,
   username: 'demo_student',
   email: 'demo@student.och.com',
   first_name: 'Demo',
@@ -96,14 +96,9 @@ const MOCK_UNIVERSITIES: University[] = [
 ]
 
 const MOCK_TIER0_STATUS = {
-  profile_complete: true,
+  tier0_complete: false,
   profiler_complete: true,
-  foundations_complete: false,
-  curriculum_enrolled: true,
-  track_selected: 'defender',
-  university_selected: true,
-  timezone_set: true,
-  country_set: true
+  foundations_complete: false
 }
 
 interface OnboardingChecklistItem {

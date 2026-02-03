@@ -12,13 +12,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard/mentor' },
-  { label: 'Missions', href: '/dashboard/mentor/missions' },
-  { label: 'Cohorts & Tracks', href: '/dashboard/mentor/cohorts-tracks' },
-  { label: 'Sessions', href: '/dashboard/mentor/sessions' },
-  { label: 'Messages', href: '/dashboard/mentor/messages' },
-  { label: 'Analytics', href: '/dashboard/mentor/analytics' },
-  { label: 'Profile', href: '/dashboard/mentor/profile' },
+  { label: 'Dashboard', href: '/mentor/dashboard' },
+  { label: 'Missions', href: '/mentor/dashboard/missions' },
+  { label: 'Cohorts & Tracks', href: '/mentor/dashboard/cohorts-tracks' },
+  { label: 'Sessions', href: '/mentor/dashboard/sessions' },
+  { label: 'Messages', href: '/mentor/dashboard/messages' },
+  { label: 'Analytics', href: '/mentor/dashboard/analytics' },
+  { label: 'Profile', href: '/mentor/dashboard/profile' },
 ]
 
 export function MentorNavigation() {
@@ -26,8 +26,8 @@ export function MentorNavigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const isActive = (href: string) => {
-    if (href === '/dashboard/mentor') {
-      return pathname === '/dashboard/mentor'
+    if (href === '/mentor/dashboard') {
+      return pathname === '/mentor/dashboard'
     }
     return pathname.startsWith(href)
   }
@@ -70,7 +70,7 @@ export function MentorNavigation() {
         <div className="flex flex-col h-full">
           {/* Logo/Brand */}
           <div className="p-6 border-b border-och-steel/20">
-            <Link href="/dashboard/mentor" className="flex items-center gap-2">
+            <Link href="/mentor/dashboard" className="flex items-center gap-2">
               <span className="text-2xl">🧑‍🏫</span>
               <span className="text-xl font-bold text-och-mint">OCH Mentor</span>
             </Link>

@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-interface Recommendation {
-  type: 'video' | 'recipe' | 'mission';
+interface RecommendationAction {
+  type: 'video' | 'quiz' | 'recipe' | 'assessment';
+  track_slug?: string;
   level_slug?: string;
   module_slug?: string;
   content_slug?: string;
   recipe_slug?: string;
-  mission_slug?: string;
+  title: string;
+  description: string;
   reason: string;
-  priority?: 'high' | 'medium' | 'low';
-  estimated_time?: string;
+  priority: number;
+  estimated_duration_minutes?: number;
+  skill_codes?: string[];
+  cohort_completion_rate?: number;
 }
 
 /**
- * GET /api/users/:userId/coaching/recommendations
- * Returns AI coach recommendations for next best actions
- * Query params: track_slug? (defaults to defender)
+ * GET /api/users/:userId/coaching/recommendations?track_slug=defender
+ * Returns personalized coaching recommendations based on user progress and track focus
  */
 export async function GET(
   request: NextRequest,
@@ -24,28 +27,40 @@ export async function GET(
   try {
     const userId = params.userId;
     const { searchParams } = new URL(request.url);
-    const trackSlug = searchParams.get('track_slug') || 'defender';
+    const trackSlug = searchParams.get('track_slug');
 
-    if (trackSlug !== 'defender' && trackSlug !== 'grc') {
-      return NextResponse.json(
-        { error: 'Only defender and GRC track recommendations are currently supported' },
-        { status: 400 }
-      );
-    }
+    // Mock user progress data - in production this would come from database
+    const mockUserProgress = {
+      completed_content: [
+        'defender-beginner-log-analysis-fundamentals-what-are-logs-video',
+        'defender-beginner-log-analysis-fundamentals-common-security-event-ids-video',
+        'defender-beginner-siem-searching-basics-basic-search-syntax-video'
+      ],
+      quiz_scores: {
+        'defender-beginner-log-analysis-fundamentals-log-basics-quiz': 78
+      },
+      current_track: trackSlug || 'defender',
+      completed_modules: ['log-analysis-fundamentals'],
+      weak_areas: ['log_correlation', 'threat_detection']
+    };
 
-    // In production, this would query the database for actual user progress
-    // For now, we'll use mock logic based on the user's progress state
-    const recommendations = await generateRecommendations(userId, trackSlug);
+    // Generate recommendations based on track and user progress
+    const recommendations = generateRecommendations(mockUserProgress, trackSlug);
+
+    // Sort by priority and return top recommendations
+    const sortedRecommendations = recommendations
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, 5); // Return top 5 recommendations
 
     return NextResponse.json({
       user_id: userId,
       track_slug: trackSlug,
-      recommendations: recommendations.slice(0, 3), // Return up to 3 recommendations
+      recommendations: sortedRecommendations,
       generated_at: new Date().toISOString()
     });
 
   } catch (error: any) {
-    console.error('Failed to generate recommendations:', error);
+    console.error('Failed to generate coaching recommendations:', error);
     return NextResponse.json(
       { error: 'Failed to generate recommendations' },
       { status: 500 }
@@ -54,90 +69,301 @@ export async function GET(
 }
 
 /**
- * Generate heuristic-based recommendations
- * In production, this would use AI/ML to provide personalized recommendations
+ * Generate personalized recommendations based on user progress and track focus
  */
-async function generateRecommendations(userId: string, trackSlug: string): Promise<Recommendation[]> {
-  const recommendations: Recommendation[] = [];
+function generateRecommendations(userProgress: any, trackSlug?: string | null): RecommendationAction[] {
+  const recommendations: RecommendationAction[] = [];
 
-  // Mock user progress data - in production this would come from database queries
-  const mockUserProgress = {
-    beginner: {
-      videos_completed: 4,
-      quizzes_completed: 2,
-      assessment_completed: false,
-      total_videos: 9,
-      total_quizzes: 3
-    },
-    intermediate: {
-      videos_completed: 0,
-      quizzes_completed: 0,
-      assessment_completed: false,
-      total_videos: 9,
-      total_quizzes: 3
-    }
-  };
+  // Track-specific recommendation logic
+  switch (trackSlug) {
+    case 'defender':
+      recommendations.push(...generateDefenderRecommendations(userProgress));
+      break;
+    case 'grc':
+      recommendations.push(...generateGrcRecommendations(userProgress));
+      break;
+    case 'innovation':
+      recommendations.push(...generateInnovationRecommendations(userProgress));
+      break;
+    case 'leadership':
+      recommendations.push(...generateLeadershipRecommendations(userProgress));
+      break;
+    case 'offensive':
+      recommendations.push(...generateOffensiveRecommendations(userProgress));
+      break;
+    default:
+      // Cross-track recommendations when no specific track is requested
+      recommendations.push(...generateCrossTrackRecommendations(userProgress));
+  }
 
-  // Priority 1: Incomplete videos in current level
-  if (mockUserProgress.beginner.videos_completed < mockUserProgress.beginner.total_videos) {
+  return recommendations;
+}
+
+/**
+ * Generate Defender track recommendations
+ */
+function generateDefenderRecommendations(userProgress: any): RecommendationAction[] {
+  const recommendations: RecommendationAction[] = [];
+
+  // Check if user struggled with log basics quiz
+  if (userProgress.quiz_scores['defender-beginner-log-analysis-fundamentals-log-basics-quiz'] < 85) {
     recommendations.push({
       type: 'video',
+      track_slug: 'defender',
       level_slug: 'beginner',
       module_slug: 'log-analysis-fundamentals',
-      content_slug: 'common-security-event-ids',
-      reason: 'Continue building foundational log analysis skills',
-      priority: 'high',
-      estimated_time: '7 min'
+      content_slug: 'event-viewer-basics',
+      title: 'Event Viewer Basics',
+      description: 'Master Windows Event Viewer for log analysis',
+      reason: 'You scored 78% on logs quiz. This video teaches Event Viewer filtering techniques.',
+      priority: 1,
+      estimated_duration_minutes: 8,
+      skill_codes: ['log_parsing', 'event_analysis', 'windows_logging'],
+      cohort_completion_rate: 87
     });
   }
 
-  // Priority 2: Supporting recipes for current level
-  const beginnerRecipes = ['defender-log-parsing-basics', 'defender-siem-search-basics'];
+  // Recommend next module content
+  if (!userProgress.completed_modules.includes('siem-searching-basics')) {
+    recommendations.push({
+      type: 'video',
+      track_slug: 'defender',
+      level_slug: 'beginner',
+      module_slug: 'siem-searching-basics',
+      content_slug: 'advanced-search-operators',
+      title: 'Advanced SIEM Search Operators',
+      description: 'Learn complex query operators for threat hunting',
+      reason: 'Build on your basic SIEM knowledge with advanced search techniques.',
+      priority: 2,
+      estimated_duration_minutes: 12,
+      skill_codes: ['siem_queries', 'threat_hunting', 'log_correlation'],
+      cohort_completion_rate: 73
+    });
+  }
+
+  // Recipe recommendation
   recommendations.push({
     type: 'recipe',
     recipe_slug: 'defender-log-parsing-basics',
-    reason: 'Practice hands-on log parsing techniques from the videos',
-    priority: 'medium',
-    estimated_time: '20 min'
+    track_slug: 'defender',
+    title: 'Log Parsing Basics',
+    description: 'Hands-on log parsing techniques',
+    reason: 'Strengthen your log analysis skills with practical exercises.',
+    priority: 3,
+    estimated_duration_minutes: 18,
+    skill_codes: ['log_parsing', 'regex_patterns', 'data_extraction'],
+    cohort_completion_rate: 92
   });
 
-  // Priority 3: Next level preparation or assessment
-  if (mockUserProgress.beginner.videos_completed >= mockUserProgress.beginner.total_videos &&
-      mockUserProgress.beginner.quizzes_completed >= mockUserProgress.beginner.total_quizzes) {
+  // Assessment preparation
+  recommendations.push({
+    type: 'quiz',
+    track_slug: 'defender',
+    level_slug: 'beginner',
+    module_slug: 'alert-triage-intro',
+    content_slug: 'alert-triage-basics-quiz',
+    title: 'Alert Triage Quiz',
+    description: 'Test your alert analysis and prioritization skills',
+    reason: 'Prepare for the beginner assessment with this practice quiz.',
+    priority: 4,
+    skill_codes: ['alert_analysis', 'threat_prioritization', 'incident_response']
+  });
 
-    // Assessment if not completed
-    if (!mockUserProgress.beginner.assessment_completed) {
-      recommendations.push({
-        type: 'mission',
-        mission_slug: 'failed-logon-hunt',
-        reason: 'Apply your beginner skills in a real-world scenario',
-        priority: 'high',
-        estimated_time: '30 min'
-      });
-    } else {
-      // Next level first video
-      recommendations.push({
-        type: 'video',
-        level_slug: 'intermediate',
-        module_slug: 'advanced-log-correlation',
-        content_slug: 'correlation-basics',
-        reason: 'Advance to intermediate level content',
-        priority: 'medium',
-        estimated_time: '10 min'
-      });
-    }
-  }
+  return recommendations;
+}
 
-  // Priority 4: Additional recipes if user has completed some content
-  if (mockUserProgress.beginner.videos_completed >= 3) {
-    recommendations.push({
+/**
+ * Generate GRC track recommendations
+ */
+function generateGrcRecommendations(userProgress: any): RecommendationAction[] {
+  return [
+    {
+      type: 'video',
+      track_slug: 'grc',
+      level_slug: 'beginner',
+      module_slug: 'risk-assessment-basics',
+      content_slug: 'risk-register-creation',
+      title: 'Risk Register Creation',
+      description: 'Learn to build and maintain risk registers',
+      reason: 'Essential skill for compliance and risk management roles.',
+      priority: 1,
+      estimated_duration_minutes: 15,
+      skill_codes: ['risk_assessment', 'register_management', 'compliance_basics'],
+      cohort_completion_rate: 81
+    },
+    {
       type: 'recipe',
-      recipe_slug: 'defender-siem-search-basics',
-      reason: 'Reinforce SIEM search concepts with practical exercises',
-      priority: 'low',
-      estimated_time: '15 min'
+      recipe_slug: 'grc-risk-register-basics',
+      track_slug: 'grc',
+      title: 'Risk Register Template',
+      description: 'Practical risk register implementation',
+      reason: 'Apply risk assessment concepts with this hands-on exercise.',
+      priority: 2,
+      estimated_duration_minutes: 22,
+      skill_codes: ['risk_identification', 'impact_analysis', 'control_evaluation'],
+      cohort_completion_rate: 76
+    }
+  ];
+}
+
+/**
+ * Generate Innovation track recommendations
+ */
+function generateInnovationRecommendations(userProgress: any): RecommendationAction[] {
+  return [
+    {
+      type: 'video',
+      track_slug: 'innovation',
+      level_slug: 'beginner',
+      module_slug: 'threat-research-basics',
+      content_slug: 'osint-methodology',
+      title: 'OSINT Methodology',
+      description: 'Systematic approach to open source intelligence gathering',
+      reason: 'Build threat research skills for innovative security solutions.',
+      priority: 1,
+      estimated_duration_minutes: 14,
+      skill_codes: ['osint_analysis', 'threat_intelligence', 'research_methodology'],
+      cohort_completion_rate: 69
+    },
+    {
+      type: 'recipe',
+      recipe_slug: 'innovation-osint-basics',
+      track_slug: 'innovation',
+      title: 'OSINT Tool Setup',
+      description: 'Configure and use OSINT tools effectively',
+      reason: 'Practical application of threat research techniques.',
+      priority: 2,
+      estimated_duration_minutes: 25,
+      skill_codes: ['tool_configuration', 'intelligence_collection', 'data_analysis'],
+      cohort_completion_rate: 58
+    }
+  ];
+}
+
+/**
+ * Generate Leadership track recommendations
+ */
+function generateLeadershipRecommendations(userProgress: any): RecommendationAction[] {
+  return [
+    {
+      type: 'video',
+      track_slug: 'leadership',
+      level_slug: 'beginner',
+      module_slug: 'communication-security',
+      content_slug: 'explaining-risk-to-executives',
+      title: 'Explaining Risk to Executives',
+      description: 'Master the art of communicating technical risk to business leaders',
+      reason: 'Critical leadership skill for CISO and security management roles.',
+      priority: 1,
+      estimated_duration_minutes: 18,
+      skill_codes: ['executive_communication', 'risk_explanation', 'stakeholder_management'],
+      cohort_completion_rate: 84
+    },
+    {
+      type: 'recipe',
+      recipe_slug: 'leadership-risk-communication',
+      track_slug: 'leadership',
+      title: 'Risk Communication Framework',
+      description: 'Structured approach to explaining security concepts',
+      reason: 'Practice executive communication with real-world scenarios.',
+      priority: 2,
+      estimated_duration_minutes: 20,
+      skill_codes: ['communication_frameworks', 'executive_briefing', 'risk_presentation'],
+      cohort_completion_rate: 91
+    }
+  ];
+}
+
+/**
+ * Generate Offensive track recommendations
+ */
+function generateOffensiveRecommendations(userProgress: any): RecommendationAction[] {
+  return [
+    {
+      type: 'video',
+      track_slug: 'offensive',
+      level_slug: 'beginner',
+      module_slug: 'port-scanning-nmap',
+      content_slug: 'nmap-scripting-engine-nse',
+      title: 'Nmap Scripting Engine (NSE)',
+      description: 'Automate complex scanning tasks with NSE scripts',
+      reason: 'Enhance your reconnaissance capabilities with advanced Nmap features.',
+      priority: 1,
+      estimated_duration_minutes: 16,
+      skill_codes: ['network_scanning', 'scripting_automation', 'vulnerability_detection'],
+      cohort_completion_rate: 72
+    },
+    {
+      type: 'recipe',
+      recipe_slug: 'offensive-nmap-basics',
+      track_slug: 'offensive',
+      title: 'Nmap Scanning Labs',
+      description: 'Practice Nmap techniques in safe environments',
+      reason: 'Apply scanning concepts with hands-on exercises.',
+      priority: 2,
+      estimated_duration_minutes: 30,
+      skill_codes: ['practical_scanning', 'network_enumeration', 'scan_analysis'],
+      cohort_completion_rate: 65
+    }
+  ];
+}
+
+/**
+ * Generate cross-track recommendations when no specific track is requested
+ */
+function generateCrossTrackRecommendations(userProgress: any): RecommendationAction[] {
+  const recommendations: RecommendationAction[] = [];
+
+  // If user is strong in defensive skills, recommend offensive reconnaissance
+  if (userProgress.completed_modules.includes('log-analysis-fundamentals')) {
+    recommendations.push({
+      type: 'video',
+      track_slug: 'offensive',
+      level_slug: 'beginner',
+      module_slug: 'recon-fundamentals',
+      content_slug: 'active-vs-passive-recon',
+      title: 'Active vs Passive Reconnaissance',
+      description: 'Learn offensive reconnaissance techniques',
+      reason: 'Your defensive log analysis skills make you ready for offensive reconnaissance.',
+      priority: 1,
+      estimated_duration_minutes: 12,
+      skill_codes: ['passive_recon', 'active_scanning', 'osint_collection'],
+      cohort_completion_rate: 78
     });
   }
+
+  // If user struggles with technical concepts, recommend leadership communication
+  const quizScores = Object.values(userProgress.quiz_scores) as number[];
+  if (quizScores.length > 0 && Math.max(...quizScores) < 80) {
+    recommendations.push({
+      type: 'video',
+      track_slug: 'leadership',
+      level_slug: 'beginner',
+      module_slug: 'communication-security',
+      content_slug: 'explaining-risk-non-tech-executives',
+      title: 'Explaining Risk to Executives',
+      description: 'Bridge technical and business understanding',
+      reason: 'Strengthen your communication skills to explain technical concepts clearly.',
+      priority: 2,
+      estimated_duration_minutes: 18,
+      skill_codes: ['executive_communication', 'risk_explanation', 'stakeholder_management'],
+      cohort_completion_rate: 84
+    });
+  }
+
+  // Innovation recommendation for creative problem-solving
+  recommendations.push({
+    type: 'recipe',
+    recipe_slug: 'innovation-idea-validation',
+    track_slug: 'innovation',
+    title: 'Security Solution Ideation',
+    description: 'Brainstorm innovative security solutions',
+    reason: 'Apply your technical knowledge to create innovative security approaches.',
+    priority: 3,
+    estimated_duration_minutes: 16,
+    skill_codes: ['creative_thinking', 'problem_solving', 'solution_design'],
+    cohort_completion_rate: 61
+  });
 
   return recommendations;
 }
