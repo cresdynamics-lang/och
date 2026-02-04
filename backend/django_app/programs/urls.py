@@ -12,6 +12,12 @@ from .views import (
     MentorAssignmentViewSet,
     director_dashboard
 )
+from .api_views import (
+    CohortViewSet as APICohortViewSet,
+    ModuleViewSet as APIModuleViewSet,
+    MilestoneViewSet as APIMilestoneViewSet,
+    SpecializationViewSet as APISpecializationViewSet
+)
 from .views.calendar_views import CalendarEventViewSet
 from .views.director_views import DirectorCohortViewSet
 from .views.director_management_views import (
@@ -36,9 +42,10 @@ router = DefaultRouter()
 router.register(r'programs', ProgramViewSet, basename='program')
 router.register(r'programs-management', ProgramManagementViewSet, basename='program-management')
 router.register(r'tracks', TrackViewSet, basename='track')
-router.register(r'milestones', MilestoneViewSet, basename='milestone')
-router.register(r'modules', ModuleViewSet, basename='module')
-router.register(r'cohorts', CohortViewSet, basename='cohort')
+router.register(r'milestones', APIMilestoneViewSet, basename='milestone')
+router.register(r'modules', APIModuleViewSet, basename='module')
+router.register(r'specializations', APISpecializationViewSet, basename='specialization')
+router.register(r'cohorts', APICohortViewSet, basename='cohort')
 router.register(r'rules', ProgramRuleViewSet, basename='rule')
 router.register(r'certificates', CertificateViewSet, basename='certificate')
 router.register(r'mentor-assignments', MentorAssignmentViewSet, basename='mentor-assignment')

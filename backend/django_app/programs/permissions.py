@@ -26,6 +26,30 @@ class IsProgramDirector(permissions.BasePermission):
         ).exists()
 
 
+class IsDirectorOrAdmin(permissions.BasePermission):
+    """Permission check for Program Director or Admin role."""
+    
+    def has_permission(self, request, view):
+        """Check if user has program_director or admin role."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        
+        # Check if user has program_director role
+        from users.models import UserRole, Role
+        director_role = Role.objects.filter(name='program_director').first()
+        if not director_role:
+            return False
+        
+        return UserRole.objects.filter(
+            user=request.user,
+            role=director_role,
+            is_active=True
+        ).exists()
+
+
 class CanManageProgram(permissions.BasePermission):
     """Permission check for program management."""
     
