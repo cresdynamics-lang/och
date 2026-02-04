@@ -67,6 +67,9 @@ urlpatterns = [
     # Sponsors Management
     path('sponsors/', include('sponsors.urls')),
     
+    # Sponsor/Employer APIs (OCH SMP Technical Specifications)
+    path('', include('sponsors.urls_api')),
+    
     # Director Dashboard (must come after programs.urls to avoid URL conflicts with director router)
     # Note: director_dashboard.urls only registers 'dashboard' routes, so it won't conflict with 'cohorts'
     path('director/', include('director_dashboard.urls')),

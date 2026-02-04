@@ -1,8 +1,180 @@
 /**
- * Sponsor Dashboard API Client
+ * Sponsor Dashboard API Client - Updated for OCH SMP Technical Specifications
  */
 import { apiGateway } from './apiGateway'
 
+// =============================================================================
+// 🔑 Identity & Organization Types
+// =============================================================================
+export interface SponsorProfile {
+  user_id: string
+  email: string
+  first_name: string
+  last_name: string
+  user_type: string
+  roles: Array<{
+    role_name: string
+    scope_type: string
+    scope_id: string
+  }>
+  consent_scopes: Array<{
+    scope_type: string
+    granted_at: string
+    expires_at: string | null
+  }>
+  sponsor_organizations: Array<{
+    id: string
+    name: string
+    slug: string
+    role: string
+  }>
+}
+
+export interface SponsorSignupData {
+  email: string
+  password: string
+  first_name: string
+  last_name: string
+  organization_name: string
+  sponsor_type?: 'corporate' | 'university' | 'scholarship'
+  website?: string
+  country?: string
+  city?: string
+  region?: string
+}
+
+// =============================================================================
+// 📚 Program & Cohort Types
+// =============================================================================
+export interface SponsorCohort {
+  cohort_id: string
+  name: string
+  sponsor: string
+  track_slug: string
+  target_size: number
+  students_enrolled: number
+  completion_rate: number
+  start_date: string | null
+  expected_graduation_date: string | null
+  budget_allocated: number
+  placement_goal: number
+  status: 'draft' | 'active' | 'graduated' | 'archived'
+}
+
+export interface CohortReports {
+  cohort_id: string
+  cohort_name: string
+  seat_utilization: {
+    target_seats: number
+    used_seats: number
+    utilization_percentage: number
+  }
+  completion_metrics: {
+    total_enrolled: number
+    completed_students: number
+    completion_rate: number
+    average_completion_percentage: number
+  }
+  financial_summary: {
+    total_cost_kes: number
+    total_revenue_kes: number
+    net_cost_kes: number
+    budget_allocated_kes: number
+    budget_utilization_pct: number
+  }
+  payment_status: {
+    paid_invoices: number
+    pending_invoices: number
+    overdue_invoices: number
+    total_invoices: number
+  }
+}
+
+// =============================================================================
+// 💳 Billing & Finance Types
+// =============================================================================
+export interface BillingCatalog {
+  pricing_models: Array<{
+    model_type: string
+    name: string
+    description: string
+    price_kes?: number
+    percentage?: number
+    currency?: string
+    billing_cycle: string
+    description_detail?: string
+  }>
+}
+
+export interface CheckoutSession {
+  session_id: string
+  amount: number
+  currency: string
+  seats_count: number
+  cohort_name: string
+  payment_url: string
+  expires_at: string
+}
+
+export interface SponsorInvoice {
+  invoice_id: string
+  billing_month: string
+  cohort_name: string
+  total_amount_kes: number
+  revenue_share_kes: number
+  net_amount_kes: number
+  payment_status: 'pending' | 'paid' | 'overdue'
+  payment_date: string | null
+  invoice_generated: boolean
+  created_at: string
+}
+
+export interface SeatEntitlement {
+  cohort_id: string
+  cohort_name: string
+  seats_allocated: number
+  seats_used: number
+  seats_available: number
+  utilization_percentage: number
+  track_slug: string
+  status: string
+}
+
+// =============================================================================
+// 🔒 Privacy & Consent Types
+// =============================================================================
+export interface StudentConsent {
+  student_id: string
+  student_name: string
+  student_email: string
+  consents: Array<{
+    scope_type: string
+    granted: boolean
+    granted_at: string | null
+    expires_at: string | null
+  }>
+}
+
+export interface ConsentCheck {
+  student_id: string
+  scope_type: string
+  has_consent: boolean
+  checked_at: string
+  reason?: string
+}
+
+// =============================================================================
+// 📊 Analytics Types
+// =============================================================================
+export interface SponsorMetrics {
+  metric_key: string
+  sponsor_id: string
+  sponsor_name: string
+  data: any
+  last_updated: string
+}
+
+// Legacy types for backward compatibility
 export interface SponsorDashboardSummary {
   org_id: string
   seats_total: number
@@ -19,50 +191,6 @@ export interface SponsorDashboardSummary {
   cache_updated_at: string
 }
 
-export interface SponsorCohort {
-  cohort_id: string
-  cohort_name: string
-  track_name: string
-  seats_total: number
-  seats_used: number
-  seats_sponsored: number
-  seats_remaining: number
-  avg_readiness: number | null
-  completion_pct: number | null
-  graduates_count: number
-  at_risk_count: number
-  next_milestone: {
-    title: string
-    date: string
-    type: string
-  } | null
-  flags: string[]
-  budget_remaining: number | null
-}
-
-export interface SponsorCohortDetail extends SponsorCohort {
-  seats: {
-    total: number
-    used: number
-    sponsored: number
-    remaining: number
-    at_risk: number
-  }
-  progress: {
-    avg_readiness: number | null
-    completion_pct: number | null
-    portfolio_health: number | null
-  }
-  top_graduates: number
-  budget: {
-    allocated: number | null
-    spent: number | null
-    remaining: number | null
-  }
-  shared_profiles: number
-  next_events: any[]
-}
-
 export interface SponsorStudent {
   student_id: string
   name_anonymized: string
@@ -72,69 +200,243 @@ export interface SponsorStudent {
   consent_employer_share: boolean
 }
 
-export interface SponsorStudentProfile {
-  student_id: string
-  name: string
-  email: string | null
-  readiness_score: number | null
-  completion_pct: number | null
-  portfolio_items: number
-  cohort: {
-    id: string
-    name: string
-  }
-  enrollment_status: string
-}
-
-export interface PortfolioItem {
-  id: string
-  title: string
-  description: string
-  created_at: string
-  file_url: string | null
-}
-
-export interface StudentPortfolio {
-  student_id: string
-  portfolio_items: PortfolioItem[]
-  total_items: number
-}
-
-export interface CompetencyDefinition {
-  id: string
-  name: string
-  description: string
-}
-
-export interface CompetenciesResponse {
-  competencies: CompetencyDefinition[]
-  count: number
-}
-
-export interface SponsorCode {
-  id: string
-  code: string
-  seats: number
-  value_per_seat: number | null
-  valid_from: string | null
-  valid_until: string | null
-  usage_count: number
-  max_usage: number | null
-  status: 'active' | 'expired' | 'revoked'
-  is_valid: boolean
-  created_at: string
-}
-
 class SponsorClient {
+  // =============================================================================
+  // 🔑 Identity & Organization APIs
+  // =============================================================================
+
   /**
-   * Get sponsor dashboard summary
+   * Create sponsor account
+   */
+  async signup(data: SponsorSignupData): Promise<{
+    user_id: string
+    sponsor_id: string
+    organization_id: string
+    message: string
+  }> {
+    return apiGateway.post('/auth/signup/', data)
+  }
+
+  /**
+   * Get sponsor profile
+   */
+  async getProfile(): Promise<SponsorProfile> {
+    return apiGateway.get('/auth/me/')
+  }
+
+  /**
+   * Update consent scopes
+   */
+  async updateConsent(data: {
+    scope_type: string
+    granted: boolean
+  }): Promise<{
+    consent_id: string
+    scope_type: string
+    granted: boolean
+    message: string
+  }> {
+    return apiGateway.post('/auth/consents/', data)
+  }
+
+  // =============================================================================
+  // 📚 Program & Cohort Management APIs
+  // =============================================================================
+
+  /**
+   * Create sponsored cohort
+   */
+  async createCohort(data: {
+    name: string
+    track_slug: string
+    sponsor_slug: string
+    target_size?: number
+    start_date?: string
+    expected_graduation_date?: string
+    budget_allocated?: number
+    placement_goal?: number
+  }): Promise<{
+    cohort_id: string
+    name: string
+    sponsor: string
+    track_slug: string
+    message: string
+  }> {
+    return apiGateway.post('/programs/cohorts/', data)
+  }
+
+  /**
+   * Enroll sponsored students
+   */
+  async enrollStudents(cohortId: string, data: {
+    student_emails: string[]
+  }): Promise<{
+    enrolled_students: Array<{
+      student_id: string
+      email: string
+      enrollment_id: string
+    }>
+    total_enrolled: number
+    message: string
+  }> {
+    return apiGateway.post(`/programs/cohorts/${cohortId}/enrollments/`, data)
+  }
+
+  /**
+   * List sponsored students
+   */
+  async getSponsoredStudents(cohortId: string): Promise<{
+    cohort_id: string
+    cohort_name: string
+    students: Array<{
+      enrollment_id: string
+      student_id: string
+      name: string
+      email: string | null
+      enrollment_status: string
+      completion_percentage: number
+      joined_at: string
+      last_activity_at: string | null
+      has_employer_consent: boolean
+    }>
+    total_students: number
+  }> {
+    return apiGateway.get(`/programs/cohorts/${cohortId}/enrollments/list/`)
+  }
+
+  /**
+   * Get cohort reports
+   */
+  async getCohortReports(cohortId: string): Promise<CohortReports> {
+    return apiGateway.get(`/programs/cohorts/${cohortId}/reports/`)
+  }
+
+  // =============================================================================
+  // 💳 Billing & Finance APIs
+  // =============================================================================
+
+  /**
+   * Get billing catalog
+   */
+  async getBillingCatalog(): Promise<BillingCatalog> {
+    return apiGateway.get('/billing/catalog/')
+  }
+
+  /**
+   * Create checkout session
+   */
+  async createCheckoutSession(data: {
+    cohort_id: string
+    seats_count: number
+  }): Promise<CheckoutSession> {
+    return apiGateway.post('/billing/checkout/sessions/', data)
+  }
+
+  /**
+   * Get sponsor invoices
+   */
+  async getInvoices(): Promise<{
+    invoices: SponsorInvoice[]
+    total_invoices: number
+  }> {
+    return apiGateway.get('/billing/invoices/')
+  }
+
+  /**
+   * Get seat entitlements
+   */
+  async getEntitlements(): Promise<{
+    entitlements: SeatEntitlement[]
+    total_cohorts: number
+  }> {
+    return apiGateway.get('/billing/entitlements/')
+  }
+
+  // =============================================================================
+  // 📢 Notifications APIs
+  // =============================================================================
+
+  /**
+   * Send message to sponsored students
+   */
+  async sendMessage(data: {
+    recipient_type: 'cohort' | 'all_students' | 'specific_students'
+    subject: string
+    message: string
+    cohort_id?: string
+    student_ids?: string[]
+  }): Promise<{
+    message_id: string
+    recipients_count: number
+    status: string
+    message: string
+  }> {
+    return apiGateway.post('/notifications/send/', data)
+  }
+
+  // =============================================================================
+  // 🔒 Privacy & Consent APIs
+  // =============================================================================
+
+  /**
+   * Get sponsor-related consents
+   */
+  async getSponsorConsents(): Promise<{
+    consents: StudentConsent[]
+    total_students: number
+  }> {
+    return apiGateway.get('/privacy/consents/my/')
+  }
+
+  /**
+   * Check student consent
+   */
+  async checkStudentConsent(data: {
+    student_id: string
+    scope_type: string
+  }): Promise<ConsentCheck> {
+    return apiGateway.post('/privacy/check/', data)
+  }
+
+  // =============================================================================
+  // 📊 Analytics & Reporting APIs
+  // =============================================================================
+
+  /**
+   * Get sponsor metrics
+   */
+  async getMetrics(metricKey: 'seat_utilization' | 'completion_rates' | 'placement_metrics' | 'roi_analysis'): Promise<SponsorMetrics> {
+    return apiGateway.get(`/analytics/metrics/${metricKey}/`)
+  }
+
+  /**
+   * Export dashboard PDF
+   */
+  async exportDashboardPDF(dashboardId: string = 'main-dashboard'): Promise<{
+    dashboard_id: string
+    sponsor_name: string
+    generated_at: string
+    pdf_url: string
+    expires_at: string
+    file_size_bytes: number
+    status: string
+  }> {
+    return apiGateway.get(`/analytics/dashboards/${dashboardId}/pdf/`)
+  }
+
+  // =============================================================================
+  // Legacy API methods for backward compatibility
+  // =============================================================================
+
+  /**
+   * Get sponsor dashboard summary (legacy)
    */
   async getSummary(): Promise<SponsorDashboardSummary> {
     return apiGateway.get('/sponsor/dashboard/summary')
   }
 
   /**
-   * Get sponsored cohorts list
+   * Get sponsored cohorts list (legacy)
    */
   async getCohorts(params?: {
     limit?: number
@@ -149,14 +451,7 @@ class SponsorClient {
   }
 
   /**
-   * Get cohort detail
-   */
-  async getCohortDetail(cohortId: string): Promise<SponsorCohortDetail> {
-    return apiGateway.get(`/sponsor/dashboard/cohorts/${cohortId}`)
-  }
-
-  /**
-   * Get student aggregates (consent-gated)
+   * Get student aggregates (legacy)
    */
   async getStudents(params?: {
     cohort_id?: string
@@ -167,24 +462,7 @@ class SponsorClient {
   }
 
   /**
-   * Get graduates pool (consent-gated)
-   */
-  async getGraduates(params?: {
-    readiness_gte?: number
-    limit?: number
-  }): Promise<SponsorStudent[]> {
-    return apiGateway.get('/sponsor/graduates', { params })
-  }
-
-  /**
-   * Request graduate CV
-   */
-  async requestGraduateCV(userId: string): Promise<{ cv_url?: string }> {
-    return apiGateway.post(`/sponsor/graduates/${userId}/request_cv`)
-  }
-
-  /**
-   * Assign seats to users
+   * Assign seats to users (legacy)
    */
   async assignSeats(data: {
     cohort_id: string
@@ -196,65 +474,6 @@ class SponsorClient {
     enrollment_ids: string[]
   }> {
     return apiGateway.post('/sponsor/seats/assign', data)
-  }
-
-  /**
-   * Generate sponsor codes
-   */
-  async generateCodes(data: {
-    seats: number
-    value_per_seat?: number
-    valid_from?: string
-    valid_until?: string
-    max_usage?: number
-    count?: number
-  }): Promise<SponsorCode[]> {
-    return apiGateway.post('/sponsor/codes/generate', data)
-  }
-
-  /**
-   * List sponsor codes
-   */
-  async getCodes(): Promise<SponsorCode[]> {
-    return apiGateway.get('/sponsor/codes')
-  }
-
-  /**
-   * Get invoices
-   */
-  async getInvoices(): Promise<any[]> {
-    return apiGateway.get('/sponsor/invoices')
-  }
-
-  /**
-   * Export reports
-   */
-  async exportReport(data: {
-    format: 'json' | 'csv'
-    type: string
-  }): Promise<any> {
-    return apiGateway.post('/sponsor/reports/export', data)
-  }
-
-  /**
-   * Get student profile (consent-gated)
-   */
-  async getStudentProfile(studentId: string): Promise<SponsorStudentProfile> {
-    return apiGateway.get(`/sponsor/dashboard/students/${studentId}`)
-  }
-
-  /**
-   * Get student portfolio (consent-gated with portfolio.public_page)
-   */
-  async getStudentPortfolio(studentId: string): Promise<StudentPortfolio> {
-    return apiGateway.get(`/sponsor/dashboard/students/${studentId}/portfolio`)
-  }
-
-  /**
-   * Get competency/role definitions from MCRR
-   */
-  async getCompetencies(): Promise<CompetenciesResponse> {
-    return apiGateway.get('/sponsor/dashboard/competencies')
   }
 }
 
