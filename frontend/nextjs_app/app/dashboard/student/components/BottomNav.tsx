@@ -6,7 +6,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { useDashboardStore } from '../lib/store/dashboardStore';
+import { useDashboardStore } from '../../../../stores/dashboardStore';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard,

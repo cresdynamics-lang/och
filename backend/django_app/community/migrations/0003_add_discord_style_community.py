@@ -100,7 +100,7 @@ class Migration(migrations.Migration):
                 ('space', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='channels', to='community.communityspace')),
             ],
             options={
-                'db_table': 'community_channels',
+                'db_table': 'community_space_channels',
                 'verbose_name': 'Community Channel',
                 'verbose_name_plural': 'Community Channels',
                 'ordering': ['space', 'sort_order', 'title'],

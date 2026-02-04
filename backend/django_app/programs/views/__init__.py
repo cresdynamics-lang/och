@@ -22,7 +22,7 @@ from .director_rules_views import DirectorProgramRulesViewSet
 from .director_reports_views import DirectorReportsViewSet
 from .director_advanced_analytics_views import DirectorAdvancedAnalyticsViewSet
 from .director_certificate_views import DirectorCertificateViewSet
-# from .mentor_assignment_views import MentorAssignmentViewSet  # Temporarily disabled due to syntax errors
+from .mentor_assignment_views import MentorAssignmentViewSet
 
 __all__ = [
     'ProgramViewSet', 'TrackViewSet', 'CohortViewSet',

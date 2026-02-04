@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venvScriptspython.exe -m django --version)",
+      "Bash(git restore:*)",
+      "Bash(python setup_mentor_data.py:*)"
+    ]
+  }
+}

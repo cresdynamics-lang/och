@@ -6,16 +6,22 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
-// import { useAuth } from '@/hooks/useAuth';
+
+interface Video {
+  id: string;
+  title: string;
+  video_url: string;
+  completed: boolean;
+}
 
 export default function CurriculumLearnPage() {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-
+  
   // Get track slug from localStorage
   const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defender' : 'defender';
 
-  // Mock videos for demonstration
-  const videos = [
+  // Properly manage videos state
+  const [videos, setVideos] = useState<Video[]>([
     {
       id: '1',
       title: 'Welcome to the Course',
@@ -34,28 +40,51 @@ export default function CurriculumLearnPage() {
       video_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
       completed: false
     }
-  ];
+  ]);
 
   const currentVideo = videos[currentVideoIndex];
 
   const handleVideoComplete = () => {
-    // Mark current video as completed
-    videos[currentVideoIndex].completed = true;
+    // Properly update state with immutable update
+    setVideos(prevVideos => 
+      prevVideos.map((video, index) => 
+        index === currentVideoIndex 
+          ? { ...video, completed: true }
+          : video
+      )
+    );
 
-    // Move to next video if available
-    const nextIndex = currentVideoIndex + 1;
-    if (nextIndex < videos.length) {
-      setCurrentVideoIndex(nextIndex);
+    // Check if this was the last video
+    if (currentVideoIndex === videos.length - 1) {
+      // All videos completed - show completion state
+      setTimeout(() => {
+        alert('🎉 Congratulations! You\'ve completed all videos in this module.\n\nNext steps:\n• Take the module quiz\n• Complete hands-on missions\n• Move to the next module');
+      }, 1000);
     }
   };
 
   const goToVideo = (index: number) => {
     // Only allow going to videos that are unlocked (previous video completed or first video)
-    if (index === 0 || videos[index - 1].completed) {
+    if (index === 0 || videos[index - 1]?.completed) {
       setCurrentVideoIndex(index);
     }
   };
 
+  const goToNextVideo = () => {
+    const nextIndex = currentVideoIndex + 1;
+    if (nextIndex < videos.length) {
+      // Check if next video is unlocked
+      if (nextIndex === 0 || videos[nextIndex - 1]?.completed) {
+        setCurrentVideoIndex(nextIndex);
+      }
+    }
+  };
+
+  const isNextVideoUnlocked = () => {
+    const nextIndex = currentVideoIndex + 1;
+    if (nextIndex >= videos.length) return false;
+    return nextIndex === 0 || videos[nextIndex - 1]?.completed;
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 md:p-8">
@@ -85,6 +114,7 @@ export default function CurriculumLearnPage() {
                 <h2 className="text-xl font-semibold text-white mb-2">{currentVideo.title}</h2>
                 <div className="aspect-video bg-slate-800 rounded-lg overflow-hidden">
                   <video
+                    key={currentVideo.id} // Force re-render when video changes
                     src={currentVideo.video_url}
                     controls
                     className="w-full h-full"
@@ -105,15 +135,25 @@ export default function CurriculumLearnPage() {
                   Previous
                 </Button>
 
-                <Button
-                  variant="outline"
-                  disabled={currentVideoIndex >= videos.length - 1}
-                  onClick={() => goToVideo(currentVideoIndex + 1)}
-                  className="flex items-center gap-2"
-                >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+                {/* Show different button based on completion state */}
+                {currentVideoIndex === videos.length - 1 && videos[currentVideoIndex]?.completed ? (
+                  <Link href="/dashboard/student/missions">
+                    <Button className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
+                      Start Missions
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={!isNextVideoUnlocked()}
+                    onClick={goToNextVideo}
+                    className="flex items-center gap-2"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </Card>
           </div>
@@ -126,7 +166,7 @@ export default function CurriculumLearnPage() {
                 {videos.map((video, index) => {
                   const isCompleted = video.completed;
                   const isCurrent = index === currentVideoIndex;
-                  const isUnlocked = index === 0 || videos[index - 1].completed;
+                  const isUnlocked = index === 0 || videos[index - 1]?.completed;
 
                   return (
                     <button

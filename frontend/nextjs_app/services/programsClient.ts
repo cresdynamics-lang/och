@@ -640,7 +640,8 @@ class ProgramsClient {
     if (Array.isArray(response)) {
       if (mentorId) {
         return response.filter((a) => {
-          const aMentorId = typeof a.mentor === 'string' ? a.mentor : (a.mentor as any)?.toString()
+          // API returns mentor_id field, not mentor
+          const aMentorId = (a as any).mentor_id || (typeof a.mentor === 'string' ? a.mentor : (a.mentor as any)?.toString())
           return aMentorId === mentorId || aMentorId === mentorId.toString()
         })
       }
@@ -649,7 +650,8 @@ class ProgramsClient {
     const results = response.results || []
     if (mentorId) {
       return results.filter((a) => {
-          const aMentorId = typeof a.mentor === 'string' ? a.mentor : (a.mentor as any)?.toString()
+        // API returns mentor_id field, not mentor
+        const aMentorId = (a as any).mentor_id || (typeof a.mentor === 'string' ? a.mentor : (a.mentor as any)?.toString())
         return aMentorId === mentorId || aMentorId === mentorId.toString()
       })
     }

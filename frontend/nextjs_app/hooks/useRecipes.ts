@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { recipesClient } from '@/services/recipesClient';
+import { apiGateway } from '@/services/apiGateway';
 import { useRecipeFilters, type RecipeQueryParams } from './useRecipeFilters';
 import type {
   Recipe,
@@ -57,45 +58,37 @@ export function useRecipes(
   const fetchRecipes = useCallback(async (forceRefresh = false) => {
     const cacheKey = getCacheKey(queryParams);
 
-    // Check cache first (if enabled and not forcing refresh)
-    if (enableCache && !forceRefresh) {
-      const cached = cache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5 minutes cache
-        setRecipes(cached.data);
-        setStats(cached.stats);
-        const bookmarkedIds = cached.data
-          .filter((recipe) => recipe.is_bookmarked)
-          .map((recipe) => recipe.id);
-        setBookmarks(bookmarkedIds);
-        setLoading(false);
-        setIsStale(false);
-        return;
-      } else if (cached) {
-        setIsStale(true); // Data is stale but we'll show it while fetching fresh data
-      }
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch recipes (stats are now included in the response)
-      const response = await recipesClient.getRecipesWithStats(queryParams);
+      // Fetch recipes, user progress, and bookmarks in parallel
+      const [response, progressList, bookmarkList] = await Promise.all([
+        recipesClient.getRecipesWithStats(queryParams),
+        recipesClient.getMyProgress().catch(() => []),
+        recipesClient.getBookmarks().catch(() => []),
+      ]);
 
-      const recipesData = response.recipes || [];
+      // Build lookup maps from live Django data
+      const progressBySlug = new Map(progressList.map(p => [p.recipe_slug, p.status]));
+      const bookmarkedSlugs = new Set(bookmarkList.map(b => b.recipe?.slug));
+      const bookmarkedIds = bookmarkList.map(b => b.recipe?.id).filter(Boolean);
+
+      // Merge live status and bookmark into each recipe
+      const recipesData = (response.recipes || []).map(r => ({
+        ...r,
+        status: progressBySlug.get(r.slug) || null,
+        is_bookmarked: bookmarkedSlugs.has(r.slug),
+      }));
+
       const statsData = {
         total: response.total || 0,
-        bookmarked: response.bookmarked || 0
+        bookmarked: bookmarkedIds.length
       };
 
       setRecipes(recipesData);
       setStats(statsData);
       setIsStale(false);
-
-      // Extract bookmarked recipe IDs
-      const bookmarkedIds = recipesData
-        .filter((recipe) => recipe.is_bookmarked)
-        .map((recipe) => recipe.id);
       setBookmarks(bookmarkedIds);
 
       // Cache the results
@@ -113,13 +106,17 @@ export function useRecipes(
     } finally {
       setLoading(false);
     }
-  }, [queryParams, enableCache, cache, getCacheKey]);
+  }, [enableCache, getCacheKey]);
+
+  // Use stringified queryParams to prevent infinite loops
+  const queryParamsKey = JSON.stringify(queryParams);
 
   useEffect(() => {
     if (autoFetch) {
       fetchRecipes();
     }
-  }, [fetchRecipes, autoFetch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryParamsKey, autoFetch]);
 
   return {
     recipes,
@@ -175,22 +172,25 @@ export function useRecipeProgress(recipeSlug: string): UseRecipeProgressResult {
     setError(null);
 
     try {
-      // Fetch recipe details (includes user progress and bookmark status)
-      const recipe = await recipesClient.getRecipe(recipeSlug);
-      
-      if (recipe.user_progress) {
+      // Fetch progress and bookmark status from Django in parallel
+      const [progressData, bookmarkData] = await Promise.all([
+        recipesClient.getProgress(recipeSlug).catch(() => null),
+        apiGateway.get<{ bookmarked: boolean }>(`/recipes/${recipeSlug}/bookmark/`).catch(() => ({ bookmarked: false })),
+      ]);
+
+      if (progressData && progressData.status) {
         setProgress({
-          status: recipe.user_progress.status as RecipeStatus,
-          rating: recipe.user_progress.rating || null,
-          notes: recipe.user_progress.notes || null,
-          time_spent_minutes: recipe.user_progress.time_spent_minutes || null,
-          completed_at: recipe.user_progress.completed_at || null,
+          status: progressData.status as RecipeStatus,
+          rating: progressData.rating || null,
+          notes: progressData.notes || null,
+          time_spent_minutes: progressData.time_spent_minutes || null,
+          completed_at: progressData.completed_at || null,
         });
       } else {
         setProgress(null);
       }
-      
-      setIsBookmarked(recipe.is_bookmarked || false);
+
+      setIsBookmarked(bookmarkData?.bookmarked || false);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch recipe progress');
       console.error('Error fetching recipe progress:', err);

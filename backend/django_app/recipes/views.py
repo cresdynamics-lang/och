@@ -54,30 +54,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
             import json
 
             with connection.cursor() as cursor:
-                # Check if user is free user (simplified - students can access recipes)
-                user = request.user
-                is_free_user = not user.is_authenticated or not hasattr(user, 'is_staff') or not user.is_staff
-
-                if is_free_user:
-                    cursor.execute("""
-                        SELECT id, title, slug, summary, description, difficulty,
-                               estimated_minutes, track_codes, skill_codes, source_type,
-                               prerequisites, tools_and_environment, inputs,
-                               steps, validation_checks, is_free_sample
-                        FROM recipes_recipe
-                        WHERE is_active = 1 AND is_free_sample = 1
-                        ORDER BY created_at DESC
-                    """)
-                else:
-                    cursor.execute("""
-                        SELECT id, title, slug, summary, description, difficulty,
-                               estimated_minutes, track_codes, skill_codes, source_type,
-                               prerequisites, tools_and_environment, inputs,
-                               steps, validation_checks, is_free_sample
-                        FROM recipes_recipe
-                        WHERE is_active = 1
-                        ORDER BY created_at DESC
-                    """)
+                # All authenticated students can access all recipes
+                cursor.execute("""
+                    SELECT id, title, slug, summary, description, difficulty,
+                           estimated_minutes, track_codes, skill_codes,
+                           prerequisites, tools_and_environment, inputs,
+                           steps, validation_checks, is_free_sample
+                    FROM recipes
+                    WHERE is_active = true
+                    ORDER BY created_at DESC
+                """)
 
                 rows = cursor.fetchall()
 
@@ -88,31 +74,49 @@ class RecipeViewSet(viewsets.ModelViewSet):
                         skill_codes = json.loads(row[8]) if row[8] else []
 
                         recipes.append({
-                            'id': row[0],
+                            'id': str(row[0]),
                             'title': row[1],
                             'slug': row[2],
                             'description': row[3] or row[4] or '',
                             'difficulty': row[5],
+                            'estimated_minutes': row[6] or 20,
                             'expected_duration_minutes': row[6] or 20,
                             'track_code': track_codes[0] if track_codes else None,
+                            'track_codes': track_codes,
                             'skill_code': skill_codes[0] if skill_codes else None,
-                            'level': row[5],  # Map difficulty to level
-                            'source_type': row[9] or 'manual',
+                            'level': row[5],
+                            'source_type': 'manual',
                             'tags': track_codes + skill_codes,
-                            'prerequisites': json.loads(row[10]) if row[10] else [],
-                            'tools_and_environment': json.loads(row[11]) if row[11] else [],
-                            'inputs': json.loads(row[12]) if row[12] else [],
-                            'steps': json.loads(row[13]) if row[13] else [],
-                            'validation_checks': json.loads(row[14]) if row[14] else [],
-                            'is_free_sample': bool(row[15])
+                            'prerequisites': json.loads(row[9]) if row[9] else [],
+                            'tools_and_environment': json.loads(row[10]) if row[10] else [],
+                            'inputs': json.loads(row[11]) if row[11] else [],
+                            'steps': json.loads(row[12]) if row[12] else [],
+                            'validation_checks': json.loads(row[13]) if row[13] else [],
+                            'is_free_sample': bool(row[14])
                         })
                     except Exception as e:
                         print(f"Error processing row {row[0]}: {e}")
                         continue
 
+                # Stamp per-recipe bookmark status and get total bookmark count
+                bookmarked_count = 0
+                if request.user.is_authenticated:
+                    bookmarked_ids = set(
+                        str(rid) for rid in UserRecipeBookmark.objects.filter(
+                            user=request.user
+                        ).values_list('recipe_id', flat=True)
+                    )
+                    bookmarked_count = len(bookmarked_ids)
+                    for r in recipes:
+                        r['is_bookmarked'] = r['id'] in bookmarked_ids
+                else:
+                    for r in recipes:
+                        r['is_bookmarked'] = False
+
                 return Response({
                     'recipes': recipes,
                     'total': len(recipes),
+                    'bookmarked': bookmarked_count,
                     'page': 1,
                     'page_size': len(recipes)
                 })
@@ -180,7 +184,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         return queryset.select_related('created_by').prefetch_related('context_links')
 
     def retrieve(self, request, *args, **kwargs):
-        """Get individual recipe with free user restrictions using raw SQL."""
+        """Get individual recipe detail using raw SQL."""
         slug = kwargs.get('slug')
         if not slug:
             return Response({'error': 'Recipe slug required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -189,18 +193,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
             from django.db import connection
             import json
 
-            # REMOVED: Free user restrictions - all recipes are now accessible to everyone
             user = request.user
 
             with connection.cursor() as cursor:
-                # All users can see all recipes
                 cursor.execute("""
                     SELECT id, title, slug, summary, description, difficulty,
-                           estimated_minutes, track_codes, skill_codes, source_type,
+                           estimated_minutes, track_codes, skill_codes,
                            prerequisites, tools_and_environment, inputs,
                            steps, validation_checks, is_free_sample
-                    FROM recipes_recipe
-                    WHERE slug = %s AND is_active = 1
+                    FROM recipes
+                    WHERE slug = %s AND is_active = true
                 """, [slug])
 
                 row = cursor.fetchone()
@@ -208,29 +210,49 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 if not row:
                     return Response({'error': 'Recipe not found'}, status=status.HTTP_404_NOT_FOUND)
 
-                try:
-                    recipe_data = {
-                        'id': row[0],
-                        'title': row[1],
-                        'slug': row[2],
-                        'description': row[3] or row[4] or '',
-                        'difficulty': row[5],
-                        'expected_duration_minutes': row[6] or 20,
-                        'track_code': json.loads(row[7])[0] if row[7] else None,
-                        'skill_code': json.loads(row[8])[0] if row[8] else None,
-                        'level': row[5],  # Map difficulty to level
-                        'source_type': row[9] or 'manual',
-                        'prerequisites': json.loads(row[10]) if row[10] else [],
-                        'tools_and_environment': json.loads(row[11]) if row[11] else [],
-                        'inputs': json.loads(row[12]) if row[12] else [],
-                        'steps': json.loads(row[13]) if row[13] else [],
-                        'validation_checks': json.loads(row[14]) if row[14] else [],
-                        'is_free_sample': bool(row[15])
-                    }
+                track_codes = json.loads(row[7]) if row[7] else []
+                skill_codes = json.loads(row[8]) if row[8] else []
 
-                    return Response(recipe_data)
-                except Exception as json_error:
-                    return Response({'error': f'JSON parsing error: {str(json_error)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                recipe_data = {
+                    'id': str(row[0]),
+                    'title': row[1],
+                    'slug': row[2],
+                    'description': row[3] or row[4] or '',
+                    'difficulty': row[5],
+                    'expected_duration_minutes': row[6] or 20,
+                    'track_code': track_codes[0] if track_codes else None,
+                    'track_codes': track_codes,
+                    'skill_code': skill_codes[0] if skill_codes else None,
+                    'level': row[5],
+                    'source_type': 'manual',
+                    'prerequisites': json.loads(row[9]) if row[9] else [],
+                    'tools_and_environment': json.loads(row[10]) if row[10] else [],
+                    'inputs': json.loads(row[11]) if row[11] else [],
+                    'steps': json.loads(row[12]) if row[12] else [],
+                    'validation_checks': json.loads(row[13]) if row[13] else [],
+                    'is_free_sample': bool(row[14]),
+                    'user_progress': None,
+                    'is_bookmarked': False,
+                }
+
+                # Attach user progress and bookmark status if authenticated
+                if user.is_authenticated:
+                    progress = UserRecipeProgress.objects.filter(
+                        user=user, recipe_id=row[0]
+                    ).first()
+                    if progress:
+                        recipe_data['user_progress'] = {
+                            'status': progress.status,
+                            'rating': progress.rating,
+                            'notes': progress.notes,
+                            'time_spent_minutes': progress.time_spent_minutes,
+                            'completed_at': progress.completed_at.isoformat() if progress.completed_at else None,
+                        }
+                    recipe_data['is_bookmarked'] = UserRecipeBookmark.objects.filter(
+                        user=user, recipe_id=row[0]
+                    ).exists()
+
+                return Response(recipe_data)
 
         except Exception as e:
             return Response({'error': f'Database error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -303,22 +325,26 @@ class RecipeViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=True, methods=['post', 'delete'], permission_classes=[permissions.IsAuthenticated])
+    @action(detail=True, methods=['get', 'post', 'delete'], permission_classes=[permissions.IsAuthenticated])
     def bookmark(self, request, slug=None):
-        """Bookmark or unbookmark a recipe."""
+        """Check, create, or remove a bookmark for a recipe."""
         recipe = self.get_object()
         user = request.user
-        
+
+        if request.method == 'GET':
+            is_bookmarked = UserRecipeBookmark.objects.filter(user=user, recipe=recipe).exists()
+            return Response({'bookmarked': is_bookmarked}, status=status.HTTP_200_OK)
+
         if request.method == 'DELETE':
             UserRecipeBookmark.objects.filter(user=user, recipe=recipe).delete()
             return Response({'bookmarked': False}, status=status.HTTP_200_OK)
-        
+
         # POST - Create bookmark
         bookmark, created = UserRecipeBookmark.objects.get_or_create(
             user=user,
             recipe=recipe
         )
-        
+
         serializer = RecipeBookmarkSerializer(bookmark)
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
@@ -332,23 +358,21 @@ class RecipeViewSet(viewsets.ModelViewSet):
         created_recipes = []
         for recipe_data in recipes_data:
             try:
-                # Transform Next.js format to Django format
+                # Transform Next.js format to Django model fields
                 django_recipe_data = {
                     'title': recipe_data['title'],
-                    'summary': recipe_data['description'][:200],  # Truncate for summary
+                    'summary': recipe_data['description'][:200],
                     'description': recipe_data['description'],
-                    'difficulty': recipe_data['level'],  # Map level to difficulty
+                    'difficulty': recipe_data['level'],
                     'estimated_minutes': recipe_data['expected_duration_minutes'],
-                    'track_codes': [recipe_data['track_code']],
-                    'skill_codes': [recipe_data['skill_code']],
-                    'level': recipe_data['level'],
-                    'source_type': recipe_data['source_type'],
+                    'track_codes': recipe_data.get('track_codes', [recipe_data.get('track_code')]),
+                    'skill_codes': recipe_data.get('skill_codes', [recipe_data.get('skill_code')]),
+                    'tools_used': recipe_data.get('tools_used', []),
                     'prerequisites': recipe_data.get('prerequisites', []),
-                    'tools_used': recipe_data.get('tools_and_environment', []),
+                    'tools_and_environment': recipe_data.get('tools_and_environment', []),
                     'inputs': recipe_data.get('inputs', []),
                     'steps': recipe_data.get('steps', []),
                     'validation_checks': recipe_data.get('validation_checks', []),
-                    'tags': recipe_data.get('tags', []),
                     'is_free_sample': recipe_data.get('is_free_sample', False),
                     'is_active': True,
                 }
@@ -364,11 +388,11 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
                 recipe = Recipe.objects.create(**django_recipe_data)
                 created_recipes.append({
-                    'id': recipe.id,
+                    'id': str(recipe.id),
                     'slug': recipe.slug,
                     'title': recipe.title,
                     'track_code': recipe.track_codes[0] if recipe.track_codes else None,
-                    'level': recipe.level
+                    'difficulty': recipe.difficulty
                 })
 
             except Exception as e:
@@ -632,8 +656,7 @@ class RecipeGenerateView(APIView):
                 description=recipe_data['description'],
                 track_codes=[track_code],
                 skill_codes=[skill_code],
-                difficulty=level,  # Map level to difficulty
-                source_type='llm_generated',
+                difficulty=level,
                 estimated_minutes=recipe_data.get('expected_duration_minutes', 20),
                 steps=recipe_data.get('steps', []),
                 prerequisites=recipe_data.get('prerequisites', []),

@@ -14,25 +14,8 @@ from users.models import User
 class CurriculumTrack(models.Model):
     """
     Curriculum track - one of 5 main tracks (Defender, Offensive, GRC, Innovation, Leadership)
+    Also includes cross-track programs (tier 6)
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    slug = models.SlugField(unique=True, max_length=50, help_text="'defender', 'offensive', 'grc', 'innovation', 'leadership'")
-    title = models.CharField(max_length=255, help_text='Display title')
-    description = models.TextField(blank=True)
-    thumbnail_url = models.URLField(blank=True, help_text='Track thumbnail image')
-    order_number = models.IntegerField(default=1, help_text='Display order')
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'curriculum_tracks'
-        verbose_name = 'Curriculum Track'
-        verbose_name_plural = 'Curriculum Tracks'
-        ordering = ['order_number', 'title']
-
-    def __str__(self):
-        return f"{self.title} ({self.slug})"
-    
     TIER_CHOICES = [
         (0, 'Tier 0 - Profiler'),
         (1, 'Tier 1 - Foundations'),
@@ -45,38 +28,51 @@ class CurriculumTrack(models.Model):
         (8, 'Tier 8 - Platform Ecosystem'),
         (9, 'Tier 9 - Enterprise & National Intelligence'),
     ]
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, unique=True, db_index=True, help_text='e.g., "SOCDEFENSE", "CLOUDSEC"')
+    slug = models.SlugField(unique=True, max_length=50, help_text="'defender', 'offensive', 'grc', 'innovation', 'leadership'")
     name = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, help_text='Display title')
     description = models.TextField(blank=True)
-    
+    thumbnail_url = models.URLField(blank=True, help_text='Track thumbnail image')
+    order_number = models.IntegerField(default=1, help_text='Display order')
+
+    # Tier field
+    tier = models.IntegerField(
+        choices=TIER_CHOICES,
+        default=2,
+        db_index=True,
+        help_text='Academic tier (0-9). Tier 2 = Beginner Tracks'
+    )
+
     # Linking to programs.Track if needed
     program_track_id = models.UUIDField(null=True, blank=True, help_text='FK to programs.Track')
-    
+
     # Track metadata
     icon = models.CharField(max_length=50, blank=True, help_text='Icon identifier e.g., "shield", "cloud"')
     color = models.CharField(max_length=20, blank=True, default='indigo', help_text='Theme color')
     estimated_duration_weeks = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1)])
-    
+
     # Stats (denormalized for performance)
     module_count = models.IntegerField(default=0)
     lesson_count = models.IntegerField(default=0)
     mission_count = models.IntegerField(default=0)
-    
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         db_table = 'curriculum_tracks'
         verbose_name = 'Curriculum Track'
         verbose_name_plural = 'Curriculum Tracks'
-        ordering = ['name']
+        ordering = ['tier', 'order_number', 'name']
         indexes = [
             models.Index(fields=['code', 'is_active']),
+            models.Index(fields=['tier', 'is_active']),
         ]
-    
+
     def __str__(self):
         return f"{self.name} ({self.code})"
 
@@ -242,15 +238,16 @@ class CurriculumModule(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Level relationship (new structure: Track → Level → Module)
-    curriculum_level = models.ForeignKey(
-        CurriculumLevel,
+
+    # Track relationship
+    track = models.ForeignKey(
+        CurriculumTrack,
         on_delete=models.CASCADE,
         related_name='modules',
         null=True,
         blank=True,
-        help_text='FK to CurriculumLevel'
+        db_column='track_id',
+        help_text='FK to CurriculumTrack'
     )
     # Keep track_key for backwards compatibility
     track_key = models.CharField(max_length=50, db_index=True, help_text='Track key like "soc_analyst"')
@@ -282,6 +279,7 @@ class CurriculumModule(models.Model):
         null=True,
         blank=True,
         validators=[MinValueValidator(1)],
+        db_column='estimated_time_minutes',
         help_text='Estimated minutes to complete'
     )
 
@@ -324,7 +322,7 @@ class CurriculumModule(models.Model):
         indexes = [
             models.Index(fields=['track_key', 'order_index']),
             models.Index(fields=['track_key', 'is_core']),
-            models.Index(fields=['curriculum_level', 'order_index']),
+            models.Index(fields=['track', 'order_index']),
             models.Index(fields=['level', 'entitlement_tier']),
         ]
         ordering = ['track_key', 'order_index']

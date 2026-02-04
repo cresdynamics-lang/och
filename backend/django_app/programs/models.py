@@ -289,7 +289,7 @@ class Enrollment(models.Model):
         ordering = ['-joined_at']
         constraints = [
             models.CheckConstraint(
-                condition=~models.Q(status='pending_payment', payment_status='paid'),
+                check=~models.Q(status='pending_payment', payment_status='paid'),
                 name='pending_payment_requires_pending_payment_status'
             ),
         ]

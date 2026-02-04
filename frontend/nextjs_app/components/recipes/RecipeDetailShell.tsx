@@ -17,6 +17,7 @@ import { Card } from '@/components/ui/Card';
 import Link from 'next/link';
 import type { RecipeDetailResponse } from '@/services/recipesClient';
 import { recipesClient } from '@/services/recipesClient';
+import { useRecipeProgress } from '@/hooks/useRecipes';
 import type { RecipeContextLink } from '@/services/types/recipes';
 
 interface RecipeDetailShellProps {
@@ -43,6 +44,7 @@ function getDifficultyColor(difficulty: string) {
 }
 
 export function RecipeDetailShell({ recipe }: RecipeDetailShellProps) {
+  const { progress, startRecipe } = useRecipeProgress(recipe.slug);
   const [contextLinks, setContextLinks] = useState<RecipeContextLink[]>([]);
   const [showMobileActions, setShowMobileActions] = useState(false);
 
@@ -150,9 +152,17 @@ export function RecipeDetailShell({ recipe }: RecipeDetailShellProps) {
             <div className="w-full lg:w-auto">
               <Button
                 size="lg"
-                className="w-full lg:w-auto bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-lg shadow-indigo-500/25"
+                disabled={progress?.status === 'completed' || progress?.status === 'in_progress'}
+                onClick={async () => { try { await startRecipe(); } catch (e) { console.error(e); } }}
+                className={`w-full lg:w-auto shadow-lg ${
+                  progress?.status === 'completed'
+                    ? 'bg-emerald-600 shadow-emerald-500/25 cursor-not-allowed'
+                    : progress?.status === 'in_progress'
+                    ? 'bg-blue-600 shadow-blue-500/25 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-indigo-500/25'
+                }`}
               >
-                Start now
+                {progress?.status === 'completed' ? '✓ Completed' : progress?.status === 'in_progress' ? 'In Progress' : 'Start Now'}
               </Button>
             </div>
           </div>
@@ -167,33 +177,33 @@ export function RecipeDetailShell({ recipe }: RecipeDetailShellProps) {
           transition={{ delay: 0.2 }}
           className="mt-8"
         >
-          <Card className={`border ${getStatusColor(recipe.user_progress?.status)}`}>
-            <CardContent className="p-4">
+          <Card className={`border ${getStatusColor(progress?.status)} p-4`}>
+            <div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {getStatusIcon(recipe.user_progress?.status)}
+                  {getStatusIcon(progress?.status)}
                   <div>
                     <h3 className="font-semibold text-slate-200">
-                      Recipe Status: {getStatusText(recipe.user_progress?.status)}
+                      Recipe Status: {getStatusText(progress?.status)}
                     </h3>
                     <p className="text-sm text-slate-400">
-                      {recipe.user_progress?.status === 'completed'
+                      {progress?.status === 'completed'
                         ? 'Great work! You\'ve completed this recipe.'
-                        : recipe.user_progress?.status === 'in_progress'
+                        : progress?.status === 'in_progress'
                         ? 'You\'re actively working on this recipe.'
-                        : 'Ready to start? Click "Start Recipe" to begin learning.'
+                        : 'Ready to start? Click "Start Now" to begin learning.'
                       }
                     </p>
                   </div>
                 </div>
-                {recipe.user_progress?.status === 'completed' && (
+                {progress?.status === 'completed' && (
                   <Badge variant="mint" className="flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
                     Completed
                   </Badge>
                 )}
               </div>
-            </CardContent>
+            </div>
           </Card>
         </motion.div>
       </div>

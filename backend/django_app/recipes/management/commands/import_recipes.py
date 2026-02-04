@@ -28,7 +28,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         import json
         import uuid
-        data_dir = Path('/home/frank/Documents/Vs Code/ongozacyberhub/frontend/nextjs_app/data/recipes')
+        import os
+        # Use absolute path
+        base_dir = Path(__file__).parent.parent.parent.parent.parent
+        data_dir = base_dir / 'frontend' / 'nextjs_app' / 'data' / 'recipes'
+
+        # Fallback to Windows absolute path if needed
+        if not data_dir.exists():
+            data_dir = Path(r'C:\Users\HP\PycharmProjects\och\frontend\nextjs_app\data\recipes')
 
         if not data_dir.exists():
             self.stdout.write(
@@ -91,11 +98,8 @@ class Command(BaseCommand):
                 }
 
                 if not options['dry_run']:
-                    # Use Django ORM but exclude fields that don't exist in database
-                    safe_recipe_data = {k: v for k, v in django_recipe_data.items()
-                                      if k != 'is_free_sample'}
                     try:
-                        Recipe.objects.create(**safe_recipe_data)
+                        Recipe.objects.create(**django_recipe_data)
                     except Exception as create_error:
                         self.stdout.write(
                             self.style.ERROR(f'Failed to create recipe via ORM: {str(create_error)}')

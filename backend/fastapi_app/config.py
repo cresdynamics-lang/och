@@ -16,24 +16,24 @@ PROJECT_ROOT = BASE_DIR.parent.parent  # /home/caleb/kiptoo/och/ongozaCyberHub
 root_env = PROJECT_ROOT / '.env'
 if root_env.exists():
     load_dotenv(root_env, override=True)
-    print(f"✅ Loaded .env from project root: {root_env}")
+    print(f" Loaded .env from project root: {root_env}")
 else:
     # Fallback: Check Django's .env location for compatibility
     django_env = PROJECT_ROOT / 'backend' / 'django_app' / '.env'
     if django_env.exists():
         load_dotenv(django_env, override=True)
-        print(f"⚠️ Loaded .env from Django location: {django_env}")
+        print(f"WARNING: Loaded .env from Django location: {django_env}")
     else:
         # Fallback to legacy locations for backward compatibility
         env_path = BASE_DIR / '.env'
         if env_path.exists():
             load_dotenv(env_path, override=True)
-            print(f"⚠️ Loaded .env from legacy location: {env_path}")
+            print(f"WARNING: Loaded .env from legacy location: {env_path}")
         else:
             parent_env = BASE_DIR.parent / '.env'
             if parent_env.exists():
                 load_dotenv(parent_env, override=True)
-                print(f"⚠️ Loaded .env from legacy location: {parent_env}")
+                print(f"WARNING: Loaded .env from legacy location: {parent_env}")
 
 
 class Settings(BaseSettings):
@@ -94,12 +94,12 @@ settings = Settings()
 # This ensures backward compatibility if JWT_SECRET_KEY is not in .env
 if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "":
     settings.JWT_SECRET_KEY = settings.DJANGO_SECRET_KEY
-    print(f"⚠️ JWT_SECRET_KEY not set, using DJANGO_SECRET_KEY as fallback (length: {len(settings.JWT_SECRET_KEY)})")
+    print(f"WARNING: JWT_SECRET_KEY not set, using DJANGO_SECRET_KEY as fallback (length: {len(settings.JWT_SECRET_KEY)})")
 else:
-    print(f"✅ Using JWT_SECRET_KEY from environment (length: {len(settings.JWT_SECRET_KEY)})")
+    print(f" Using JWT_SECRET_KEY from environment (length: {len(settings.JWT_SECRET_KEY)})")
 
 # Debug: Print first 20 chars of key for verification (not full key for security)
-print(f"🔑 FastAPI JWT key starts with: {settings.JWT_SECRET_KEY[:20]}...")
-print(f"🔑 FastAPI JWT algorithm: {settings.JWT_ALGORITHM}")
+print(f" FastAPI JWT key starts with: {settings.JWT_SECRET_KEY[:20]}...")
+print(f" FastAPI JWT algorithm: {settings.JWT_ALGORITHM}")
 
 

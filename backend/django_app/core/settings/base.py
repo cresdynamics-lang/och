@@ -188,6 +188,7 @@ JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 # Log JWT configuration on startup (for debugging)
 if JWT_SECRET_KEY != SECRET_KEY:
     print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
+    print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
 else:
     print(f"JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
 
@@ -241,7 +242,7 @@ if USE_REDIS_CACHE:
         }
     except (ImportError, ModuleNotFoundError):
         # Fallback to dummy cache if django_redis is not available
-        print("⚠️ django_redis not available, using dummy cache backend")
+        print("WARNING: django_redis not available, using dummy cache backend")
         CACHES = {
             "default": {
                 "BACKEND": "django.core.cache.backends.dummy.DummyCache",

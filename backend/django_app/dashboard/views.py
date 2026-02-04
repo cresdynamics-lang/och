@@ -171,7 +171,7 @@ def next_actions(request):
     pending_missions = MissionSubmission.objects.filter(
         user=user,
         status__in=['not_started', 'in_progress', 'draft']
-    ).order_by('mission__estimated_time_minutes')[:3]
+    ).order_by('mission__estimated_duration_minutes')[:3]
     
     for submission in pending_missions:
         actions.append({
@@ -188,7 +188,7 @@ def next_actions(request):
     habits = Habit.objects.filter(user=user, type='core')
     today_logged = HabitLog.objects.filter(
         user=user,
-        log_date=timezone.now().date()
+        date=timezone.now().date()
     ).values_list('habit_id', flat=True)
     
     for habit in habits:

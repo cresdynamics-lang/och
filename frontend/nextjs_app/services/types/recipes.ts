@@ -4,7 +4,7 @@
 
 export type RecipeDifficulty = 'beginner' | 'intermediate' | 'advanced';
 
-export type RecipeStatus = 'started' | 'completed' | 'bookmarked';
+export type RecipeStatus = 'not_started' | 'in_progress' | 'completed';
 
 export interface RecipeContentSection {
   type: 'intro' | 'prerequisites' | 'steps' | 'validation';
@@ -55,6 +55,7 @@ export interface Recipe {
 
 export interface RecipeListResponse extends Recipe {
   is_bookmarked: boolean;
+  status?: RecipeStatus | null;
   user_status: RecipeStatus | null;
   user_rating: number | null;
   context_labels?: string[]; // e.g., ["Used in Mission", "Used in Module"]

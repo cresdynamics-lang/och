@@ -4,26 +4,20 @@
  */
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { RecipeDetailShell } from '@/components/recipes/RecipeDetailShell';
 import { recipesClient, type RecipeDetailResponse } from '@/services/recipesClient';
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { useRecipeProgress } from '@/hooks/useRecipes';
-
 export default function StudentRecipeDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const slug = params?.slug as string;
 
   const [recipe, setRecipe] = useState<RecipeDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Use recipe progress hook to auto-start when recipe is opened
-  const { progress, startRecipe } = useRecipeProgress(slug);
 
   useEffect(() => {
     if (!slug) return;
@@ -34,16 +28,6 @@ export default function StudentRecipeDetailPage() {
       try {
         const data = await recipesClient.getRecipe(slug);
         setRecipe(data);
-
-        // Auto-start the recipe if it's not already started
-        if (data && (!data.user_progress || data.user_progress.status === 'not_started')) {
-          try {
-            await startRecipe();
-          } catch (startError) {
-            console.warn('Failed to auto-start recipe:', startError);
-            // Don't fail the page load if auto-start fails
-          }
-        }
       } catch (err: any) {
         setError(err.message || 'Failed to load recipe');
         console.error('Error fetching recipe:', err);

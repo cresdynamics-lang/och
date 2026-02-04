@@ -237,7 +237,7 @@ class CurriculumTrackSerializer(serializers.ModelSerializer):
     class Meta:
         model = CurriculumTrack
         fields = [
-            'id', 'slug', 'title', 'description', 'level', 'tier',
+            'id', 'code', 'slug', 'name', 'title', 'description', 'tier',
             'icon', 'color', 'estimated_duration_weeks', 'levels',
             'created_at'
         ]
@@ -326,7 +326,8 @@ class CurriculumModuleListSerializer(serializers.ModelSerializer):
     mission_count = serializers.IntegerField(read_only=True)
     completion_percentage = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
-    
+    estimated_time_minutes = serializers.IntegerField(source='estimated_duration_minutes', read_only=True)
+
     class Meta:
         model = CurriculumModule
         fields = [
@@ -366,6 +367,7 @@ class CurriculumModuleDetailSerializer(serializers.ModelSerializer):
     recipe_recommendations = RecipeRecommendationSerializer(many=True, read_only=True)
     user_progress = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
+    estimated_time_minutes = serializers.IntegerField(source='estimated_duration_minutes', read_only=True)
     
     class Meta:
         model = CurriculumModule
@@ -408,11 +410,11 @@ class CurriculumModuleDetailSerializer(serializers.ModelSerializer):
 class CurriculumTrackListSerializer(serializers.ModelSerializer):
     """List serializer for curriculum tracks."""
     user_progress = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CurriculumTrack
         fields = [
-            'id', 'code', 'name', 'description', 'level', 'tier',
+            'id', 'code', 'name', 'description', 'tier',
             'icon', 'color', 'estimated_duration_weeks',
             'module_count', 'lesson_count', 'mission_count',
             'is_active', 'user_progress'
@@ -439,11 +441,11 @@ class CurriculumTrackDetailSerializer(serializers.ModelSerializer):
     user_progress = serializers.SerializerMethodField()
     recent_activities = serializers.SerializerMethodField()
     next_action = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CurriculumTrack
         fields = [
-            'id', 'code', 'name', 'description', 'level', 'tier',
+            'id', 'code', 'name', 'description', 'tier',
             'icon', 'color', 'program_track_id',
             'estimated_duration_weeks', 'module_count', 'lesson_count',
             'mission_count', 'is_active', 'modules',

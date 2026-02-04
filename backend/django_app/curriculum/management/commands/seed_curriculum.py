@@ -32,9 +32,11 @@ class Command(BaseCommand):
         track, created = CurriculumTrack.objects.update_or_create(
             code='CYBERDEF',
             defaults={
+                'slug': 'defender',
                 'name': 'Cyber Defense',
+                'title': 'Defender Track',
                 'description': 'Master the art of defending digital assets. From SIEM fundamentals to advanced threat hunting, build the skills to protect organizations from cyber threats.',
-                'level': 'entry',
+                'tier': 2,  # Tier 2 = Beginner Track
                 'icon': 'shield',
                 'color': 'indigo',
                 'estimated_duration_weeks': 16,
@@ -45,7 +47,6 @@ class Command(BaseCommand):
 
         # Module 1: OCH Ecosystem Alignment
         module1, _ = CurriculumModule.objects.update_or_create(
-            track=track,
             track_key='CYBERDEF',
             order_index=0,
             defaults={
@@ -55,7 +56,7 @@ class Command(BaseCommand):
                 'entitlement_tier': 'all',
                 'is_core': True,
                 'is_required': True,
-                'estimated_time_minutes': 60,
+                'estimated_duration_minutes': 60,
                 'competencies': ['Mindset', 'OCH Philosophy', 'Career Planning'],
                 'mentor_notes': 'Emphasize the growth mindset and importance of consistent practice. This module sets the tone for the entire journey.',
                 'is_active': True,

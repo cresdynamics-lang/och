@@ -1727,7 +1727,7 @@ class CommunityChannel(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'community_channels'
+        db_table = 'community_space_channels'
         verbose_name = 'Community Channel'
         verbose_name_plural = 'Community Channels'
         unique_together = [['space', 'slug']]

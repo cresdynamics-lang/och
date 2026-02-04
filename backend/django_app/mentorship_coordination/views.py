@@ -36,6 +36,102 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mentor_assignments_list(request):
+    """
+    GET /api/v1/mentor-assignments/?mentor={mentor_id}
+    Get mentor assignments (cohort-level assignments).
+    """
+    mentor_id = request.query_params.get('mentor')
+    if not mentor_id:
+        return Response({'error': 'mentor parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Verify the mentor_id matches the authenticated user
+    if str(request.user.id) != str(mentor_id):
+        return Response({'error': 'You can only view your own assignments'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        from programs.models import MentorAssignment
+        assignments = MentorAssignment.objects.filter(
+            mentor_id=mentor_id,
+            active=True
+        ).select_related('cohort__track__program')
+        
+        results = []
+        for assignment in assignments:
+            cohort = assignment.cohort
+            track = cohort.track if cohort else None
+            program = track.program if track else None
+            
+            results.append({
+                'id': str(assignment.id),
+                'mentor_id': str(assignment.mentor.id),
+                'cohort_id': str(cohort.id) if cohort else None,
+                'cohort_name': cohort.name if cohort else None,
+                'track_id': str(track.id) if track else None,
+                'track_name': track.name if track else None,
+                'track_key': track.key if track else None,
+                'program_id': str(program.id) if program else None,
+                'program_name': program.name if program else None,
+                'role': assignment.role,
+                'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                'active': assignment.active,
+            })
+        
+        return Response(results)
+    except Exception as e:
+        logger.error(f"Error fetching mentor assignments: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Internal server error'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mentor_assigned_cohorts(request, mentor_id):
+    """
+    GET /api/v1/mentors/{mentor_id}/cohorts
+    Get cohorts assigned to a mentor for session creation.
+    """
+    if str(request.user.id) != str(mentor_id):
+        return Response({'error': 'You can only view your own cohorts'}, status=status.HTTP_403_FORBIDDEN)
+    
+    try:
+        from programs.models import MentorAssignment
+        assignments = MentorAssignment.objects.filter(
+            mentor_id=mentor_id,
+            active=True
+        ).select_related('cohort__track__program')
+        
+        cohorts = []
+        for assignment in assignments:
+            cohort = assignment.cohort
+            if cohort:
+                track = cohort.track
+                program = track.program if track else None
+                
+                cohorts.append({
+                    'id': str(cohort.id),
+                    'name': cohort.name,
+                    'track_name': track.name if track else None,
+                    'track_key': track.key if track else None,
+                    'program_name': program.name if program else None,
+                    'start_date': cohort.start_date.isoformat() if cohort.start_date else None,
+                    'end_date': cohort.end_date.isoformat() if cohort.end_date else None,
+                    'status': cohort.status,
+                })
+        
+        return Response(cohorts)
+    except Exception as e:
+        logger.error(f"Error fetching mentor cohorts: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Internal server error'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 def get_current_mentor(user):
     """Verify user is a mentor (either via is_mentor flag or active mentor role)."""
     # Fast path: explicit mentor flag
@@ -655,37 +751,45 @@ def update_group_session(request, session_id):
 
     data = request.data or {}
 
-    # Update schedule
+    # Update schedule - handle both scheduled_at and duration_minutes together
     scheduled_at = data.get('scheduled_at')
     duration_minutes = data.get('duration_minutes')
+    
+    # Process scheduled_at first if provided
     if scheduled_at:
-        # Reuse CreateGroupSessionSerializer datetime parsing logic
         try:
             tmp = CreateGroupSessionSerializer(data={'title': 'tmp', 'scheduled_at': scheduled_at, 'duration_minutes': 60})
             tmp.is_valid(raise_exception=True)
             start_time = tmp.validated_data['scheduled_at']
             session.start_time = _ensure_tz_aware(start_time)
-            if duration_minutes is None:
-                duration_minutes = int((session.end_time - session.start_time).total_seconds() / 60)
+            logger.info(f"Updated session start_time to: {session.start_time}")
         except Exception as e:
             logger.error(f"Error validating scheduled_at for session {session_id}: {e}")
-            logger.error(f"Received scheduled_at value: {scheduled_at}, type: {type(scheduled_at)}")
-            error_msg = str(e)
-            if hasattr(e, 'detail'):
-                error_msg = str(e.detail)
-            elif hasattr(e, 'messages'):
-                error_msg = ', '.join(e.messages)
             return Response({
-                'error': f'Invalid scheduled_at: {error_msg}',
+                'error': f'Invalid scheduled_at: {str(e)}',
                 'received_value': scheduled_at
             }, status=status.HTTP_400_BAD_REQUEST)
-
+    
+    # Process duration_minutes (requires valid start_time)
     if duration_minutes is not None:
+        logger.info(f"Processing duration_minutes: {duration_minutes} (type: {type(duration_minutes)})")
+        
+        # Ensure we have a valid start_time
+        if session.start_time is None:
+            logger.error(f"Cannot set duration: session.start_time is None for session {session_id}")
+            return Response({'error': 'Cannot set duration: session start time is not set'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            dur = int(duration_minutes)
-            session.end_time = _ensure_tz_aware(session.start_time) + timedelta(minutes=dur)
-        except Exception:
-            return Response({'error': 'Invalid duration_minutes'}, status=status.HTTP_400_BAD_REQUEST)
+            dur = int(duration_minutes) if not isinstance(duration_minutes, int) else duration_minutes
+            if dur <= 0:
+                return Response({'error': 'duration_minutes must be a positive integer'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            start_time_aware = _ensure_tz_aware(session.start_time)
+            session.end_time = start_time_aware + timedelta(minutes=dur)
+            logger.info(f"Updated session end_time to: {session.end_time} (duration: {dur} minutes)")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Failed to process duration_minutes: {duration_minutes}, error: {e}")
+            return Response({'error': f'Invalid duration_minutes: {duration_minutes}'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Update meeting info
     meeting_link = data.get('meeting_link')

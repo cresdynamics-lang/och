@@ -136,17 +136,18 @@ def list_student_missions(request):
     List missions with filters (status, difficulty, track, search).
     """
     user = request.user
+
+    # Check entitlement (mentors bypass subscription checks)
+    if not user.is_mentor:
+        tier = get_user_tier(user.id)
+        if tier == 'free':
+            return Response({
+                'error': 'Missions require Starter 3 or higher subscription',
+                'upgrade_required': True
+            }, status=status.HTTP_403_FORBIDDEN)
     
-    # Check entitlement
-    tier = get_user_tier(user.id)
-    if tier == 'free':
-        return Response({
-            'error': 'Missions require Starter 3 or higher subscription',
-            'upgrade_required': True
-        }, status=status.HTTP_403_FORBIDDEN)
-    
-    # Check starter3_normal limits (5 submissions/month)
-    if tier in ['starter_3', 'starter_normal']:
+    # Check starter3_normal limits (5 submissions/month) - mentors bypass this check
+    if not user.is_mentor and tier in ['starter_3', 'starter_normal']:
         try:
             subscription = UserSubscription.objects.filter(user=user, status='active').first()
             if subscription and subscription.plan:
@@ -501,9 +502,25 @@ def submit_mission_for_ai(request, mission_id):
     submission.submitted_at = timezone.now()
     submission.save()
     
-    # Trigger AI review
-    from .tasks import process_mission_ai_review
-    process_mission_ai_review.delay(str(submission.id))
+    # Trigger AI review (with fallback)
+    try:
+        from .tasks import process_mission_ai_review
+        # Try Celery first
+        if hasattr(process_mission_ai_review, 'delay'):
+            process_mission_ai_review.delay(str(submission.id))
+        else:
+            # Run synchronously if Celery not available
+            import threading
+            thread = threading.Thread(target=process_mission_ai_review, args=(str(submission.id),))
+            thread.start()
+    except Exception as e:
+        logger.warning(f"AI review task failed: {e}")
+        # Run AI review directly as fallback
+        try:
+            from .tasks import process_mission_ai_review
+            process_mission_ai_review(str(submission.id))
+        except Exception as e2:
+            logger.error(f"Direct AI review also failed: {e2}")
     
     # Invalidate cache
     cache_key = f'mission_funnel:{user.id}'

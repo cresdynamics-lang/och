@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Star, Clock, Target, Bookmark, Play, CheckCircle, Circle, Lock } from 'lucide-react';
-import { useRecipeEntitlements } from '@/lib/hooks/useRecipeEntitlements';
+import { useRecipeEntitlements } from '@/hooks/useRecipeEntitlements';
 import type { RecipeListResponse } from '@/services/types/recipes';
 import clsx from 'clsx';
 

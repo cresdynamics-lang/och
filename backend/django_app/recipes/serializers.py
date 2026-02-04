@@ -122,35 +122,30 @@ class RecipeListSerializer(serializers.ModelSerializer):
         return tags
 
     def get_validation_checks(self, obj):
-        """Transform validation_steps to validation_checks format."""
+        """Return validation_checks, falling back to legacy validation_steps."""
+        if obj.validation_checks:
+            return obj.validation_checks
         if obj.validation_steps and isinstance(obj.validation_steps, dict):
-            # Convert old format to new format
             checks = []
             for key, value in obj.validation_steps.items():
                 if isinstance(value, str):
-                    checks.append({
-                        'question': value,
-                        'expected_answer': '',
-                        'check_type': 'text_input',
-                        'options': []
-                    })
+                    checks.append(value)
             return checks
         return []
 
     def get_prerequisites(self, obj):
-        """Return prerequisites from the model."""
         return obj.prerequisites or []
 
     def get_tools_and_environment(self, obj):
-        """Return tools and environment info."""
-        return obj.tools_used or []
+        return obj.tools_and_environment or obj.tools_used or []
 
     def get_inputs(self, obj):
-        """Return inputs required for the recipe."""
         return obj.inputs or []
 
     def get_steps(self, obj):
-        """Return recipe steps."""
+        """Return steps, falling back to legacy content.steps."""
+        if obj.steps:
+            return obj.steps
         if obj.content and isinstance(obj.content, dict) and 'steps' in obj.content:
             return obj.content['steps']
         return []
@@ -184,7 +179,7 @@ class RecipeDetailSerializer(serializers.ModelSerializer):
             'prerequisites', 'tools_and_environment', 'inputs', 'steps',
             'tags', 'validation_checks', 'thumbnail_url',
             'usage_count', 'avg_rating', 'mentor_curated', 'created_by',
-            'created_at', 'updated_at', 'version', 'is_active',
+            'created_at', 'updated_at', 'is_active',
             'is_bookmarked', 'user_progress', 'related_recipes'
         ]
         read_only_fields = ['id', 'slug', 'usage_count', 'avg_rating', 'created_at', 'updated_at']
@@ -220,21 +215,17 @@ class RecipeDetailSerializer(serializers.ModelSerializer):
         return tags
 
     def get_validation_checks(self, obj):
-        """Transform validation_steps to validation_checks format."""
+        """Return validation_checks, falling back to legacy validation_steps."""
+        if obj.validation_checks:
+            return obj.validation_checks
         if obj.validation_steps and isinstance(obj.validation_steps, dict):
-            # Convert old format to new format
             checks = []
             for key, value in obj.validation_steps.items():
                 if isinstance(value, str):
-                    checks.append({
-                        'question': value,
-                        'expected_answer': '',
-                        'check_type': 'text_input',
-                        'options': []
-                    })
+                    checks.append(value)
             return checks
         return []
-    
+
     def get_is_bookmarked(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -320,7 +311,7 @@ class RecipeBookmarkSerializer(serializers.ModelSerializer):
 class RecipeProgressUpdateSerializer(serializers.Serializer):
     """Serializer for updating recipe progress."""
     status = serializers.ChoiceField(
-        choices=['started', 'completed', 'bookmarked'],
+        choices=['not_started', 'in_progress', 'completed'],
         required=False
     )
     rating = serializers.IntegerField(

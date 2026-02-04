@@ -14,6 +14,7 @@ from .auth_views import (
     verify_email,
     request_password_reset,
     reset_password,
+    change_password,
 )
 from .admin_views import (
     RoleViewSet,
