@@ -21,10 +21,10 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await apiClient.get(`/api/v1/programs/director/advanced-analytics/${type}/`)
-      setData(response.data)
+      const response = await apiClient.get<any>(`/api/v1/programs/director/advanced-analytics/${type}/`)
+      setData(response)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load analytics')
+      setError(err.message || 'Failed to load analytics')
     } finally {
       setIsLoading(false)
     }
