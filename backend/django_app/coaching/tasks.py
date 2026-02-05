@@ -44,7 +44,7 @@ def generate_ai_coach_response(session_id, user_message_id, context, user_id):
             })
         
         # Call OpenAI
-        client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = openai.OpenAI(api_key=settings.CHAT_GPT_API_KEY)
         response = client.chat.completions.create(
             model='gpt-4o-mini',
             messages=messages,

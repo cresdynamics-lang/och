@@ -535,23 +535,48 @@ export default function AIProfilerPage() {
     if (!session) return
 
     try {
-      // Submit response to backend
-      const response = await fastapiClient.profiling.submitResponse(
-        session.session_id,
-        questionId,
-        answer
-      )
-
-      // Update session progress
-      if (response.progress) {
+      // Check if this is a mock session
+      const isMockSession = session.session_id.startsWith('mock-session-')
+      
+      if (isMockSession) {
+        // Handle mock session locally without calling FastAPI
+        console.log('[AIProfiler] Mock mode: Recording answer locally')
+        
+        // Update local responses
+        setResponses(prev => ({ ...prev, [questionId]: answer }))
+        
+        // Update progress locally
+        const answeredCount = Object.keys(responses).length + 1
+        const progressPercentage = (answeredCount / questions.length) * 100
+        
         setSession(prev => prev ? {
           ...prev,
-          progress: response.progress
+          progress: {
+            ...prev.progress,
+            current_question: currentQuestionIndex + 1,
+            progress_percentage: progressPercentage,
+            estimated_time_remaining: (questions.length - answeredCount) * 120
+          }
         } : null)
-      }
+      } else {
+        // Submit response to FastAPI backend
+        const response = await fastapiClient.profiling.submitResponse(
+          session.session_id,
+          questionId,
+          answer
+        )
 
-      // Update local responses
-      setResponses(prev => ({ ...prev, [questionId]: answer }))
+        // Update session progress
+        if (response.progress) {
+          setSession(prev => prev ? {
+            ...prev,
+            progress: response.progress
+          } : null)
+        }
+
+        // Update local responses
+        setResponses(prev => ({ ...prev, [questionId]: answer }))
+      }
 
       // Move to next question or complete
       const nextIndex = currentQuestionIndex + 1
@@ -560,12 +585,11 @@ export default function AIProfilerPage() {
 
       // Refresh module progress so we know when a module is done
       if (session) {
-        try {
-          const modProgress = await fastapiClient.profiling.getModuleProgress(session.session_id)
-          setModuleProgress(modProgress)
-        } catch (progressError) {
-          console.log('[AIProfiler] API unavailable for progress tracking, using mock progress')
-          // For mock mode, update progress locally
+        const isMockSession = session.session_id.startsWith('mock-session-')
+        
+        if (isMockSession) {
+          // For mock mode, update progress locally without calling FastAPI
+          console.log('[AIProfiler] Mock mode: Updating progress locally')
           setModuleProgress(prev => {
             if (!prev) return prev
             const updatedModules = { ...prev.modules }
@@ -580,6 +604,29 @@ export default function AIProfilerPage() {
               modules: updatedModules
             }
           })
+        } else {
+          // Real session: call FastAPI
+          try {
+            const modProgress = await fastapiClient.profiling.getModuleProgress(session.session_id)
+            setModuleProgress(modProgress)
+          } catch (progressError) {
+            console.log('[AIProfiler] API unavailable for progress tracking, using mock progress')
+            // For mock mode, update progress locally
+            setModuleProgress(prev => {
+              if (!prev) return prev
+              const updatedModules = { ...prev.modules }
+              if (currentModuleKey && updatedModules[currentModuleKey]) {
+                updatedModules[currentModuleKey] = {
+                  ...updatedModules[currentModuleKey],
+                  answered: updatedModules[currentModuleKey].answered + 1
+                }
+              }
+              return {
+                ...prev,
+                modules: updatedModules
+              }
+            })
+          }
         }
 
         const moduleInfo = currentModuleKey && moduleProgress ? moduleProgress.modules[currentModuleKey] : null

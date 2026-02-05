@@ -60,7 +60,6 @@ export default function StudentClient() {
         
         if (!status.completed) {
           console.log('✅ Profiling not completed - redirecting to FastAPI profiling');
-          hasCheckedRef.current = true;
           router.push('/onboarding/ai-profiler');
           return;
         }
@@ -73,10 +72,19 @@ export default function StudentClient() {
         await checkFoundations();
       } catch (error: any) {
         console.error('❌ Failed to check profiling status:', error);
-        // On error, allow access but log it
-        // This prevents blocking dashboard access if FastAPI is down
+        
+        // Fallback: Check Django user.profiling_complete field
+        if (!user.profiling_complete) {
+          console.log('✅ User profiling_complete=false, redirecting to profiler');
+          router.push('/onboarding/ai-profiler');
+          return;
+        }
+        
+        // If user.profiling_complete=true, allow access (FastAPI down but user already completed)
+        console.log('⚠️ FastAPI down but user.profiling_complete=true, allowing access');
         setCheckingProfiling(false);
-        hasCheckedRef.current = true;
+        setCheckingFoundations(true);
+        await checkFoundations();
       }
     };
 
@@ -95,6 +103,15 @@ export default function StudentClient() {
         
         if (!foundationsStatus.foundations_available) {
           console.log('⚠️ Foundations not available:', foundationsStatus);
+          
+          // If profiling is not complete, redirect to profiler
+          if (foundationsStatus.reason === 'profiling_incomplete') {
+            console.log('✅ Redirecting to AI profiler (profiling incomplete)');
+            router.push('/onboarding/ai-profiler');
+            return;
+          }
+          
+          // Otherwise, just allow access (edge case)
           setCheckingFoundations(false);
           hasCheckedRef.current = true;
           return;
@@ -103,7 +120,6 @@ export default function StudentClient() {
         // If Foundations is not complete, redirect to Foundations
         if (!foundationsStatus.is_complete) {
           console.log('✅ Foundations not completed - redirecting to Foundations');
-          hasCheckedRef.current = true;
           router.push('/dashboard/student/foundations');
           return;
         }
@@ -126,13 +142,12 @@ export default function StudentClient() {
       }
     };
 
-    hasCheckedRef.current = true;
     checkProfiling();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, user]);
 
-  // Show loading only briefly, then show dashboard immediately
-  // This prevents flash of old dashboard
-  if ((checkingProfiling || checkingFoundations) && isAuthenticated && !hasCheckedRef.current) {
+  // Show loading while checking profiling or foundations
+  // This prevents dashboard from rendering and making API calls before redirect
+  if ((checkingProfiling || checkingFoundations) && isAuthenticated) {
     return (
       <div className="min-h-screen bg-och-midnight flex items-center justify-center">
         <Card className="p-8">

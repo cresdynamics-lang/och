@@ -104,6 +104,13 @@ export const djangoClient = {
     },
 
     /**
+     * Resend verification email (admin only)
+     */
+    async resendVerificationEmail(userId: number): Promise<{ detail: string; email: string }> {
+      return apiGateway.post('/auth/resend-verification', { user_id: userId });
+    },
+
+    /**
      * Confirm password reset
      */
     async confirmPasswordReset(data: PasswordResetConfirm): Promise<{ detail: string }> {

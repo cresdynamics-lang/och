@@ -322,7 +322,7 @@ class AICoachService:
         """Get AI coach nudge and action plan."""
         api_url = os.environ.get('AI_COACH_API_URL', 'http://localhost:8001/api/v1')
         api_key = os.environ.get('AI_COACH_API_KEY')
-        openai_key = os.environ.get('OPENAI_API_KEY')
+        openai_key = os.environ.get('CHAT_GPT_API_KEY')
         
         # Try AI Coach API first
         if api_key and api_url:
