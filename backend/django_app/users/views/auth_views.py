@@ -860,6 +860,9 @@ class MeView(APIView):
             'id': str(user_data.get('id', '')),
             'email': user_data.get('email', ''),
             'name': f"{user_data.get('first_name', '')} {user_data.get('last_name', '')}".strip(),
+            # Include profiling and foundations status for frontend redirect logic
+            'profiling_complete': user.profiling_complete,
+            'foundations_complete': user.foundations_complete,
         }
         
         # Format consent scopes as list of strings (e.g., ["share_with_mentor","public_portfolio:false"])

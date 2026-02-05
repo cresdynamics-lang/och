@@ -53,18 +53,52 @@ export default function StudentClient() {
 
     console.log('StudentClient: User is student/mentee, proceeding with checks');
 
-    // Check FastAPI profiling status
+    // Check profiling status - fetch fresh status from Django API
     const checkProfiling = async () => {
       try {
-        const status = await fastapiClient.profiling.checkStatus();
+        // CRITICAL: Fetch fresh user data directly from Django API
+        // This ensures admin resets are immediately respected
+        const { djangoClient } = await import('@/services/djangoClient');
+        let currentProfilingComplete = user.profiling_complete;
         
-        if (!status.completed) {
-          console.log('✅ Profiling not completed - redirecting to FastAPI profiling');
+        try {
+          console.log('StudentClient: Fetching fresh user data from Django...');
+          const freshUser = await djangoClient.auth.getCurrentUser();
+          currentProfilingComplete = freshUser?.profiling_complete ?? false;
+          console.log('StudentClient: Fresh profiling_complete =', currentProfilingComplete);
+          
+          // Also trigger a background refresh of the auth state
+          if (reloadUser) {
+            reloadUser();
+          }
+        } catch (err) {
+          console.log('StudentClient: Failed to fetch fresh user, using cached data');
+        }
+        
+        // Check Django's profiling_complete as SOURCE OF TRUTH
+        if (!currentProfilingComplete) {
+          console.log('✅ Django profiling_complete=false - redirecting to profiler');
           router.push('/onboarding/ai-profiler');
           return;
         }
         
-        console.log('✅ Profiling completed');
+        // Django says profiling is complete, optionally verify with FastAPI
+        try {
+          const status = await fastapiClient.profiling.checkStatus();
+          
+          if (!status.completed) {
+            // FastAPI disagrees - trust FastAPI for active session state
+            console.log('⚠️ Django says complete but FastAPI says not complete - redirecting');
+            router.push('/onboarding/ai-profiler');
+            return;
+          }
+          
+          console.log('✅ Profiling completed (verified)');
+        } catch (fastapiError) {
+          // FastAPI unavailable but Django says complete - allow access
+          console.log('⚠️ FastAPI unavailable but Django says complete - allowing access');
+        }
+        
         setCheckingProfiling(false);
         setCheckingFoundations(true);
         
@@ -73,15 +107,13 @@ export default function StudentClient() {
       } catch (error: any) {
         console.error('❌ Failed to check profiling status:', error);
         
-        // Fallback: Check Django user.profiling_complete field
+        // On any error, redirect to profiler if profiling not complete
         if (!user.profiling_complete) {
-          console.log('✅ User profiling_complete=false, redirecting to profiler');
           router.push('/onboarding/ai-profiler');
           return;
         }
         
-        // If user.profiling_complete=true, allow access (FastAPI down but user already completed)
-        console.log('⚠️ FastAPI down but user.profiling_complete=true, allowing access');
+        // Allow access if Django says complete
         setCheckingProfiling(false);
         setCheckingFoundations(true);
         await checkFoundations();

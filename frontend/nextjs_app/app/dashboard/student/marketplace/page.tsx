@@ -224,52 +224,16 @@ export default function MarketplaceProfilePage() {
         stack: err?.stack
       }, null, 2))
 
-      // Provide mock profile data when not authenticated
+      // Show the real error
       const isAuthError = err?.status === 401 ||
                          err?.response?.status === 401 ||
                          err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials')
-
-      console.log('Is auth error:', isAuthError)
+                         err?.message?.includes('Authentication')
 
       if (isAuthError) {
-        setProfile({
-          id: 'mock-profile',
-          mentee_id: 'mock-user',
-          mentee_name: 'Demo Student',
-          mentee_email: 'demo@student.com',
-          tier: 'free',
-          readiness_score: 75,
-          job_fit_score: 80,
-          hiring_timeline_days: 90,
-          profile_status: 'emerging_talent',
-          primary_role: 'Cybersecurity Analyst',
-          primary_track_key: 'defender',
-          skills: ['Python', 'Network Security', 'SIEM', 'Incident Response'],
-          portfolio_depth: 'moderate',
-          is_visible: false,
-          employer_share_consent: false,
-          updated_at: new Date().toISOString()
-        })
-        setError(null) // Clear error when showing mock data
+        setError('Please log in to view your marketplace profile')
       } else {
-        // For any other error, still show mock data to provide a good user experience
-        console.log('Showing mock data for non-auth error')
-        setProfile({
-          id: 'mock-profile',
-          mentee_id: 'mock-user',
-          mentee_name: 'Demo Student',
-          mentee_email: 'demo@student.com',
-          tier: 'free',
-          readiness_score: 75,
-          job_fit_score: 80,
-          hiring_timeline_days: 90,
-          profile_status: 'emerging_talent',
-          primary_role: 'Cybersecurity Analyst',
-          primary_track_key: 'defender',
-          skills: ['Python', 'Network Security', 'SIEM', 'Incident Response'],
-          portfolio_depth: 'moderate',
+        setError(err.message || 'Failed to load marketplace profile')
           is_visible: false,
           employer_share_consent: false,
           updated_at: new Date().toISOString()

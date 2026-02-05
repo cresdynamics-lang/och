@@ -214,25 +214,25 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
               <div className="text-center">
                 <div className="text-gray-400 text-xs uppercase mb-1">Level</div>
                 <div className="text-white font-bold text-lg">
-                  {blueprint.difficulty_level.selected.toUpperCase()}
+                  {blueprint?.difficulty_level?.selected?.toUpperCase() || 'INTERMEDIATE'}
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  {blueprint.difficulty_level.verified
-                    ? `Verified (${blueprint.difficulty_level.confidence} confidence)`
-                    : `Suggested level: ${blueprint.difficulty_level.suggested.toUpperCase()}`}
+                  {blueprint?.difficulty_level?.verified
+                    ? `Verified (${blueprint?.difficulty_level?.confidence || 'high'} confidence)`
+                    : `Suggested level: ${blueprint?.difficulty_level?.suggested?.toUpperCase() || 'INTERMEDIATE'}`}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-gray-400 text-xs uppercase mb-1">Readiness</div>
                 <div className="text-white font-bold text-lg">
-                  {blueprint.personalized_insights.career_alignment.career_readiness_score ?? primaryRecommendation.score}%
+                  {blueprint?.personalized_insights?.career_alignment?.career_readiness_score ?? primaryRecommendation.score}%
                 </div>
                 <div className="text-xs text-gray-400 mt-1">Career readiness score</div>
               </div>
               <div className="text-center">
                 <div className="text-gray-400 text-xs uppercase mb-1">Starting Point</div>
                 <div className="text-white font-bold text-sm">
-                  {blueprint.suggested_starting_point}
+                  {blueprint?.suggested_starting_point || 'Beginner'}
                 </div>
               </div>
             </div>
@@ -244,21 +244,21 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
                 <ul className="text-gray-300 text-sm space-y-1">
                   <li>
                     <span className="text-och-orange mr-1">•</span>
-                    Primary track: {blueprint.track_recommendation.primary_track.name} ({blueprint.track_recommendation.primary_track.score}%)
+                    Primary track: {blueprint?.track_recommendation?.primary_track?.name || result.primary_track.name} ({blueprint?.track_recommendation?.primary_track?.score || primaryRecommendation.score}%)
                   </li>
-                  {blueprint.track_recommendation.secondary_track && (
+                  {blueprint?.track_recommendation?.secondary_track && (
                     <li>
                       <span className="text-och-orange mr-1">•</span>
                       Secondary track: {blueprint.track_recommendation.secondary_track.name}
                     </li>
                   )}
-                  {blueprint.learning_strategy.strengths_to_leverage.length > 0 && (
+                  {blueprint?.learning_strategy?.strengths_to_leverage?.length > 0 && (
                     <li>
                       <span className="text-och-orange mr-1">•</span>
                       Strengths to leverage: {blueprint.learning_strategy.strengths_to_leverage.join(', ')}
                     </li>
                   )}
-                  {blueprint.learning_strategy.growth_opportunities.length > 0 && (
+                  {blueprint?.learning_strategy?.growth_opportunities?.length > 0 && (
                     <li>
                       <span className="text-och-orange mr-1">•</span>
                       Growth opportunities: {blueprint.learning_strategy.growth_opportunities.join(', ')}
@@ -269,9 +269,9 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
               <div>
                 <h4 className="text-white font-semibold mb-2">Future Career Path Alignment</h4>
                 <p className="text-gray-300 text-sm mb-2">
-                  {blueprint.learning_strategy.optimal_path}
+                  {blueprint?.learning_strategy?.optimal_path || 'Follow your track curriculum to build foundational skills'}
                 </p>
-                {blueprint.personalized_insights.career_alignment.career_paths && (
+                {blueprint?.personalized_insights?.career_alignment?.career_paths && (
                   <ul className="text-gray-300 text-sm space-y-1">
                     {blueprint.personalized_insights.career_alignment.career_paths.slice(0, 4).map((path, idx) => (
                       <li key={idx}>
@@ -289,13 +289,13 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
               <div>
                 <h4 className="text-white font-semibold mb-2">Your Value Statement</h4>
                 <p className="text-gray-300 text-sm leading-relaxed">
-                  {blueprint.value_statement}
+                  {blueprint?.value_statement || 'Your unique combination of skills and interests make you well-suited for your chosen cybersecurity track.'}
                 </p>
               </div>
               <div>
                 <h4 className="text-white font-semibold mb-2">Next Steps</h4>
                 <ul className="text-gray-300 text-sm space-y-1">
-                  {blueprint.next_steps.map((step, idx) => (
+                  {(blueprint?.next_steps || result.next_steps || []).map((step, idx) => (
                     <li key={idx}>
                       <span className="text-och-orange mr-1">•</span>
                       {step}

@@ -191,21 +191,7 @@ export default function ProfilingResultsPage() {
       try {
         setCheckingStatus(true)
 
-        // For demonstration purposes, always load mock data
-        console.log('Loading mock profiling data for demonstration...')
-        setResults(MOCK_PROFILING_RESULTS)
-        setBlueprint(MOCK_BLUEPRINT)
-        setAllTracks({
-          defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-          offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-          grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-          innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-          leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
-        })
-        setLoading(false)
-        setCheckingStatus(false)
-        return
-
+        // Check FastAPI profiling status first
         const fastapiStatus = await fastapiClient.profiling.checkStatus()
 
         if (!fastapiStatus.completed) {
@@ -314,21 +300,11 @@ export default function ProfilingResultsPage() {
         setCheckingStatus(false)
       } catch (err: any) {
         console.error('Error checking profiling status:', err)
-
-        // Load mock profiling data for demonstration purposes
-        console.log('Loading mock profiling data due to API error...')
-        setResults(MOCK_PROFILING_RESULTS)
-        setBlueprint(MOCK_BLUEPRINT)
-        setAllTracks({
-          defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-          offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-          grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-          innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-          leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
-        })
+        
+        // Show error instead of mock data
+        setError(err.message || 'Failed to load profiling results. Please complete the profiler first.')
         setLoading(false)
         setCheckingStatus(false)
-        return
       }
     }
 
@@ -357,14 +333,18 @@ export default function ProfilingResultsPage() {
         try {
           const primaryTrack = results.primary_track || results.recommendations?.[0]
           if (primaryTrack?.key || primaryTrack?.track_key) {
-            const trackKey = (primaryTrack.key || primaryTrack.track_key).toUpperCase()
-            const trackCode = `${trackKey}_2` // Tier 2 (Beginner)
+            // Use the track slug directly instead of hardcoded mapping
+            const trackSlug = (primaryTrack.key || primaryTrack.track_key).toLowerCase()
             try {
-              const progress = await curriculumClient.getTrackProgress(trackCode)
+              const progress = await curriculumClient.getTrackProgress(trackSlug)
               setCurriculumProgress(progress)
-            } catch (err) {
-              // Track might not be enrolled yet
-              console.log('Track not enrolled yet:', err)
+            } catch (err: any) {
+              // Track might not be enrolled yet or doesn't exist in database
+              if (err?.status === 404) {
+                console.log(`Track "${trackSlug}" not found in curriculum database`)
+              } else {
+                console.log('Track progress not available:', err?.message)
+              }
             }
           }
         } catch (err) {
