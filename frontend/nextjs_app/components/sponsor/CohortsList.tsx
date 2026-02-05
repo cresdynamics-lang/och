@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { sponsorClient, SponsorCohort } from '@/services/sponsorClient'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Users, FileText, TrendingUp, Plus } from 'lucide-react'
 
 export function CohortsList() {
   const [cohorts, setCohorts] = useState<SponsorCohort[]>([])
@@ -24,6 +26,16 @@ export function CohortsList() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleEnrollStudents = (cohortId: string) => {
+    // TODO: Open enrollment modal or navigate to enrollment page
+    console.log('Enroll students for cohort:', cohortId)
+  }
+
+  const handleGenerateReport = (cohortId: string) => {
+    // TODO: Generate and download report
+    console.log('Generate report for cohort:', cohortId)
   }
 
   if (loading) {
@@ -51,19 +63,23 @@ export function CohortsList() {
       ) : (
         <div className="space-y-4">
           {cohorts.map((cohort) => (
-            <Link
+            <div
               key={cohort.cohort_id}
-              href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}`}
-              className="block bg-och-slate-900 rounded-lg p-4 border border-och-slate-700 hover:border-och-mint transition-colors"
+              className="bg-och-slate-900 rounded-lg p-4 border border-och-slate-700"
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-och-mint mb-2">
-                    {cohort.cohort_name}
-                  </h3>
+                  <Link
+                    href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}`}
+                    className="hover:text-och-mint transition-colors"
+                  >
+                    <h3 className="text-lg font-semibold text-och-mint mb-2">
+                      {cohort.cohort_name}
+                    </h3>
+                  </Link>
                   <div className="text-sm text-och-steel mb-3">{cohort.track_name}</div>
                   
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
                     <div>
                       <div className="text-och-steel">Seats</div>
                       <div className="text-och-mint font-semibold">
@@ -87,6 +103,35 @@ export function CohortsList() {
                       <div className="text-och-mint font-semibold">{cohort.graduates_count}</div>
                     </div>
                   </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleEnrollStudents(cohort.cohort_id)}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Enroll Students
+                    </Button>
+                    
+                    <Link href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}?tab=progress`}>
+                      <Button size="sm" variant="outline" className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Track Progress
+                      </Button>
+                    </Link>
+                    
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleGenerateReport(cohort.cohort_id)}
+                      className="flex items-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Generate Report
+                    </Button>
+                  </div>
                 </div>
                 
                 {cohort.flags && cohort.flags.length > 0 && (
@@ -102,7 +147,7 @@ export function CohortsList() {
                   </div>
                 )}
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

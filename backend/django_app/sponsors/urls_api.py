@@ -24,6 +24,8 @@ auth_patterns = [
 # =============================================================================
 programs_patterns = [
     path('cohorts/', views_api.create_sponsored_cohort, name='create-sponsored-cohort'),
+    path('cohorts/assign-sponsors/', views_api.assign_sponsors_to_cohort, name='assign-sponsors-to-cohort'),
+    path('cohorts/assignments/', views_api.get_sponsor_assignments, name='get-sponsor-assignments'),
     path('cohorts/<uuid:cohort_id>/enrollments/', views_api.enroll_sponsored_students, name='enroll-sponsored-students'),
     path('cohorts/<uuid:cohort_id>/enrollments/list/', views_api.list_sponsored_students, name='list-sponsored-students'),
     path('cohorts/<uuid:cohort_id>/reports/', views_api.cohort_reports, name='cohort-reports'),

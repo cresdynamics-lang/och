@@ -634,3 +634,44 @@ class RevenueShareTracking(models.Model):
         if not self.revenue_share_3pct:
             self.revenue_share_3pct = self.first_year_salary_kes * Decimal('0.03')
         super().save(*args, **kwargs)
+
+
+class SponsorCohortAssignment(models.Model):
+    """
+    Assignment of sponsors to cohorts with seat allocation and funding details.
+    """
+    ROLE_CHOICES = [
+        ('funding', 'Funding'),
+        ('mentorship', 'Mentorship'),
+        ('partnership', 'Partnership'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor_uuid_id = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sponsor_assignments',
+        to_field='uuid_id',
+        db_column='sponsor_uuid_id'
+    )
+    cohort_id = models.ForeignKey(
+        'programs.Cohort',
+        on_delete=models.CASCADE,
+        related_name='sponsor_assignments',
+        db_column='cohort_id'
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='funding')
+    seat_allocation = models.IntegerField(validators=[MinValueValidator(1)])
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    funding_agreement_id = models.CharField(max_length=100, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sponsor_cohort_assignments'
+        unique_together = ['sponsor_uuid_id', 'cohort_id']
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.sponsor_uuid_id.email} -> {self.cohort_id.name} ({self.seat_allocation} seats)"

@@ -1087,3 +1087,110 @@ def export_dashboard_pdf(request, dashboard_id):
         return Response({
             'error': f'Failed to export dashboard: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assign_sponsors_to_cohort(request):
+    """POST /api/v1/programs/cohorts/assign-sponsors - Assign sponsors to cohorts"""
+    data = request.data
+    
+    required_fields = ['cohort_id', 'sponsor_assignments']
+    for field in required_fields:
+        if field not in data:
+            return Response({
+                'error': f'{field} is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        from programs.models import Cohort
+        from .models import SponsorCohortAssignment
+        
+        cohort = get_object_or_404(Cohort, id=data['cohort_id'])
+        
+        created_assignments = []
+        for assignment_data in data['sponsor_assignments']:
+            sponsor_uuid = assignment_data.get('sponsor_uuid_id')
+            seat_allocation = assignment_data.get('seat_allocation', 1)
+            role = assignment_data.get('role', 'funding')
+            
+            if not sponsor_uuid:
+                continue
+                
+            try:
+                sponsor_user = User.objects.get(uuid_id=sponsor_uuid)
+                
+                assignment, created = SponsorCohortAssignment.objects.get_or_create(
+                    sponsor=sponsor_user,
+                    cohort=cohort,
+                    defaults={
+                        'role': role,
+                        'seat_allocation': seat_allocation,
+                        'start_date': assignment_data.get('start_date'),
+                        'end_date': assignment_data.get('end_date'),
+                        'funding_agreement_id': assignment_data.get('funding_agreement_id')
+                    }
+                )
+                
+                if created:
+                    created_assignments.append({
+                        'assignment_id': str(assignment.id),
+                        'sponsor_email': sponsor_user.email,
+                        'cohort_name': cohort.name,
+                        'seat_allocation': assignment.seat_allocation,
+                        'role': assignment.role
+                    })
+                    
+            except User.DoesNotExist:
+                continue
+        
+        return Response({
+            'message': f'Successfully assigned {len(created_assignments)} sponsor(s) to cohort',
+            'assignments': created_assignments,
+            'cohort_id': str(cohort.id),
+            'cohort_name': cohort.name
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response({
+            'error': f'Failed to assign sponsors: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sponsor_assignments(request):
+    """GET /api/v1/programs/cohorts/assignments - Get all sponsor assignments"""
+    try:
+        from .models import SponsorCohortAssignment
+        
+        assignments = SponsorCohortAssignment.objects.all().select_related('sponsor', 'cohort')
+        
+        assignments_data = []
+        for assignment in assignments:
+            assignment_data = {
+                'id': str(assignment.id),
+                'sponsor_uuid_id': str(assignment.sponsor.uuid_id),
+                'sponsor_name': f"{assignment.sponsor.first_name} {assignment.sponsor.last_name}".strip(),
+                'sponsor_email': assignment.sponsor.email,
+                'cohort_id': str(assignment.cohort.id),
+                'cohort_name': assignment.cohort.name,
+                'role': assignment.role,
+                'seat_allocation': assignment.seat_allocation,
+                'start_date': assignment.start_date.isoformat() if assignment.start_date else None,
+                'end_date': assignment.end_date.isoformat() if assignment.end_date else None,
+                'funding_agreement_id': assignment.funding_agreement_id,
+                'created_at': assignment.created_at.isoformat(),
+                'updated_at': assignment.updated_at.isoformat()
+            }
+            assignments_data.append(assignment_data)
+        
+        return Response({
+            'assignments': assignments_data,
+            'total_assignments': len(assignments_data)
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'Failed to retrieve assignments: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

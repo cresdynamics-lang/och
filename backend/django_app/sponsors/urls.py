@@ -9,6 +9,9 @@ app_name = 'sponsors'
 urlpatterns = [
     # OCH SMP Technical Specifications APIs
     path('api/', include('sponsors.urls_api')),
+    # Sponsor assignments
+    path('assignments/', views.sponsor_assignments, name='sponsor-assignments'),
+
     # Sponsor listing and details
     path('', views.sponsor_list, name='sponsor-list'),
     path('<slug:slug>/', views.sponsor_detail, name='sponsor-detail'),

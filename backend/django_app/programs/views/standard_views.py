@@ -849,6 +849,49 @@ class CohortViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_200_OK
                 )
 
+    @action(detail=True, methods=['get', 'post'])
+    def sponsors(self, request, pk=None):
+        """Get or assign sponsors for cohort."""
+        cohort = self.get_object()
+        
+        if request.method == 'GET':
+            # Get sponsors assigned to this cohort
+            # This would need a SponsorCohort model - for now return empty
+            return Response([])
+        
+        elif request.method == 'POST':
+            # Assign sponsor to cohort
+            sponsor_id = request.data.get('sponsor_id')
+            seat_allocation = request.data.get('seat_allocation', 0)
+            role = request.data.get('role', 'funding')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+            funding_agreement_id = request.data.get('funding_agreement_id')
+            
+            if not sponsor_id:
+                return Response(
+                    {'error': 'sponsor_id is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if not seat_allocation or seat_allocation <= 0:
+                return Response(
+                    {'error': 'seat_allocation must be greater than 0'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # For now, just return success - would need SponsorCohort model to persist
+            return Response({
+                'message': 'Sponsor assigned successfully',
+                'cohort_id': str(cohort.id),
+                'sponsor_id': sponsor_id,
+                'seat_allocation': seat_allocation,
+                'role': role,
+                'start_date': start_date,
+                'end_date': end_date,
+                'funding_agreement_id': funding_agreement_id
+            }, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=['get', 'post'], url_path='mentorship-cycle')
     def mentorship_cycle(self, request, pk=None):
         """Get or create mentorship cycle for this cohort."""

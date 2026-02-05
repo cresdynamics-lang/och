@@ -16,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 
-from .models import Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics
+from .models import Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics, SponsorCohortAssignment
 from . import services as sponsor_services
 from .services.cohorts_service import SponsorCohortsService
 from .services.finance_service import FinanceDataService
@@ -30,7 +30,8 @@ from .serializers import (
     SponsorDashboardSerializer,
     SponsorAnalyticsSerializer,
     CohortListResponseSerializer,
-    CohortDetailResponseSerializer
+    CohortDetailResponseSerializer,
+    SponsorCohortAssignmentSerializer
 )
 
 User = get_user_model()
@@ -1002,3 +1003,20 @@ class FinanceRealtimeView(APIView):
         response['Access-Control-Allow-Headers'] = 'Cache-Control'
 
         return response
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def sponsor_assignments(request):
+    """GET/POST /api/sponsors/assignments - List or create sponsor assignments"""
+    if request.method == 'GET':
+        assignments = SponsorCohortAssignment.objects.all()
+        serializer = SponsorCohortAssignmentSerializer(assignments, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        serializer = SponsorCohortAssignmentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

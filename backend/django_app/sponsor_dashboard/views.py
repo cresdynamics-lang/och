@@ -193,55 +193,59 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
             offset = int(request.query_params.get('offset', 0))
             cursor = request.query_params.get('cursor')
             
-            # Try to get cohorts, but return empty list if table doesn't exist or query fails
+            # Get cohorts that have sponsor assignments for users in this org
             try:
-                queryset = SponsorCohortDashboard.objects.filter(org=org).order_by('-updated_at')
+                from sponsors.models import SponsorCohortAssignment
+                from programs.models import Cohort
                 
-                # Cursor-based pagination (simplified)
-                if cursor:
-                    try:
-                        cursor_time = timezone.datetime.fromisoformat(cursor.replace('Z', '+00:00'))
-                        queryset = queryset.filter(updated_at__lt=cursor_time)
-                    except (ValueError, AttributeError):
-                        pass
+                # Get users from this organization
+                org_users = User.objects.filter(
+                    Q(org_id=org) | Q(organizationmember__organization=org)
+                ).distinct()
                 
-                cohorts = list(queryset[offset:offset + limit])
+                # Get cohorts that have assignments from these users
+                assigned_cohorts = SponsorCohortAssignment.objects.filter(
+                    sponsor_uuid_id__in=org_users
+                ).select_related('cohort_id', 'cohort_id__track').values_list('cohort_id', flat=True).distinct()
                 
-                try:
-                    serializer = SponsorCohortListSerializer(cohorts, many=True)
-                except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f'Error serializing cohorts: {e}. Returning empty list.', exc_info=True)
-                    return Response({
-                        'results': [],
-                        'next_cursor': None,
-                        'count': 0,
+                cohorts = Cohort.objects.filter(id__in=assigned_cohorts).select_related('track')[offset:offset + limit]
+                
+                results = []
+                for cohort in cohorts:
+                    # Get assignment details for this cohort
+                    assignment = SponsorCohortAssignment.objects.filter(
+                        cohort_id=cohort,
+                        sponsor_uuid_id__in=org_users
+                    ).first()
+                    
+                    results.append({
+                        'cohort_id': str(cohort.id),
+                        'cohort_name': cohort.name,
+                        'name': cohort.name,  # For backward compatibility
+                        'track_name': cohort.track.name if cohort.track else 'Unknown Track',
+                        'track_slug': cohort.track.key if cohort.track else 'unknown',
+                        'seats_total': assignment.seat_allocation if assignment else 0,
+                        'seats_used': cohort.enrollments.filter(status='active').count(),
+                        'completion_pct': 0,  # TODO: Calculate from enrollments
+                        'avg_readiness': 0,   # TODO: Calculate from student data
+                        'graduates_count': cohort.enrollments.filter(status='completed').count(),
+                        'flags': [],
+                        'status': cohort.status,
+                        'start_date': cohort.start_date.isoformat() if cohort.start_date else None,
+                        'end_date': cohort.end_date.isoformat() if cohort.end_date else None,
                     })
                 
-                # Get next cursor
-                next_cursor = None
-                if len(cohorts) == limit and cohorts:
-                    try:
-                        next_cursor = cohorts[-1].updated_at.isoformat()
-                    except (AttributeError, IndexError):
-                        pass
-                
-                try:
-                    count = queryset.count()
-                except Exception:
-                    count = len(cohorts)
-                
                 return Response({
-                    'results': serializer.data,
-                    'next_cursor': next_cursor,
-                    'count': count,
+                    'results': results,
+                    'next_cursor': None,
+                    'count': len(results),
                 })
+                
             except Exception as e:
-                # If table doesn't exist or query fails, return empty list
+                # If query fails, return empty list
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning(f'Error querying SponsorCohortDashboard: {e}. Returning empty list.', exc_info=True)
+                logger.warning(f'Error querying sponsor assignments: {e}. Returning empty list.', exc_info=True)
                 return Response({
                     'results': [],
                     'next_cursor': None,
