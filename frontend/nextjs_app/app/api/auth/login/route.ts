@@ -8,12 +8,17 @@ import type { LoginRequest, LoginResponse } from '@/services/types';
 
 function normalizeRoleName(roleName: string): string {
   const normalized = (roleName || '').toLowerCase().trim()
+  console.log('[Role Normalization] Input:', roleName, 'Normalized:', normalized)
+
   if (normalized === 'program_director' || normalized === 'program director' || normalized === 'programdirector' || normalized === 'director') return 'program_director'
   if (normalized === 'mentee') return 'mentee'
   if (normalized === 'student') return 'student'
   if (normalized === 'mentor') return 'mentor'
   if (normalized === 'admin') return 'admin'
-  if (normalized === 'sponsor_admin' || normalized === 'sponsor' || normalized === 'sponsor/employer admin' || normalized === 'sponsoremployer admin') return 'sponsor_admin'
+  if (normalized === 'sponsor_admin' || normalized === 'sponsor' || normalized === 'sponsor/employer admin' || normalized === 'sponsoremployer admin') {
+    console.log('[Role Normalization] Converting sponsor to sponsor_admin')
+    return 'sponsor_admin'
+  }
   if (normalized === 'analyst') return 'analyst'
   if (normalized === 'employer') return 'employer'
   if (normalized === 'finance' || normalized === 'finance_admin') return 'finance'
@@ -21,39 +26,72 @@ function normalizeRoleName(roleName: string): string {
 }
 
 function extractNormalizedRoles(user: any): string[] {
+  console.log('[Role Extraction] Full user object:', JSON.stringify(user, null, 2))
   const rolesRaw = user?.roles || []
-  if (!Array.isArray(rolesRaw)) return []
+  console.log('[Role Extraction] Raw roles from user.roles:', rolesRaw, 'Type:', typeof rolesRaw, 'Is Array:', Array.isArray(rolesRaw))
+
+  if (!Array.isArray(rolesRaw)) {
+    console.log('[Role Extraction] rolesRaw is not an array, trying user.role:', user?.role)
+    // Fallback: if roles is not an array, try to use the single role field
+    const singleRole = user?.role
+    if (singleRole) {
+      const normalized = normalizeRoleName(String(singleRole))
+      console.log('[Role Extraction] Using single role:', singleRole, '->', normalized)
+      return [normalized]
+    }
+    return []
+  }
+
   const roles = rolesRaw
     .map((ur: any) => {
       const roleValue = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
-      return normalizeRoleName(String(roleValue || ''))
+      const normalized = normalizeRoleName(String(roleValue || ''))
+      console.log('[Role Extraction] Processing:', roleValue, '->', normalized)
+      return normalized
     })
     .filter(Boolean)
   // de-dupe
-  return Array.from(new Set(roles))
+  const uniqueRoles = Array.from(new Set(roles))
+  console.log('[Role Extraction] Final unique roles:', uniqueRoles)
+  return uniqueRoles
 }
 
 function getPrimaryRole(roles: string[]): string | null {
-  if (roles.includes('admin')) return 'admin'
+  console.log('[Primary Role] Available roles:', roles)
+  if (roles.includes('admin')) {
+    console.log('[Primary Role] Selected: admin')
+    return 'admin'
+  }
   const priority = ['program_director', 'finance', 'mentor', 'analyst', 'sponsor_admin', 'employer', 'mentee', 'student']
-  for (const r of priority) if (roles.includes(r)) return r
-  return roles[0] || null
+  for (const r of priority) {
+    if (roles.includes(r)) {
+      console.log('[Primary Role] Selected:', r)
+      return r
+    }
+  }
+  const fallback = roles[0] || null
+  console.log('[Primary Role] Fallback to:', fallback)
+  return fallback
 }
 
 function getDashboardForRole(role: string | null): string {
+  console.log('[Dashboard Routing] Input role:', role)
+  let dashboard: string
   switch (role) {
-    case 'admin': return '/dashboard/admin'
-    case 'program_director': return '/dashboard/director'
-    case 'mentor': return '/mentor/dashboard'
-    case 'analyst': return '/dashboard/analyst'
-    case 'sponsor_admin': return '/dashboard/sponsor'
-    case 'employer': return '/dashboard/employer'
-    case 'finance': return '/dashboard/finance'
+    case 'admin': dashboard = '/dashboard/admin'; break
+    case 'program_director': dashboard = '/dashboard/director'; break
+    case 'mentor': dashboard = '/mentor/dashboard'; break
+    case 'analyst': dashboard = '/dashboard/analyst'; break
+    case 'sponsor_admin': dashboard = '/dashboard/sponsor'; break
+    case 'employer': dashboard = '/dashboard/employer'; break
+    case 'finance': dashboard = '/dashboard/finance'; break
     case 'mentee':
-    case 'student':
+    case 'student': dashboard = '/dashboard/student'; break
     default:
-      return '/dashboard/student'
+      dashboard = '/dashboard/student'
   }
+  console.log('[Dashboard Routing] Selected dashboard:', dashboard)
+  return dashboard
 }
 
 export async function POST(request: NextRequest) {
@@ -63,9 +101,9 @@ export async function POST(request: NextRequest) {
 
     console.log('[Login API] Received login attempt:', { email, passwordLength: password?.length });
 
-    // Forward authentication to Django backend
-    const djangoUrl = `${process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000'}/api/v1/auth/login`;
-    console.log('[Login API] Forwarding to Django URL:', djangoUrl);
+    // Forward authentication to OCH API backend
+    const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/auth/login`;
+    console.log('[Login API] Forwarding to API URL:', apiUrl);
 
     const djangoResponse = await fetch(djangoUrl, {
       method: 'POST',
@@ -95,6 +133,7 @@ export async function POST(request: NextRequest) {
 
     // Use the Django response data
     const loginResponse = djangoData;
+    console.log('[Login API] Full login response:', JSON.stringify(loginResponse, null, 2));
 
     // Create the response (include refresh_token so client can store it for auto-refresh)
     const nextResponse = NextResponse.json({
@@ -106,6 +145,7 @@ export async function POST(request: NextRequest) {
     // Set RBAC cookies for middleware enforcement (HttpOnly so client can't tamper)
     const normalizedRoles = extractNormalizedRoles(loginResponse.user)
     const primaryRole = getPrimaryRole(normalizedRoles)
+    console.log('[Login API] Final results - Normalized roles:', normalizedRoles, 'Primary role:', primaryRole);
     nextResponse.cookies.set('och_roles', JSON.stringify(normalizedRoles), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
