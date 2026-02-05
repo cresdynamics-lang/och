@@ -658,6 +658,9 @@ export default function AIProfilerPage() {
 
     try {
       setLoading(true)
+      
+      // Variable to hold the final result (either from FastAPI or mock)
+      let finalResult: ProfilingResult
 
       try {
         // Complete profiling session in FastAPI (enhanced engine under the hood)
@@ -683,6 +686,7 @@ export default function AIProfilerPage() {
           assessment_summary: resultResponse.assessment_summary || 'Assessment completed',
           completed_at: resultResponse.completed_at || new Date().toISOString()
         }
+        finalResult = transformedResult
         setResult(transformedResult)
       } catch (apiError: any) {
         console.log('[AIProfiler] FastAPI unavailable for completion, generating mock results')
@@ -691,11 +695,58 @@ export default function AIProfilerPage() {
         const mockResults: ProfilingResult = {
           user_id: 'mock-user',
           session_id: session.session_id,
+          recommendations: [
+            {
+              track_key: 'defender',
+              track_name: 'Cybersecurity Defender',
+              score: 85,
+              confidence_level: 'high',
+              reasoning: [
+                'Strong analytical thinking and problem-solving abilities',
+                'Interest in threat detection and security monitoring',
+                'Attention to detail and methodical approach'
+              ],
+              career_suggestions: [
+                'SOC Analyst',
+                'Security Operations Engineer',
+                'Threat Intelligence Analyst'
+              ]
+            },
+            {
+              track_key: 'grc',
+              track_name: 'Governance, Risk & Compliance',
+              score: 72,
+              confidence_level: 'medium',
+              reasoning: [
+                'Understanding of security policies and frameworks',
+                'Interest in organizational security posture',
+                'Communication and documentation skills'
+              ],
+              career_suggestions: [
+                'GRC Analyst',
+                'Compliance Specialist',
+                'Risk Assessment Consultant'
+              ]
+            }
+          ],
           primary_track: {
             key: 'defender',
             name: 'Cybersecurity Defender',
             description: 'Focus on defensive security operations and threat detection',
-            confidence_score: 85
+            confidence_score: 85,
+            focus_areas: [
+              'Security Monitoring',
+              'Threat Detection',
+              'Incident Response',
+              'Log Analysis',
+              'SIEM Tools'
+            ],
+            career_paths: [
+              'SOC Analyst',
+              'Security Operations Engineer',
+              'Threat Intelligence Analyst',
+              'Incident Responder'
+            ]
           },
           secondary_tracks: [
             {
@@ -732,6 +783,7 @@ export default function AIProfilerPage() {
           assessment_summary: 'Strong foundation in cybersecurity with focus on defensive operations',
           completed_at: new Date().toISOString()
         }
+        finalResult = mockResults
         setResult(mockResults)
       }
 
@@ -781,10 +833,10 @@ export default function AIProfilerPage() {
         const { apiGateway } = await import('@/services/apiGateway')
         const syncResponse = await apiGateway.post('/profiler/sync-fastapi', {
           user_id: user?.id?.toString(),
-          session_id: resultResponse.session_id,
-          completed_at: resultResponse.completed_at,
-          primary_track: resultResponse.primary_track.key,
-          recommendations: resultResponse.recommendations.map(rec => ({
+          session_id: finalResult.session_id,
+          completed_at: finalResult.completed_at,
+          primary_track: finalResult.primary_track.key,
+          recommendations: finalResult.recommendations.map(rec => ({
             track_key: rec.track_key,
             score: rec.score,
             confidence_level: rec.confidence_level
@@ -796,7 +848,7 @@ export default function AIProfilerPage() {
         if (typeof window !== 'undefined') {
           // Dispatch event for auth hook to refresh user
           window.dispatchEvent(new CustomEvent('profiling-completed', { 
-            detail: { sessionId: resultResponse.session_id }
+            detail: { sessionId: finalResult.session_id }
           }))
           
           // Also reload user directly after a short delay to allow sync to complete
