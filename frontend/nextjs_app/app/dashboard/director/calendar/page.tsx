@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { RouteGuard } from '@/components/auth/RouteGuard'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/card'
 import { apiGateway } from '@/services/apiGateway'
 
