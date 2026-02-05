@@ -37,10 +37,14 @@ export function StudentsManagementClient() {
 
   const fetchStudents = async () => {
     try {
-      const response = await fetch('/api/v1/director/students')
+      const response = await fetch('http://localhost:8000/api/v1/users?role=student', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
       if (response.ok) {
         const data = await response.json()
-        setStudents(data.students || [])
+        setStudents(data.results || [])
       }
     } catch (error) {
       console.error('Failed to fetch students:', error)
@@ -49,10 +53,14 @@ export function StudentsManagementClient() {
 
   const fetchSponsors = async () => {
     try {
-      const response = await fetch('/api/v1/director/sponsors')
+      const response = await fetch('http://localhost:8000/api/v1/users?role=sponsor_admin', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
       if (response.ok) {
         const data = await response.json()
-        setSponsors(data.sponsors || [])
+        setSponsors(data.results || [])
       }
     } catch (error) {
       console.error('Failed to fetch sponsors:', error)

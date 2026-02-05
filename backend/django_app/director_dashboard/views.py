@@ -5,6 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import get_user_model
 
 from .models import DirectorDashboardCache, DirectorCohortHealth
 from .serializers import (
@@ -84,6 +85,75 @@ class DirectorDashboardViewSet(viewsets.ViewSet):
             logger.error(f"Error refreshing cache: {e}")
             return Response(
                 {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def students(self, request):
+        """
+        GET /api/v1/director/students
+        Get all students for director management.
+        """
+        User = get_user_model()
+        
+        try:
+            students = User.objects.filter(
+                is_active=True,
+                account_status='active'
+            ).order_by('-created_at')
+            
+            students_data = []
+            for student in students:
+                students_data.append({
+                    'id': str(student.uuid_id),
+                    'email': student.email,
+                    'first_name': student.first_name,
+                    'last_name': student.last_name,
+                    'cohort_id': student.cohort_id,
+                    'track_key': student.track_key,
+                    'created_at': student.created_at.isoformat(),
+                    'sponsor_id': None,
+                    'sponsor_name': None
+                })
+            
+            return Response({'students': students_data})
+        except Exception as e:
+            logger.error(f"Error getting students: {e}")
+            return Response(
+                {'error': 'Failed to load students data'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def sponsors(self, request):
+        """
+        GET /api/v1/director/sponsors
+        Get all sponsors for linking to students.
+        """
+        User = get_user_model()
+        
+        try:
+            sponsors = User.objects.filter(
+                is_active=True,
+                account_status='active',
+                user_roles__role__name='sponsor_admin'
+            ).distinct().order_by('first_name', 'last_name')
+            
+            sponsors_data = []
+            for sponsor in sponsors:
+                sponsors_data.append({
+                    'id': str(sponsor.uuid_id),
+                    'email': sponsor.email,
+                    'first_name': sponsor.first_name,
+                    'last_name': sponsor.last_name,
+                    'organization': getattr(sponsor.org_id, 'name', None) if sponsor.org_id else None
+                })
+            
+            return Response({'sponsors': sponsors_data})
+        except Exception as e:
+            logger.error(f"Error getting sponsors: {e}")
+            return Response(
+                {'error': 'Failed to load sponsors data'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
