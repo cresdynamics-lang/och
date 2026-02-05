@@ -7,6 +7,12 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { CreateCohortPayload } from '@/types/api'
+import { apiGateway } from '@/services/apiGateway'
+
+interface Program {
+  id: string
+  name: string
+}
 
 interface Track {
   id: string
@@ -17,8 +23,14 @@ interface Track {
   }
 }
 
+interface CalendarTemplate {
+  id: string
+  name: string
+}
+
 interface User {
   id: string
+  uuid_id: string
   email: string
   first_name?: string
   last_name?: string
@@ -26,48 +38,81 @@ interface User {
 
 export default function CreateCohortPage() {
   const router = useRouter()
+  const [programs, setPrograms] = useState<Program[]>([])
   const [tracks, setTracks] = useState<Track[]>([])
+  const [calendarTemplates, setCalendarTemplates] = useState<CalendarTemplate[]>([])
+  const [mentors, setMentors] = useState<User[]>([])
   const [coordinators, setCoordinators] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [formData, setFormData] = useState<CreateCohortPayload>({
-    track: '',
+  const [formData, setFormData] = useState({
+    program_id: '',
+    track_id: '',
     name: '',
     start_date: '',
     end_date: '',
-    mode: 'virtual',
-    seat_cap: 25,
+    mode: 'virtual' as 'onsite' | 'virtual' | 'hybrid',
+    seat_cap: 50,
     mentor_ratio: 0.1,
-    seat_pool: {
-      paid: 20,
-      scholarship: 3,
-      sponsored: 2
+    calendar_template_id: '',
+    assigned_staff: {
+      mentors: [] as string[],
+      coordinators: [] as string[]
     }
   })
 
   useEffect(() => {
-    fetchTracks()
+    fetchPrograms()
+    fetchCalendarTemplates()
+    fetchMentors()
     fetchCoordinators()
   }, [])
 
-  const fetchTracks = async () => {
+  useEffect(() => {
+    if (formData.program_id) {
+      fetchTracks(formData.program_id)
+    }
+  }, [formData.program_id])
+
+  const fetchPrograms = async () => {
     try {
-      const response = await fetch('/api/tracks')
-      if (response.ok) {
-        const data = await response.json()
-        setTracks(data.data || [])
-      }
+      const data = await apiGateway.get('/programs/')
+      setPrograms(data.results || data.data || data || [])
+    } catch (error) {
+      console.error('Failed to fetch programs:', error)
+    }
+  }
+
+  const fetchTracks = async (programId: string) => {
+    try {
+      const data = await apiGateway.get(`/tracks/?program_id=${programId}`)
+      setTracks(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch tracks:', error)
     }
   }
 
+  const fetchCalendarTemplates = async () => {
+    try {
+      const data = await apiGateway.get('/calendar-templates/')
+      setCalendarTemplates(data.results || data.data || data || [])
+    } catch (error) {
+      console.error('Failed to fetch calendar templates:', error)
+    }
+  }
+
+  const fetchMentors = async () => {
+    try {
+      const data = await apiGateway.get('/users?role=mentor')
+      setMentors(data.results || data.data || data || [])
+    } catch (error) {
+      console.error('Failed to fetch mentors:', error)
+    }
+  }
+
   const fetchCoordinators = async () => {
     try {
-      const response = await fetch('/api/users?role=coordinator')
-      if (response.ok) {
-        const data = await response.json()
-        setCoordinators(data.data || [])
-      }
+      const data = await apiGateway.get('/users?role=coordinator')
+      setCoordinators(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch coordinators:', error)
     }
@@ -78,20 +123,31 @@ export default function CreateCohortPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/cohorts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      // Transform data to match backend expectations
+      const cohortData = {
+        track: formData.track_id,
+        name: formData.name,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        mode: formData.mode,
+        seat_cap: formData.seat_cap,
+        mentor_ratio: formData.mentor_ratio,
+        calendar_template_id: null, // Always null for now until templates work properly
+        coordinator: formData.assigned_staff.coordinators[0] || null,
+        seat_pool: {
+          paid: Math.floor(formData.seat_cap * 0.8),
+          scholarship: Math.floor(formData.seat_cap * 0.1),
+          sponsored: Math.floor(formData.seat_cap * 0.1)
         },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        router.push('/dashboard/director/cohorts')
-      } else {
-        const error = await response.json()
-        console.error('Failed to create cohort:', error)
+        assigned_staff: {
+          mentors: formData.assigned_staff.mentors,
+          coordinators: formData.assigned_staff.coordinators
+        }
       }
+      
+      console.log('Sending cohort data:', cohortData)
+      await apiGateway.post('/cohorts/', cohortData)
+      router.push('/dashboard/director/cohorts')
     } catch (error) {
       console.error('Failed to create cohort:', error)
     } finally {
@@ -99,16 +155,16 @@ export default function CreateCohortPage() {
     }
   }
 
-  const updateFormData = (field: keyof CreateCohortPayload, value: any) => {
+  const updateFormData = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const updateSeatPool = (type: 'paid' | 'scholarship' | 'sponsored', value: number) => {
+  const updateAssignedStaff = (type: 'mentors' | 'coordinators', values: string[]) => {
     setFormData(prev => ({
       ...prev,
-      seat_pool: {
-        ...prev.seat_pool,
-        [type]: value
+      assigned_staff: {
+        ...prev.assigned_staff,
+        [type]: values
       }
     }))
   }
@@ -124,22 +180,25 @@ export default function CreateCohortPage() {
 
           <Card className="border-och-steel/20 bg-och-midnight/50">
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {/* Basic Information */}
+              {/* Program and Track Selection */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Track *
+                    Program *
                   </label>
                   <select
-                    value={formData.track}
-                    onChange={(e) => updateFormData('track', e.target.value)}
+                    value={formData.program_id}
+                    onChange={(e) => {
+                      updateFormData('program_id', e.target.value)
+                      updateFormData('track_id', '') // Reset track when program changes
+                    }}
                     required
                     className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
                   >
-                    <option value="">Select a track</option>
-                    {tracks.map((track) => (
-                      <option key={track.id} value={track.id}>
-                        {track.name} ({track.program.name})
+                    <option value="">Select a program</option>
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
                       </option>
                     ))}
                   </select>
@@ -147,17 +206,38 @@ export default function CreateCohortPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
-                    Cohort Name *
+                    Track *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => updateFormData('name', e.target.value)}
-                    placeholder="e.g., Jan 2026 Cohort"
+                  <select
+                    value={formData.track_id}
+                    onChange={(e) => updateFormData('track_id', e.target.value)}
                     required
-                    className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
-                  />
+                    disabled={!formData.program_id}
+                    className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender disabled:opacity-50"
+                  >
+                    <option value="">Select a track</option>
+                    {tracks.map((track) => (
+                      <option key={track.id} value={track.id}>
+                        {track.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              {/* Cohort Name */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-2">
+                  Cohort Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => updateFormData('name', e.target.value)}
+                  placeholder="e.g., Jan 2026 Cohort"
+                  required
+                  className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                />
               </div>
 
               {/* Dates */}
@@ -236,65 +316,74 @@ export default function CreateCohortPage() {
                 </div>
               </div>
 
-              {/* Seat Pool Allocation */}
-              <div>
-                <label className="block text-sm font-medium text-white mb-4">
-                  Seat Pool Allocation
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs text-och-steel mb-1">Paid Seats</label>
-                    <input
-                      type="number"
-                      value={formData.seat_pool?.paid || 0}
-                      onChange={(e) => updateSeatPool('paid', parseInt(e.target.value))}
-                      min="0"
-                      className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded text-white focus:outline-none focus:border-och-defender"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-och-steel mb-1">Scholarship Seats</label>
-                    <input
-                      type="number"
-                      value={formData.seat_pool?.scholarship || 0}
-                      onChange={(e) => updateSeatPool('scholarship', parseInt(e.target.value))}
-                      min="0"
-                      className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded text-white focus:outline-none focus:border-och-defender"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-och-steel mb-1">Sponsored Seats</label>
-                    <input
-                      type="number"
-                      value={formData.seat_pool?.sponsored || 0}
-                      onChange={(e) => updateSeatPool('sponsored', parseInt(e.target.value))}
-                      min="0"
-                      className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded text-white focus:outline-none focus:border-och-defender"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Coordinator */}
+              {/* Calendar Template */}
               <div>
                 <label className="block text-sm font-medium text-white mb-2">
-                  Coordinator (Optional)
+                  Calendar Template
                 </label>
                 <select
-                  value={formData.coordinator || ''}
-                  onChange={(e) => updateFormData('coordinator', e.target.value || undefined)}
+                  value={formData.calendar_template_id}
+                  onChange={(e) => updateFormData('calendar_template_id', e.target.value)}
                   className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
                 >
-                  <option value="">No coordinator assigned</option>
-                  {coordinators.map((coordinator) => (
-                    <option key={coordinator.id} value={coordinator.id}>
-                      {coordinator.first_name && coordinator.last_name 
-                        ? `${coordinator.first_name} ${coordinator.last_name} (${coordinator.email})`
-                        : coordinator.email
-                      }
-                    </option>
-                  ))}
+                  <option value="">No template</option>
+                  {calendarTemplates.length === 0 ? (
+                    <option disabled>No templates available</option>
+                  ) : (
+                    calendarTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))
+                  )}
                 </select>
+              </div>
+
+              {/* Staff Assignment */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Assigned Mentors
+                  </label>
+                  <select
+                    multiple
+                    value={formData.assigned_staff.mentors}
+                    onChange={(e) => updateAssignedStaff('mentors', Array.from(e.target.selectedOptions, option => option.value))}
+                    className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender h-32"
+                  >
+                    {mentors.map((mentor) => (
+                      <option key={mentor.id} value={mentor.uuid_id}>
+                        {mentor.first_name && mentor.last_name 
+                          ? `${mentor.first_name} ${mentor.last_name} (${mentor.email})`
+                          : mentor.email
+                        }
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-och-steel mt-1">Hold Ctrl/Cmd to select multiple</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Assigned Coordinators
+                  </label>
+                  <select
+                    multiple
+                    value={formData.assigned_staff.coordinators}
+                    onChange={(e) => updateAssignedStaff('coordinators', Array.from(e.target.selectedOptions, option => option.value))}
+                    className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender h-32"
+                  >
+                    {coordinators.map((coordinator) => (
+                      <option key={coordinator.id} value={coordinator.uuid_id}>
+                        {coordinator.first_name && coordinator.last_name 
+                          ? `${coordinator.first_name} ${coordinator.last_name} (${coordinator.email})`
+                          : coordinator.email
+                        }
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-och-steel mt-1">Hold Ctrl/Cmd to select multiple</p>
+                </div>
               </div>
 
               {/* Actions */}

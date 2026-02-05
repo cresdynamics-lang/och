@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
-from .models import Cohort, Module, Milestone, Specialization
+from .models import Cohort, Module, Milestone, Specialization, CalendarTemplate
 from .api_serializers import (
     CohortSerializer, CreateCohortSerializer,
     ModuleSerializer, CreateModuleSerializer,
@@ -240,3 +240,42 @@ class SpecializationViewSet(viewsets.ModelViewSet):
             'data': serializer.data,
             'count': len(serializer.data)
         })
+
+
+class CalendarTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing calendar templates."""
+    permission_classes = [IsAuthenticated, IsDirectorOrAdmin]
+    queryset = CalendarTemplate.objects.select_related('program', 'track')
+    
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        template = CalendarTemplate.objects.create(
+            program_id=data['program_id'],
+            track_id=data['track_id'],
+            name=data['name'],
+            timezone=data.get('timezone', 'Africa/Nairobi'),
+            events=data.get('events', [])
+        )
+        return Response({
+            'success': True,
+            'data': {
+                'template_id': str(template.id),
+                'program_id': str(template.program_id),
+                'track_id': str(template.track_id),
+                'name': template.name,
+                'timezone': template.timezone,
+                'events': template.events
+            }
+        }, status=status.HTTP_201_CREATED)
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        data = [{
+            'template_id': str(t.id),
+            'program_id': str(t.program_id),
+            'track_id': str(t.track_id),
+            'name': t.name,
+            'timezone': t.timezone,
+            'events': t.events
+        } for t in queryset]
+        return Response({'success': True, 'data': data})

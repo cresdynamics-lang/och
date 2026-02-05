@@ -54,13 +54,14 @@ class CreateCohortSerializer(serializers.ModelSerializer):
     """Serializer for creating cohorts."""
     track = serializers.UUIDField()
     coordinator = serializers.UUIDField(required=False, allow_null=True)
+    assigned_staff = serializers.DictField(required=False, allow_empty=True)
     
     class Meta:
         model = Cohort
         fields = [
             'track', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id',
-            'coordinator', 'seat_pool'
+            'coordinator', 'seat_pool', 'assigned_staff'
         ]
     
     def validate_track(self, value):
@@ -80,12 +81,28 @@ class CreateCohortSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         track = validated_data.pop('track')
         coordinator = validated_data.pop('coordinator', None)
+        assigned_staff = validated_data.pop('assigned_staff', {})
         
         cohort = Cohort.objects.create(
             track=track,
             coordinator=coordinator,
             **validated_data
         )
+        
+        # Handle mentor assignments if provided
+        if assigned_staff.get('mentors'):
+            from .models import MentorAssignment
+            for mentor_id in assigned_staff['mentors']:
+                try:
+                    mentor = User.objects.get(uuid_id=mentor_id)
+                    MentorAssignment.objects.create(
+                        cohort=cohort,
+                        mentor=mentor,
+                        role='support'
+                    )
+                except User.DoesNotExist:
+                    pass  # Skip invalid mentor IDs
+        
         return cohort
 
 

@@ -6,6 +6,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { SpecializationResponse, CreateSpecializationPayload } from '@/types/api'
+import { apiGateway } from '@/services/apiGateway'
 
 export default function SpecializationsPage() {
   const [specializations, setSpecializations] = useState<SpecializationResponse[]>([])
@@ -18,11 +19,8 @@ export default function SpecializationsPage() {
 
   const fetchSpecializations = async () => {
     try {
-      const response = await fetch('/api/specializations')
-      if (response.ok) {
-        const data = await response.json()
-        setSpecializations(data.data || [])
-      }
+      const data = await apiGateway.get('/specializations/')
+      setSpecializations(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch specializations:', error)
     } finally {
@@ -169,11 +167,8 @@ function CreateSpecializationModal({ onClose, onSuccess }: CreateSpecializationM
 
   const fetchTracks = async () => {
     try {
-      const response = await fetch('/api/tracks')
-      if (response.ok) {
-        const data = await response.json()
-        setTracks(data.data || [])
-      }
+      const data = await apiGateway.get('/tracks/')
+      setTracks(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch tracks:', error)
     }
@@ -184,15 +179,8 @@ function CreateSpecializationModal({ onClose, onSuccess }: CreateSpecializationM
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/specializations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        onSuccess()
-      }
+      await apiGateway.post('/specializations/', formData)
+      onSuccess()
     } catch (error) {
       console.error('Failed to create specialization:', error)
     } finally {

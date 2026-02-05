@@ -61,7 +61,7 @@ const navItems: NavItem[] = [
     icon: Users,
     children: [
       { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users },
-      { label: 'Create Cohort', href: '/dashboard/director/cohorts/new', icon: Plus },
+      { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
       { label: 'Seat Management', href: '/dashboard/director/cohorts/seats', icon: Ticket },
     ]
   },
@@ -86,7 +86,6 @@ const navItems: NavItem[] = [
     ]
   },
   { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: TrendingUp },
-  { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
   { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: Settings },
 ]
 
@@ -139,7 +138,7 @@ export function DirectorNavigation() {
     return pathname?.startsWith(href)
   }
 
-  // Auto-expand items with active children
+  // Auto-expand items with active children and keep them expanded
   useEffect(() => {
     navItems.forEach((item) => {
       if (item.children) {
@@ -149,7 +148,7 @@ export function DirectorNavigation() {
         }
       }
     })
-  }, [pathname])
+  }, [pathname, expandedItems, toggleExpanded])
 
   // Keyboard navigation
   useEffect(() => {

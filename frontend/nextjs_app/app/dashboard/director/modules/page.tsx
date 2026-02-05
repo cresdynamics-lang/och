@@ -6,6 +6,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ModuleResponse, CreateModulePayload } from '@/types/api'
+import { apiGateway } from '@/services/apiGateway'
 
 export default function ModulesPage() {
   const [modules, setModules] = useState<ModuleResponse[]>([])
@@ -18,11 +19,8 @@ export default function ModulesPage() {
 
   const fetchModules = async () => {
     try {
-      const response = await fetch('/api/modules')
-      if (response.ok) {
-        const data = await response.json()
-        setModules(data.data || [])
-      }
+      const data = await apiGateway.get('/modules/')
+      setModules(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch modules:', error)
     } finally {
@@ -156,13 +154,17 @@ export default function ModulesPage() {
           )}
 
           {showCreateForm && (
-            <CreateModuleModal
-              onClose={() => setShowCreateForm(false)}
-              onSuccess={() => {
-                setShowCreateForm(false)
-                fetchModules()
-              }}
-            />
+            <div className="fixed inset-0 bg-och-midnight/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="w-full max-w-4xl bg-och-midnight border border-och-steel/20 rounded-lg shadow-xl">
+                <CreateModuleForm
+                  onClose={() => setShowCreateForm(false)}
+                  onSuccess={() => {
+                    setShowCreateForm(false)
+                    fetchModules()
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
       </DirectorLayout>
@@ -170,12 +172,12 @@ export default function ModulesPage() {
   )
 }
 
-interface CreateModuleModalProps {
+interface CreateModuleFormProps {
   onClose: () => void
   onSuccess: () => void
 }
 
-function CreateModuleModal({ onClose, onSuccess }: CreateModuleModalProps) {
+function CreateModuleForm({ onClose, onSuccess }: CreateModuleFormProps) {
   const [milestones, setMilestones] = useState<Array<{ id: string; name: string; track: { name: string; program: { name: string } } }>>([])
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState<CreateModulePayload>({
@@ -193,11 +195,8 @@ function CreateModuleModal({ onClose, onSuccess }: CreateModuleModalProps) {
 
   const fetchMilestones = async () => {
     try {
-      const response = await fetch('/api/milestones')
-      if (response.ok) {
-        const data = await response.json()
-        setMilestones(data.data || [])
-      }
+      const data = await apiGateway.get('/milestones/')
+      setMilestones(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch milestones:', error)
     }
@@ -208,15 +207,8 @@ function CreateModuleModal({ onClose, onSuccess }: CreateModuleModalProps) {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/modules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-
-      if (response.ok) {
-        onSuccess()
-      }
+      await apiGateway.post('/modules/', formData)
+      onSuccess()
     } catch (error) {
       console.error('Failed to create module:', error)
     } finally {
@@ -225,58 +217,51 @@ function CreateModuleModal({ onClose, onSuccess }: CreateModuleModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-och-midnight/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl border-och-steel/20 bg-och-midnight">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white">Create Module</h2>
-            <button
-              onClick={onClose}
-              className="text-och-steel hover:text-white transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Create New Module</h1>
+          <p className="text-och-steel">Add a new learning module to a milestone</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-och-steel hover:text-white transition-colors p-2"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Milestone *</label>
-              <select
-                value={formData.milestone}
-                onChange={(e) => setFormData(prev => ({ ...prev, milestone: e.target.value }))}
-                required
-                className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
-              >
-                <option value="">Select a milestone</option>
-                {milestones.map((milestone) => (
-                  <option key={milestone.id} value={milestone.id}>
-                    {milestone.name} ({milestone.track.name})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <form onSubmit={handleSubmit}>
+        <Card className="mb-6">
+          <div className="p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Basic Information</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Name *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Introduction to Cybersecurity"
+                <label className="block text-sm font-medium text-och-steel mb-2">Milestone *</label>
+                <select
+                  value={formData.milestone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, milestone: e.target.value }))}
                   required
-                  className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
-                />
+                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
+                >
+                  <option value="">Select a milestone</option>
+                  {milestones.map((milestone) => (
+                    <option key={milestone.id} value={milestone.id}>
+                      {milestone.name} ({milestone.track.name})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Content Type *</label>
+                <label className="block text-sm font-medium text-och-steel mb-2">Content Type *</label>
                 <select
                   value={formData.content_type}
                   onChange={(e) => setFormData(prev => ({ ...prev, content_type: e.target.value as any }))}
-                  className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
                 >
                   <option value="video">Video</option>
                   <option value="article">Article</option>
@@ -288,75 +273,91 @@ function CreateModuleModal({ onClose, onSuccess }: CreateModuleModalProps) {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Description</label>
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-och-steel mb-2">Module Name *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., Introduction to Cybersecurity"
+                required
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
+              />
+            </div>
+
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-och-steel mb-2">Description</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Covers fundamentals of cyber risk and governance..."
-                rows={3}
-                className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                rows={4}
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
               />
             </div>
+          </div>
+        </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="mb-6">
+          <div className="p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Content Details</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Order *</label>
+                <label className="block text-sm font-medium text-och-steel mb-2">Order *</label>
                 <input
                   type="number"
                   value={formData.order}
                   onChange={(e) => setFormData(prev => ({ ...prev, order: parseInt(e.target.value) }))}
                   min="1"
                   required
-                  className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Estimated Hours</label>
+                <label className="block text-sm font-medium text-och-steel mb-2">Estimated Hours</label>
                 <input
                   type="number"
                   step="0.5"
                   value={formData.estimated_hours || ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, estimated_hours: e.target.value ? parseFloat(e.target.value) : undefined }))}
                   min="0"
-                  className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Content URL</label>
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-och-steel mb-2">Content URL</label>
               <input
                 type="url"
                 value={formData.content_url || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, content_url: e.target.value || undefined }))}
                 placeholder="https://..."
-                className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-defender focus:outline-none"
               />
             </div>
+          </div>
+        </Card>
 
-            <div className="flex gap-4 pt-6 border-t border-och-steel/20">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                className="flex-1 border-och-steel/50 text-och-steel hover:bg-och-steel/10"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="defender"
-                disabled={isLoading}
-                className="flex-1"
-              >
-                {isLoading ? 'Creating...' : 'Create Module'}
-              </Button>
-            </div>
-          </form>
+        <div className="flex justify-end gap-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="defender"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Creating...' : 'Create Module'}
+          </Button>
         </div>
-      </Card>
+      </form>
     </div>
   )
 }

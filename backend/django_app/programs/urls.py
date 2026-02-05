@@ -16,7 +16,8 @@ from .api_views import (
     CohortViewSet as APICohortViewSet,
     ModuleViewSet as APIModuleViewSet,
     MilestoneViewSet as APIMilestoneViewSet,
-    SpecializationViewSet as APISpecializationViewSet
+    SpecializationViewSet as APISpecializationViewSet,
+    CalendarTemplateViewSet as APICalendarTemplateViewSet
 )
 from .views.calendar_views import CalendarEventViewSet
 from .views.director_views import DirectorCohortViewSet
@@ -45,6 +46,7 @@ router.register(r'tracks', TrackViewSet, basename='track')
 router.register(r'milestones', APIMilestoneViewSet, basename='milestone')
 router.register(r'modules', APIModuleViewSet, basename='module')
 router.register(r'specializations', APISpecializationViewSet, basename='specialization')
+router.register(r'calendar-templates', APICalendarTemplateViewSet, basename='calendar-template')
 router.register(r'cohorts', APICohortViewSet, basename='cohort')
 router.register(r'rules', ProgramRuleViewSet, basename='rule')
 router.register(r'certificates', CertificateViewSet, basename='certificate')

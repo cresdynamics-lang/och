@@ -66,6 +66,7 @@ class MilestoneSerializer(serializers.ModelSerializer):
 
 class TrackSerializer(serializers.ModelSerializer):
     program_name = serializers.CharField(source='program.name', read_only=True)
+    program = serializers.SerializerMethodField()
     milestones = MilestoneSerializer(many=True, read_only=True)
     specializations = serializers.SerializerMethodField()
     
@@ -73,6 +74,15 @@ class TrackSerializer(serializers.ModelSerializer):
         model = Track
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_program(self, obj):
+        """Get program data for this track."""
+        if obj.program:
+            return {
+                'id': str(obj.program.id),
+                'name': obj.program.name
+            }
+        return None
     
     def validate(self, data):
         """Validate track data."""

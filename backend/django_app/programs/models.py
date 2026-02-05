@@ -202,6 +202,7 @@ class Cohort(models.Model):
         null=True,
         blank=True,
         related_name='coordinated_cohorts',
+        to_field='uuid_id',
         help_text='Program coordinator for this cohort'
     )
     calendar_id = models.UUIDField(null=True, blank=True)
@@ -476,4 +477,23 @@ class MentorshipCycle(models.Model):
 
     def __str__(self):
         return f"Mentorship Cycle - {self.cohort.name} ({self.program_type})"
+
+
+class CalendarTemplate(models.Model):
+    """Calendar template for cohorts."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name='calendar_templates')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='calendar_templates')
+    name = models.CharField(max_length=200)
+    timezone = models.CharField(max_length=50, default='Africa/Nairobi')
+    events = models.JSONField(default=list, help_text='List of template events with type, title, offset_days')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'calendar_templates'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - {self.track.name}"
 

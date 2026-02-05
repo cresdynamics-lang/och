@@ -19,7 +19,7 @@ export default function MilestonesPage() {
 
   const fetchMilestones = async () => {
     try {
-      const data = await apiGateway.get('/milestones')
+      const data = await apiGateway.get('/milestones/')
       setMilestones(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch milestones:', error)
@@ -173,7 +173,7 @@ function CreateMilestoneModal({ onClose, onSuccess }: CreateMilestoneModalProps)
 
   const fetchTracks = async () => {
     try {
-      const data = await apiGateway.get('/tracks')
+      const data = await apiGateway.get('/tracks/')
       console.log('Tracks API response:', data)
       // Handle different response formats
       const tracksArray = data.results || data.data || data || []
@@ -189,7 +189,7 @@ function CreateMilestoneModal({ onClose, onSuccess }: CreateMilestoneModalProps)
     setIsLoading(true)
 
     try {
-      await apiGateway.post('/milestones', formData)
+      await apiGateway.post('/milestones/', formData)
       onSuccess()
     } catch (error) {
       console.error('Failed to create milestone:', error)

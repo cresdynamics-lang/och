@@ -6,6 +6,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { CohortResponse } from '@/types/api'
+import { apiGateway } from '@/services/apiGateway'
 import Link from 'next/link'
 
 export default function CohortsPage() {
@@ -18,11 +19,8 @@ export default function CohortsPage() {
 
   const fetchCohorts = async () => {
     try {
-      const response = await fetch('/api/cohorts')
-      if (response.ok) {
-        const data = await response.json()
-        setCohorts(data.data || [])
-      }
+      const data = await apiGateway.get('/cohorts/')
+      setCohorts(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch cohorts:', error)
     } finally {
