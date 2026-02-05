@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { Input } from '@/components/ui/Input'
+import { Label } from '@/components/ui/Label'
+import { Textarea } from '@/components/ui/Textarea'
+import { Select } from '@/components/ui/Select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { 
   Plus, 
@@ -226,7 +226,7 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
+          <div className="pt-6 p-6">
             <div className="flex items-center space-x-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
               <span>Error: {error}</span>
@@ -234,7 +234,7 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
             <Button onClick={loadCohorts} className="mt-4 w-full">
               Retry
             </Button>
-          </CardContent>
+          </div>
         </Card>
       </div>
     )
@@ -274,17 +274,12 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
                 </div>
                 <div>
                   <Label htmlFor="track">Track</Label>
-                  <Select value={newCohort.track_slug} onValueChange={(value) => setNewCohort({...newCohort, track_slug: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trackOptions.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
+                  <Select value={newCohort.track_slug} onChange={(e) => setNewCohort({...newCohort, track_slug: e.target.value})}>
+                    {trackOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               </div>
@@ -357,11 +352,11 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
           
           return (
             <Card key={cohort.cohort_id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
                     <div>
-                      <CardTitle className="text-xl">{cohort.name}</CardTitle>
+                      <h3 className="text-xl font-semibold">{cohort.name}</h3>
                       <p className="text-sm text-muted-foreground capitalize">
                         {cohort.track_slug} Track
                       </p>
@@ -374,8 +369,8 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
                     </Badge>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div className="px-6 pb-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
                   <div className="flex items-center space-x-3">
                     <Users className="h-8 w-8 text-blue-600" />
@@ -508,7 +503,7 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
                     View Details
                   </Button>
                 </div>
-              </CardContent>
+              </div>
             </Card>
           )
         })}
@@ -516,7 +511,7 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
 
       {cohorts.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <div className="pt-6 p-6">
             <div className="text-center py-8">
               <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">No Cohorts Yet</h3>
@@ -528,7 +523,7 @@ export default function CohortManagement({ sponsorSlug }: CohortManagementProps)
                 Create First Cohort
               </Button>
             </div>
-          </CardContent>
+          </div>
         </Card>
       )}
     </div>
