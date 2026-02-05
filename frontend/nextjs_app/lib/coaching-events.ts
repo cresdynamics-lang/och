@@ -45,3 +45,9 @@ export function emitHabitLogCreated(data: {
 }) {
   console.log('Habit log created:', data)
 }
+
+export function emitCoachingEvent(eventType: string, data: Record<string, any>) {
+  console.log('Coaching event:', eventType, data)
+  // TODO: Integrate with coaching system
+  // This is a generic event emitter that can be used for various coaching events
+}

@@ -31,3 +31,5 @@ export const Card = ({ children, className, glow = false, gradient = 'none', onC
   )
 }
 
+// Export sub-components from card-enhanced
+export { CardHeader, CardContent, CardTitle, CardFooter } from './card-enhanced'
