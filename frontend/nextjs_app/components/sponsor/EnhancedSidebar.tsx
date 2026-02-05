@@ -33,10 +33,10 @@ export function EnhancedSidebar() {
       {/* Bulk Employee Invite */}
       <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-4 md:p-6">
         <h3 className="text-base md:text-lg font-bold text-white mb-3 md:mb-4 flex items-center gap-2">
-          📧 Bulk Employee Invite
+          👥 Bulk Student Invite
         </h3>
         <p className="text-xs md:text-sm text-och-steel mb-3 md:mb-4">
-          Invite multiple employees to enroll using sponsor codes
+          Invite multiple sponsored students to enroll using sponsor codes
         </p>
         <button 
           onClick={() => window.location.href = '/dashboard/sponsor/employees'}

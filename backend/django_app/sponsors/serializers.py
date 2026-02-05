@@ -2,7 +2,22 @@
 Serializers for the Sponsors app.
 """
 from rest_framework import serializers
-from .models import Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics
+from .models import Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics, SponsorCohortAssignment
+
+
+class SponsorCohortAssignmentSerializer(serializers.ModelSerializer):
+    """Serializer for SponsorCohortAssignment model"""
+    sponsor_name = serializers.CharField(source='sponsor.get_full_name', read_only=True)
+    sponsor_email = serializers.EmailField(source='sponsor.email', read_only=True)
+    cohort_name = serializers.CharField(source='cohort.name', read_only=True)
+
+    class Meta:
+        model = SponsorCohortAssignment
+        fields = [
+            'id', 'sponsor', 'sponsor_name', 'sponsor_email', 'cohort', 'cohort_name',
+            'role', 'seat_allocation', 'start_date', 'end_date', 'funding_agreement_id',
+            'created_at', 'updated_at'
+        ]
 
 
 class SponsorSerializer(serializers.ModelSerializer):

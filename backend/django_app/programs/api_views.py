@@ -2,7 +2,7 @@
 API Views for Cohorts, Modules, Milestones, and Specializations.
 """
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
@@ -81,6 +81,92 @@ class CohortViewSet(viewsets.ModelViewSet):
             'data': serializer.data,
             'message': 'Cohort activated successfully'
         })
+    
+    @action(detail=True, methods=['get', 'post'])
+    def sponsors(self, request, pk=None):
+        """Get or assign sponsors for cohort."""
+        cohort = self.get_object()
+        
+        if request.method == 'GET':
+            # Get sponsors assigned to this cohort
+            return Response({
+                'success': True,
+                'data': [],
+                'message': 'Sponsors retrieved successfully'
+            })
+        
+        elif request.method == 'POST':
+            # Assign sponsor to cohort
+            sponsor_id = request.data.get('sponsor_id')
+            seat_allocation = request.data.get('seat_allocation', 0)
+            role = request.data.get('role', 'funding')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+            funding_agreement_id = request.data.get('funding_agreement_id')
+            
+            if not sponsor_id:
+                return Response({
+                    'success': False,
+                    'error': 'sponsor_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not seat_allocation or seat_allocation <= 0:
+                return Response({
+                    'success': False,
+                    'error': 'seat_allocation must be greater than 0'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Save to database
+            try:
+                from sponsors.models import SponsorCohortAssignment
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                
+                # Try to find user by ID first, then by uuid_id if that fails
+                try:
+                    sponsor_user = User.objects.get(id=sponsor_id)
+                except (User.DoesNotExist, ValueError):
+                    # If ID lookup fails, try uuid_id
+                    sponsor_user = User.objects.get(uuid_id=sponsor_id)
+                
+                assignment, created = SponsorCohortAssignment.objects.get_or_create(
+                    sponsor_uuid_id=sponsor_user,
+                    cohort_id=cohort,
+                    defaults={
+                        'role': role,
+                        'seat_allocation': seat_allocation,
+                        'start_date': start_date,
+                        'end_date': end_date,
+                        'funding_agreement_id': funding_agreement_id
+                    }
+                )
+                
+                return Response({
+                    'success': True,
+                    'data': {
+                        'assignment_id': str(assignment.id),
+                        'cohort_id': str(cohort.id),
+                        'sponsor_id': str(sponsor_user.id),
+                        'sponsor_uuid_id': str(sponsor_user.uuid_id),
+                        'seat_allocation': assignment.seat_allocation,
+                        'role': assignment.role,
+                        'start_date': assignment.start_date,
+                        'end_date': assignment.end_date,
+                        'funding_agreement_id': assignment.funding_agreement_id
+                    },
+                    'message': 'Sponsor assigned successfully'
+                }, status=status.HTTP_201_CREATED)
+                
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Sponsor user not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'error': f'Failed to assign sponsor: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ModuleViewSet(viewsets.ModelViewSet):
@@ -279,3 +365,53 @@ class CalendarTemplateViewSet(viewsets.ModelViewSet):
             'events': t.events
         } for t in queryset]
         return Response({'success': True, 'data': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sponsor_assignments(request):
+    """Get all sponsor assignments across cohorts."""
+    try:
+        from sponsors.models import SponsorCohortAssignment
+        
+        assignments = SponsorCohortAssignment.objects.all().select_related('sponsor_uuid_id', 'cohort_id__track')
+        
+        data = []
+        for assignment in assignments:
+            data.append({
+                'id': str(assignment.id),
+                'sponsor_uuid_id': str(assignment.sponsor_uuid_id.uuid_id),
+                'sponsor': {
+                    'name': f"{assignment.sponsor_uuid_id.first_name} {assignment.sponsor_uuid_id.last_name}".strip(),
+                    'email': assignment.sponsor_uuid_id.email,
+                    'organization': None  # Add if needed
+                },
+                'cohort': {
+                    'id': str(assignment.cohort_id.id),
+                    'name': assignment.cohort_id.name,
+                    'track': {
+                        'name': assignment.cohort_id.track.name if assignment.cohort_id.track else 'Unknown Track'
+                    }
+                },
+                'role': assignment.role,
+                'seat_allocation': assignment.seat_allocation,
+                'start_date': assignment.start_date.isoformat() if assignment.start_date else None,
+                'end_date': assignment.end_date.isoformat() if assignment.end_date else None,
+                'funding_agreement_id': assignment.funding_agreement_id,
+                'created_at': assignment.created_at.isoformat(),
+                'updated_at': assignment.updated_at.isoformat()
+            })
+        
+        return Response({
+            'success': True,
+            'data': data,
+            'count': len(data),
+            'message': 'Sponsor assignments retrieved successfully'
+        })
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': f'Failed to retrieve sponsor assignments: {str(e)}',
+            'data': []
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

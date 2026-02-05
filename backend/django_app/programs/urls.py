@@ -17,7 +17,8 @@ from .api_views import (
     ModuleViewSet as APIModuleViewSet,
     MilestoneViewSet as APIMilestoneViewSet,
     SpecializationViewSet as APISpecializationViewSet,
-    CalendarTemplateViewSet as APICalendarTemplateViewSet
+    CalendarTemplateViewSet as APICalendarTemplateViewSet,
+    sponsor_assignments
 )
 from .views.calendar_views import CalendarEventViewSet
 from .views.director_views import DirectorCohortViewSet
@@ -77,6 +78,9 @@ urlpatterns = [
     path('director/dashboard/summary/', director_dashboard_summary, name='director-dashboard-summary'),
     path('director/dashboard/cohorts/', director_cohorts_list, name='director-cohorts-list'),
     path('director/dashboard/cohorts/<uuid:cohort_id>/', director_cohort_detail, name='director-cohort-detail'),
+    
+    # Sponsor assignments endpoint
+    path('sponsor-assignments/', sponsor_assignments, name='sponsor-assignments'),
     
     # All other routes (includes /programs/ and /programs/{id}/ for ProgramViewSet)
     path('', include(router.urls)),

@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { programsClient, type Enrollment } from '@/services/programsClient'
+import { apiGateway } from '@/services/apiGateway'
 import Link from 'next/link'
 import clsx from 'clsx'
 
@@ -58,12 +59,19 @@ export default function EnrollmentPage() {
       setError(null)
       try {
         console.log('Loading cohorts...')
-        // Fetch all cohorts
-        const cohortsData = await programsClient.getCohorts({ page: 1, pageSize: 1000 })
+        // Use the same API call as the cohorts page
+        const cohortsData = await apiGateway.get('/cohorts/')
         console.log('Cohorts response:', cohortsData)
-        const cohortsList = Array.isArray(cohortsData) ? cohortsData : (cohortsData?.results || [])
+        const cohortsList = cohortsData?.results || cohortsData?.data || cohortsData || []
         console.log('Cohorts list:', cohortsList)
+        console.log('Cohorts count:', cohortsList.length)
         setCohorts(cohortsList)
+
+        if (cohortsList.length === 0) {
+          console.warn('No cohorts found - this might be an API issue')
+          setError('No cohorts found. Please check if cohorts exist in the system.')
+          return
+        }
 
         // Fetch enrollments and waitlist for each cohort
         const allPending: PendingEnrollment[] = []
@@ -78,7 +86,7 @@ export default function EnrollmentPage() {
               .map((e: Enrollment) => ({
                 ...e,
                 cohort_name: cohort.name,
-                track_name: cohort.track_name || cohort.track,
+                track_name: cohort.track_name || cohort.track?.name,
               }))
             allPending.push(...pending)
 
@@ -531,8 +539,8 @@ export default function EnrollmentPage() {
                 onClick={async () => {
                   setIsLoading(true)
                   try {
-                    const cohortsData = await programsClient.getCohorts({ page: 1, pageSize: 1000 })
-                    const cohortsList = Array.isArray(cohortsData) ? cohortsData : (cohortsData?.results || [])
+                    const cohortsData = await apiGateway.get('/cohorts/')
+                    const cohortsList = cohortsData?.results || cohortsData?.data || cohortsData || []
                     setCohorts(cohortsList)
 
                     const allPending: PendingEnrollment[] = []
@@ -546,7 +554,7 @@ export default function EnrollmentPage() {
                           .map((e: Enrollment) => ({
                             ...e,
                             cohort_name: cohort.name,
-                            track_name: cohort.track_name || cohort.track,
+                            track_name: cohort.track_name || cohort.track?.name,
                           }))
                         allPending.push(...pending)
 
