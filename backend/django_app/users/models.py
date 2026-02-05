@@ -572,3 +572,43 @@ class Entitlement(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.feature}"
+
+
+class SponsorStudentLink(models.Model):
+    """
+    Links sponsors to students they can enroll in cohorts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sponsored_students',
+        to_field='uuid_id'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sponsor_links',
+        to_field='uuid_id'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_sponsor_links',
+        to_field='uuid_id'
+    )
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        db_table = 'sponsor_student_links'
+        unique_together = ['sponsor', 'student']
+        indexes = [
+            models.Index(fields=['sponsor', 'is_active']),
+            models.Index(fields=['student', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.sponsor.email} -> {self.student.email}"

@@ -10,7 +10,7 @@ import { getPrimaryRole } from '@/utils/rbac'
 import { 
   LayoutDashboard, Target, CheckCircle, Handshake, BookOpen, TrendingUp, 
   Calendar, Settings, Route, Plus, Users, Clock, RefreshCw, Ticket, 
-  Shuffle, Star, RotateCcw, Grid3X3, Rocket, BarChart3, FileText 
+  Shuffle, Star, RotateCcw, Grid3X3, Rocket, BarChart3, FileText, GraduationCap 
 } from 'lucide-react'
 
 // Helper function to get role display name
@@ -50,6 +50,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Programs', href: '/dashboard/director/programs', icon: BookOpen },
       { label: 'Tracks', href: '/dashboard/director/tracks', icon: Route },
+      { label: 'Missions', href: '/dashboard/director/missions', icon: Rocket },
       { label: 'Milestones', href: '/dashboard/director/milestones', icon: CheckCircle },
       { label: 'Modules', href: '/dashboard/director/modules', icon: Grid3X3 },
       { label: 'Specializations', href: '/dashboard/director/specializations', icon: Star },
@@ -63,6 +64,7 @@ const navItems: NavItem[] = [
       { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users },
       { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
       { label: 'Sponsors', href: '/dashboard/director/cohorts/sponsors', icon: Star },
+      { label: 'Students', href: '/dashboard/director/students', icon: GraduationCap },
     ]
   },
   { 
