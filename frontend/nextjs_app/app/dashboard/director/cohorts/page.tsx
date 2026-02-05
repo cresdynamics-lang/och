@@ -8,10 +8,12 @@ import { Card } from '@/components/ui/card'
 import { CohortResponse } from '@/types/api'
 import { apiGateway } from '@/services/apiGateway'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export default function CohortsPage() {
   const [cohorts, setCohorts] = useState<CohortResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     fetchCohorts()
@@ -120,6 +122,7 @@ export default function CohortsPage() {
                         variant="outline"
                         size="sm"
                         className="flex-1 text-xs border-och-defender/50 text-och-defender hover:bg-och-defender hover:text-white"
+                        onClick={() => router.push(`/dashboard/director/cohorts/${cohort.id}`)}
                       >
                         View Details
                       </Button>
@@ -127,6 +130,7 @@ export default function CohortsPage() {
                         variant="outline"
                         size="sm"
                         className="px-2 border-och-steel/50 text-och-steel hover:border-och-mint hover:text-och-mint"
+                        onClick={() => router.push(`/dashboard/director/cohorts/${cohort.id}/edit`)}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />

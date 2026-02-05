@@ -1,5 +1,7 @@
 'use client'
 
+import { CohortsList } from '@/components/sponsor/CohortsList'
+
 export default function SponsorCohortsPage() {
   return (
     <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:pl-0 lg:pr-6 xl:pr-8">
@@ -10,9 +12,7 @@ export default function SponsorCohortsPage() {
         </p>
       </div>
       
-      <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6">
-        <p className="text-och-steel">Cohorts management coming soon...</p>
-      </div>
+      <CohortsList />
     </div>
   )
 }

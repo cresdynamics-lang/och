@@ -42,6 +42,8 @@ export default function CalendarTemplatePage() {
   const [templates, setTemplates] = useState<CalendarTemplate[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [showEventsModal, setShowEventsModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<CalendarTemplate | null>(null)
   const [formData, setFormData] = useState<CalendarTemplate>({
     program_id: '',
     track_id: '',
@@ -161,8 +163,21 @@ export default function CalendarTemplatePage() {
                 <div className="p-6">
                   <h3 className="text-lg font-semibold text-white mb-2">{template.name}</h3>
                   <p className="text-sm text-och-mint mb-4">{template.timezone}</p>
-                  <div className="text-sm text-och-steel">
+                  <div className="text-sm text-och-steel mb-4">
                     <p>Events: {template.events.length}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-xs border-och-defender/50 text-och-defender hover:bg-och-defender hover:text-white"
+                      onClick={() => {
+                        setSelectedTemplate(template)
+                        setShowEventsModal(true)
+                      }}
+                    >
+                      View Events
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -337,6 +352,48 @@ export default function CalendarTemplatePage() {
                 </div>
               </form>
             </Card>
+          )}
+
+          {/* Events Modal */}
+          {showEventsModal && selectedTemplate && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="border-och-steel/20 bg-och-midnight/95 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-white">Events in {selectedTemplate.name}</h2>
+                    <button
+                      onClick={() => {
+                        setShowEventsModal(false)
+                        setSelectedTemplate(null)
+                      }}
+                      className="text-och-steel hover:text-white"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {selectedTemplate.events.length === 0 ? (
+                    <p className="text-och-steel text-center py-8">No events in this template</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedTemplate.events.map((event, index) => (
+                        <div key={index} className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-white font-medium">{event.title}</h3>
+                            <span className="text-xs bg-och-defender/20 text-och-defender px-2 py-1 rounded">
+                              {event.type}
+                            </span>
+                          </div>
+                          <p className="text-och-steel text-sm">Day {event.offset_days}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
           )}
         </div>
       </DirectorLayout>

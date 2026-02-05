@@ -51,6 +51,9 @@ export default function SeatAllocationPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedCohort, setSelectedCohort] = useState<string | null>(null)
+  const [enrolledStudents, setEnrolledStudents] = useState<any[]>([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
+  const [selectedCohortForSeatPool, setSelectedCohortForSeatPool] = useState<string | null>(null)
   const [seatPoolForm, setSeatPoolForm] = useState<SeatPoolData>({
     paid: 0,
     scholarship: 0,
@@ -121,19 +124,41 @@ export default function SeatAllocationPage() {
 
   // Handle seat pool modal
   const openSeatPoolModal = (cohort: CohortSeatData) => {
-    setSelectedCohort(cohort.id)
+    setSelectedCohortForSeatPool(cohort.id)
     setSeatPoolForm(cohort.seat_pool || { paid: 0, scholarship: 0, sponsored: 0 })
     setSeatPoolError(null)
     setSeatPoolSuccess(null)
   }
 
+  // Handle cohort selection to show enrolled students
+  const selectCohort = async (cohort: CohortSeatData) => {
+    if (selectedCohort === cohort.id) {
+      // Deselect if clicking the same cohort
+      setSelectedCohort(null)
+      setEnrolledStudents([])
+      return
+    }
+    
+    setSelectedCohort(cohort.id)
+    setLoadingStudents(true)
+    try {
+      const data = await programsClient.getCohortEnrollments(cohort.id)
+      setEnrolledStudents(Array.isArray(data) ? data : (data?.results || []))
+    } catch (err) {
+      console.error('Failed to load enrolled students:', err)
+      setEnrolledStudents([])
+    } finally {
+      setLoadingStudents(false)
+    }
+  }
+
   const handleUpdateSeatPool = async () => {
-    if (!selectedCohort) return
+    if (!selectedCohortForSeatPool) return
 
     setSeatPoolError(null)
     setSeatPoolSuccess(null)
 
-    const cohort = cohorts.find((c) => c.id === selectedCohort)
+    const cohort = cohorts.find((c) => c.id === selectedCohortForSeatPool)
     if (!cohort) return
 
     // Validate total doesn't exceed seat cap
@@ -150,7 +175,7 @@ export default function SeatAllocationPage() {
 
     setIsProcessing(true)
     try {
-      await programsClient.manageSeatPool(selectedCohort, seatPoolForm)
+      await programsClient.manageSeatPool(selectedCohortForSeatPool, seatPoolForm)
       setSeatPoolSuccess('Seat pool updated successfully')
 
       // Reload cohorts to sync with backend
@@ -161,7 +186,7 @@ export default function SeatAllocationPage() {
 
       // Close modal after 2 seconds
       setTimeout(() => {
-        setSelectedCohort(null)
+        setSelectedCohortForSeatPool(null)
         setSeatPoolSuccess(null)
       }, 2000)
     } catch (err: any) {
@@ -348,7 +373,10 @@ export default function SeatAllocationPage() {
                         return (
                           <tr
                             key={cohort.id}
-                            className="border-b border-och-steel/10 hover:bg-och-midnight/50 transition-colors"
+                            className={`border-b border-och-steel/10 hover:bg-och-midnight/50 transition-colors cursor-pointer ${
+                              selectedCohort === cohort.id ? 'bg-och-defender/10 border-och-defender/30' : ''
+                            }`}
+                            onClick={() => selectCohort(cohort)}
                           >
                             <td className="py-3 px-4">
                               <div>
@@ -424,14 +452,30 @@ export default function SeatAllocationPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openSeatPoolModal(cohort)}
-                                className="text-xs"
-                              >
-                                Manage
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openSeatPoolModal(cohort)
+                                  }}
+                                  className="text-xs"
+                                >
+                                  Manage
+                                </Button>
+                                <Button
+                                  variant={selectedCohort === cohort.id ? 'defender' : 'outline'}
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    selectCohort(cohort)
+                                  }}
+                                  className="text-xs"
+                                >
+                                  {selectedCohort === cohort.id ? 'Hide Students' : 'Show Students'}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -442,27 +486,133 @@ export default function SeatAllocationPage() {
               )}
             </div>
           </Card>
+
+          {/* Enrolled Students Section */}
+          {selectedCohort && (
+            <Card className="mt-6">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">
+                      Enrolled Students - {cohorts.find((c) => c.id === selectedCohort)?.name}
+                    </h2>
+                    <p className="text-sm text-och-steel mt-1">
+                      {cohorts.find((c) => c.id === selectedCohort)?.track_name} • {enrolledStudents.length} students enrolled
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCohort(null)
+                      setEnrolledStudents([])
+                    }}
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                {loadingStudents ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-defender mx-auto mb-4"></div>
+                    <p className="text-och-steel">Loading students...</p>
+                  </div>
+                ) : enrolledStudents.length === 0 ? (
+                  <div className="text-center py-8 text-och-steel">
+                    <p>No students enrolled in this cohort.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-och-steel/20">
+                          <th className="text-left py-3 px-4 text-sm text-och-steel">Student</th>
+                          <th className="text-left py-3 px-4 text-sm text-och-steel">Email</th>
+                          <th className="text-center py-3 px-4 text-sm text-och-steel">Seat Type</th>
+                          <th className="text-center py-3 px-4 text-sm text-och-steel">Status</th>
+                          <th className="text-center py-3 px-4 text-sm text-och-steel">Joined</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {enrolledStudents.map((enrollment) => (
+                          <tr
+                            key={enrollment.id}
+                            className="border-b border-och-steel/10 hover:bg-och-midnight/50 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="text-white font-medium">
+                                  {enrollment.user?.first_name} {enrollment.user?.last_name}
+                                </p>
+                                <p className="text-xs text-och-steel">
+                                  ID: {enrollment.user?.id}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-sm text-och-steel">
+                              {enrollment.user?.email}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <Badge
+                                variant={
+                                  enrollment.seat_type === 'paid'
+                                    ? 'mint'
+                                    : enrollment.seat_type === 'scholarship'
+                                    ? 'gold'
+                                    : 'defender'
+                                }
+                              >
+                                {enrollment.seat_type}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <Badge
+                                variant={
+                                  enrollment.status === 'active'
+                                    ? 'mint'
+                                    : enrollment.status === 'completed'
+                                    ? 'defender'
+                                    : 'orange'
+                                }
+                              >
+                                {enrollment.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-center text-sm text-och-steel">
+                              {enrollment.joined_at
+                                ? new Date(enrollment.joined_at).toLocaleDateString()
+                                : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Manage Seat Pool Modal */}
-        {selectedCohort && (
+        {selectedCohortForSeatPool && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
             <div className="w-full max-w-md bg-och-midnight border border-och-steel/20 rounded-xl shadow-xl">
               <div className="p-6 border-b border-och-steel/20 flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-bold text-white">Manage Seat Pool</h3>
                   <p className="text-sm text-och-steel mt-1">
-                    {cohorts.find((c) => c.id === selectedCohort)?.name}
+                    {cohorts.find((c) => c.id === selectedCohortForSeatPool)?.name}
                   </p>
                   <p className="text-xs text-och-steel mt-0.5">
-                    Total capacity: {cohorts.find((c) => c.id === selectedCohort)?.seat_cap} seats
+                    Total capacity: {cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap} seats
                   </p>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setSelectedCohort(null)
+                    setSelectedCohortForSeatPool(null)
                     setSeatPoolError(null)
                     setSeatPoolSuccess(null)
                   }}
@@ -490,7 +640,7 @@ export default function SeatAllocationPage() {
                     <input
                       type="number"
                       min="0"
-                      max={cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0}
+                      max={cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0}
                       value={seatPoolForm.paid}
                       onChange={(e) => {
                         const value = parseInt(e.target.value) || 0
@@ -506,7 +656,7 @@ export default function SeatAllocationPage() {
                     <input
                       type="number"
                       min="0"
-                      max={cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0}
+                      max={cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0}
                       value={seatPoolForm.scholarship}
                       onChange={(e) => {
                         const value = parseInt(e.target.value) || 0
@@ -522,7 +672,7 @@ export default function SeatAllocationPage() {
                     <input
                       type="number"
                       min="0"
-                      max={cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0}
+                      max={cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0}
                       value={seatPoolForm.sponsored}
                       onChange={(e) => {
                         const value = parseInt(e.target.value) || 0
@@ -539,22 +689,22 @@ export default function SeatAllocationPage() {
                       <span
                         className={`text-lg font-bold ${
                           seatPoolForm.paid + seatPoolForm.scholarship + seatPoolForm.sponsored >
-                          (cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0)
+                          (cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0)
                             ? 'text-och-orange'
                             : seatPoolForm.paid + seatPoolForm.scholarship + seatPoolForm.sponsored ===
-                              (cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0)
+                              (cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0)
                             ? 'text-och-mint'
                             : 'text-white'
                         }`}
                       >
                         {seatPoolForm.paid + seatPoolForm.scholarship + seatPoolForm.sponsored} /{' '}
-                        {cohorts.find((c) => c.id === selectedCohort)?.seat_cap}
+                        {cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-och-steel">Available</span>
                       <span className="text-sm font-medium text-white">
-                        {(cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0) -
+                        {(cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0) -
                           (seatPoolForm.paid + seatPoolForm.scholarship + seatPoolForm.sponsored)}{' '}
                         seats
                       </span>
@@ -567,7 +717,7 @@ export default function SeatAllocationPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setSelectedCohort(null)
+                      setSelectedCohortForSeatPool(null)
                       setSeatPoolError(null)
                       setSeatPoolSuccess(null)
                     }}
@@ -583,7 +733,7 @@ export default function SeatAllocationPage() {
                     disabled={
                       isProcessing ||
                       seatPoolForm.paid + seatPoolForm.scholarship + seatPoolForm.sponsored >
-                        (cohorts.find((c) => c.id === selectedCohort)?.seat_cap || 0) ||
+                        (cohorts.find((c) => c.id === selectedCohortForSeatPool)?.seat_cap || 0) ||
                       seatPoolForm.paid < 0 ||
                       seatPoolForm.scholarship < 0 ||
                       seatPoolForm.sponsored < 0

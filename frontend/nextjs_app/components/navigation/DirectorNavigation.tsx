@@ -62,7 +62,6 @@ const navItems: NavItem[] = [
     children: [
       { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users },
       { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
-      { label: 'Seat Management', href: '/dashboard/director/cohorts/seats', icon: Ticket },
     ]
   },
   { 
@@ -70,7 +69,8 @@ const navItems: NavItem[] = [
     href: '/dashboard/director/enrollment', 
     icon: CheckCircle,
     children: [
-      { label: 'Pending Approvals', href: '/dashboard/director/enrollment', icon: Clock },
+      { label: 'Enrollment', href: '/dashboard/director/enrollment', icon: Clock },
+      { label: 'Seat Management', href: '/dashboard/director/enrollment/seats', icon: Ticket },
       { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw },
     ]
   },

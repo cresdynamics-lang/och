@@ -33,13 +33,13 @@ interface PendingEnrollment extends Enrollment {
 
 export default function EnrollmentPage() {
   const [cohorts, setCohorts] = useState<any[]>([])
+  const [selectedCohort, setSelectedCohort] = useState<string>('all')
   const [pendingEnrollments, setPendingEnrollments] = useState<PendingEnrollment[]>([])
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'pending' | 'waitlist'>('pending')
   const [searchQuery, setSearchQuery] = useState('')
-  const [cohortFilter, setCohortFilter] = useState<string>('all')
   const [selectedEnrollments, setSelectedEnrollments] = useState<Set<string>>(new Set())
   const [selectedWaitlist, setSelectedWaitlist] = useState<Set<string>>(new Set())
   const [isProcessing, setIsProcessing] = useState(false)
@@ -57,9 +57,12 @@ export default function EnrollmentPage() {
       setIsLoading(true)
       setError(null)
       try {
+        console.log('Loading cohorts...')
         // Fetch all cohorts
         const cohortsData = await programsClient.getCohorts({ page: 1, pageSize: 1000 })
+        console.log('Cohorts response:', cohortsData)
         const cohortsList = Array.isArray(cohortsData) ? cohortsData : (cohortsData?.results || [])
+        console.log('Cohorts list:', cohortsList)
         setCohorts(cohortsList)
 
         // Fetch enrollments and waitlist for each cohort
@@ -104,10 +107,10 @@ export default function EnrollmentPage() {
     loadData()
   }, [])
 
-  // Filter data
+  // Filter data by selected cohort
   const filteredPending = useMemo(() => {
     return pendingEnrollments.filter((enrollment) => {
-      if (cohortFilter !== 'all' && enrollment.cohort !== cohortFilter) return false
+      if (selectedCohort !== 'all' && enrollment.cohort !== selectedCohort) return false
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         return (
@@ -119,12 +122,12 @@ export default function EnrollmentPage() {
       }
       return true
     })
-  }, [pendingEnrollments, cohortFilter, searchQuery])
+  }, [pendingEnrollments, selectedCohort, searchQuery])
 
   const filteredWaitlist = useMemo(() => {
     return waitlistEntries
       .filter((entry) => {
-        if (cohortFilter !== 'all' && entry.cohort !== cohortFilter) return false
+        if (selectedCohort !== 'all' && entry.cohort !== selectedCohort) return false
         if (searchQuery) {
           const query = searchQuery.toLowerCase()
           return (
@@ -136,9 +139,34 @@ export default function EnrollmentPage() {
         }
         return true
       })
-      .filter((entry) => entry.active !== false) // Only show active waitlist entries
-      .sort((a, b) => a.position - b.position) // Sort by position
-  }, [waitlistEntries, cohortFilter, searchQuery])
+      .filter((entry) => entry.active !== false)
+      .sort((a, b) => a.position - b.position)
+  }, [waitlistEntries, selectedCohort, searchQuery])
+
+  // Statistics for selected cohort
+  const stats = useMemo(() => {
+    const cohortPending = selectedCohort === 'all' 
+      ? pendingEnrollments 
+      : pendingEnrollments.filter(e => e.cohort === selectedCohort)
+    
+    const cohortWaitlist = selectedCohort === 'all' 
+      ? waitlistEntries 
+      : waitlistEntries.filter(w => w.cohort === selectedCohort)
+    
+    const selectedCohortData = selectedCohort === 'all' 
+      ? null 
+      : cohorts.find(c => c.id === selectedCohort)
+
+    return {
+      totalPending: cohortPending.length,
+      totalWaitlist: cohortWaitlist.length,
+      totalEnrollments: cohortPending.length + cohortWaitlist.length,
+      cohortName: selectedCohortData?.name || 'All Cohorts',
+      seatCap: selectedCohortData?.seat_cap || null,
+      enrolledCount: selectedCohortData?.enrolled_count || null,
+      availableSeats: selectedCohortData ? (selectedCohortData.seat_cap - (selectedCohortData.enrolled_count || 0)) : null
+    }
+  }, [pendingEnrollments, waitlistEntries, selectedCohort, cohorts])
 
   // Paginated data
   const paginatedPending = useMemo(() => {
@@ -155,23 +183,6 @@ export default function EnrollmentPage() {
 
   const totalPendingPages = Math.ceil(filteredPending.length / itemsPerPage)
   const totalWaitlistPages = Math.ceil(filteredWaitlist.length / itemsPerPage)
-
-  // Statistics
-  const stats = useMemo(() => {
-    const totalPending = pendingEnrollments.length
-    const totalWaitlist = waitlistEntries.length
-    const totalEnrollments = pendingEnrollments.length + waitlistEntries.length
-    const cohortsWithPending = new Set(pendingEnrollments.map((e) => e.cohort)).size
-    const cohortsWithWaitlist = new Set(waitlistEntries.map((w) => w.cohort)).size
-
-    return {
-      totalPending,
-      totalWaitlist,
-      totalEnrollments,
-      cohortsWithPending,
-      cohortsWithWaitlist,
-    }
-  }, [pendingEnrollments, waitlistEntries])
 
   // Handle approval
   const handleApproveEnrollment = async (enrollment: PendingEnrollment) => {
@@ -482,11 +493,11 @@ export default function EnrollmentPage() {
   // Reset pagination when filters change
   useEffect(() => {
     setPendingPage(1)
-  }, [searchQuery, cohortFilter, activeTab])
+  }, [searchQuery, selectedCohort, activeTab])
 
   useEffect(() => {
     setWaitlistPage(1)
-  }, [searchQuery, cohortFilter, activeTab])
+  }, [searchQuery, selectedCohort, activeTab])
 
   if (isLoading) {
     return (
@@ -511,8 +522,8 @@ export default function EnrollmentPage() {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h1 className="text-4xl font-bold mb-2 text-och-defender">Enrollment & Placement</h1>
-                <p className="text-och-steel">Approve enrollments, manage waitlists, and handle placements</p>
+                <h1 className="text-4xl font-bold mb-2 text-och-defender">Enrollment Management</h1>
+                <p className="text-och-steel">Manage enrollments, approvals, and waitlists for {stats.cohortName}</p>
               </div>
               <Button
                 variant="outline"
@@ -575,66 +586,83 @@ export default function EnrollmentPage() {
               </Card>
             )}
 
-            {/* Statistics */}
+            {/* Cohort Selection */}
+            <Card className="mb-6">
+              <div className="p-4">
+                <label className="block text-sm font-medium text-white mb-2">Select Cohort</label>
+                <div className="text-xs text-och-steel mb-2">Found {cohorts.length} cohorts</div>
+                {cohorts.length === 0 && !isLoading && (
+                  <div className="text-xs text-och-orange mb-2">No cohorts loaded. Check console for errors.</div>
+                )}
+                <select
+                  value={selectedCohort}
+                  onChange={(e) => {
+                    console.log('Cohort selected:', e.target.value)
+                    setSelectedCohort(e.target.value)
+                    setSelectedEnrollments(new Set())
+                    setSelectedWaitlist(new Set())
+                    setPendingPage(1)
+                    setWaitlistPage(1)
+                  }}
+                  className="w-full max-w-md px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                >
+                  <option value="all">All Cohorts</option>
+                  {cohorts.length === 0 && (
+                    <option value="test">Test Cohort (No data loaded)</option>
+                  )}
+                  {cohorts.map((cohort) => (
+                    <option key={cohort.id} value={cohort.id}>
+                      {cohort.name} ({cohort.track_name || 'No Track'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Card>
+
+            {/* Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <Card>
                 <div className="p-4">
                   <p className="text-och-steel text-sm mb-1">Pending Approvals</p>
                   <p className="text-2xl font-bold text-och-orange">{stats.totalPending}</p>
-                  <p className="text-xs text-och-steel mt-1">{stats.cohortsWithPending} cohort(s)</p>
                 </div>
               </Card>
               <Card>
                 <div className="p-4">
                   <p className="text-och-steel text-sm mb-1">Waitlist Entries</p>
                   <p className="text-2xl font-bold text-och-defender">{stats.totalWaitlist}</p>
-                  <p className="text-xs text-och-steel mt-1">{stats.cohortsWithWaitlist} cohort(s)</p>
                 </div>
               </Card>
+              {stats.seatCap && (
+                <Card>
+                  <div className="p-4">
+                    <p className="text-och-steel text-sm mb-1">Enrolled / Capacity</p>
+                    <p className="text-2xl font-bold text-white">{stats.enrolledCount} / {stats.seatCap}</p>
+                    <p className="text-xs text-och-steel mt-1">
+                      {stats.availableSeats} seats available
+                    </p>
+                  </div>
+                </Card>
+              )}
               <Card>
                 <div className="p-4">
                   <p className="text-och-steel text-sm mb-1">Total Pending</p>
-                  <p className="text-2xl font-bold text-white">{stats.totalEnrollments}</p>
-                </div>
-              </Card>
-              <Card>
-                <div className="p-4">
-                  <p className="text-och-steel text-sm mb-1">Total Cohorts</p>
-                  <p className="text-2xl font-bold text-och-mint">{cohorts.length}</p>
+                  <p className="text-2xl font-bold text-och-mint">{stats.totalEnrollments}</p>
                 </div>
               </Card>
             </div>
 
-            {/* Filters */}
+            {/* Search */}
             <Card className="mb-6">
               <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">Search</label>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search by email, name, cohort, or ID..."
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white mb-2">Filter by Cohort</label>
-                    <select
-                      value={cohortFilter}
-                      onChange={(e) => setCohortFilter(e.target.value)}
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
-                    >
-                      <option value="all">All Cohorts</option>
-                      {cohorts.map((cohort) => (
-                        <option key={cohort.id} value={cohort.id}>
-                          {cohort.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <label className="block text-sm font-medium text-white mb-2">Search</label>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by email, name, or ID..."
+                  className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                />
               </div>
             </Card>
           </div>
