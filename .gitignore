@@ -10,7 +10,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python lib directories
+backend/*/lib/
+# Allow frontend lib directories
+!frontend/*/lib/
 lib64/
 parts/Curriculum & Missions
 ▼

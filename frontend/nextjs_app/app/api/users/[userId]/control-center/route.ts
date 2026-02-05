@@ -34,6 +34,7 @@ export async function GET(
     const summary = await getControlCenterSummary(userId);
 
     const response: ControlCenterData = {
+      userId,
       next_actions,
       notifications,
       summary

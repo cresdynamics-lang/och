@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { RouteGuard } from '@/components/auth/RouteGuard'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
 import { apiGateway } from '@/services/apiGateway'
 
 interface Program {
