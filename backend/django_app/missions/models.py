@@ -1,291 +1,137 @@
 """
-Missions MXP models - Mission submissions with AI and mentor review.
+Missions models for the director dashboard
 """
 import uuid
 from django.db import models
+from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.utils import timezone
-from users.models import User
+
+User = get_user_model()
 
 
 class Mission(models.Model):
-    """Mission template - MXP Core Model."""
-    TRACK_CHOICES = [
-        ('defender', 'Defender'),
-        ('offensive', 'Offensive'),
-        ('grc', 'GRC'),
-        ('innovation', 'Innovation'),
-        ('leadership', 'Leadership'),
-    ]
-    
-    TIER_CHOICES = [
-        ('beginner', 'Beginner'),
-        ('intermediate', 'Intermediate'),
-        ('advanced', 'Advanced'),
-        ('mastery', 'Mastery'),
-        ('capstone', 'Capstone'),
-    ]
+    """Mission model for curriculum assignments"""
     
     DIFFICULTY_CHOICES = [
-        ('novice', 'Novice'),
+        (1, 'Beginner'),
+        (2, 'Intermediate'), 
+        (3, 'Advanced'),
+        (4, 'Expert'),
+        (5, 'Master'),
+    ]
+    
+    MISSION_TYPE_CHOICES = [
         ('beginner', 'Beginner'),
         ('intermediate', 'Intermediate'),
         ('advanced', 'Advanced'),
-        ('elite', 'Elite'),
-    ]
-    
-    TYPE_CHOICES = [
-        ('lab', 'Lab'),
-        ('scenario', 'Scenario'),
-        ('project', 'Project'),
         ('capstone', 'Capstone'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code = models.CharField(max_length=50, unique=True, db_index=True, help_text='Mission code like "SIEM-03"')
+    track_id = models.CharField(max_length=50, blank=True, null=True, help_text='Track identifier like SOC_DEFENSE')
+    module_id = models.UUIDField(blank=True, null=True, help_text='UUID of curriculum module')
     title = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    story = models.TextField(blank=True, help_text='Narrative context for the mission')
-    objectives = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='Array of mission objectives'
-    )
-    subtasks = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='Array of subtasks with dependencies and evidence_schema'
-    )
-    track = models.CharField(
-        max_length=20,
-        choices=TRACK_CHOICES,
-        db_index=True,
-        help_text='Track: defender, offensive, grc, innovation, leadership'
-    )
-    tier = models.CharField(
-        max_length=20,
-        choices=TIER_CHOICES,
-        db_index=True,
-        help_text='Tier: beginner, intermediate, advanced, mastery, capstone'
-    )
-    difficulty = models.CharField(
-        max_length=20,
-        choices=DIFFICULTY_CHOICES,
-        db_index=True
-    )
-    type = models.CharField(
-        max_length=20,
-        choices=TYPE_CHOICES,
-        default='lab',
-        db_index=True
-    )
-    track_id = models.UUIDField(null=True, blank=True, db_index=True)
-    track_key = models.CharField(max_length=50, blank=True, db_index=True, help_text='Track key like "soc_analyst"')
-    estimated_duration_minutes = models.IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(1)],
-        help_text='Estimated minutes to complete'
-    )
-    est_hours = models.IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(1)],
-        help_text='Estimated hours to complete (legacy)'
-    )
-    requires_mentor_review = models.BooleanField(
-        default=False,
-        help_text='Requires premium mentor review'
-    )
-    recipe_recommendations = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='Array of recipe IDs for micro-skills'
-    )
-    success_criteria = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text='Rubric criteria for scoring'
-    )
-    competencies = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='["SIEM", "Alerting", "IR"]'
-    )
-    requirements = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text='Mission requirements template, file types, etc.'
-    )
-    is_active = models.BooleanField(default=True, db_index=True)
+    description = models.TextField()
+    difficulty = models.IntegerField(choices=DIFFICULTY_CHOICES, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    mission_type = models.CharField(max_length=20, choices=MISSION_TYPE_CHOICES, default='intermediate')
+    requires_mentor_review = models.BooleanField(default=False, help_text='Requires $7 tier mentor review')
+    requires_lab_integration = models.BooleanField(default=False, help_text='Linked to external lab')
+    estimated_duration_min = models.IntegerField(validators=[MinValueValidator(1)])
+    skills_tags = models.JSONField(default=list, help_text='Array of skill tags')
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_missions', db_column='created_by', to_field='uuid_id')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'missions'
+        ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['difficulty', 'track_id']),
-            models.Index(fields=['track_key', 'difficulty']),
+            models.Index(fields=['track_id', 'is_active']),
+            models.Index(fields=['mission_type', 'difficulty']),
+            models.Index(fields=['is_active']),
         ]
     
     def __str__(self):
-        return f"{self.code}: {self.title} ({self.difficulty})"
+        return self.title
 
 
-class MissionSubmission(models.Model):
-    """User submission for a mission."""
+class MissionAssignment(models.Model):
+    """Assignment of missions to cohorts or individual students"""
+    
+    ASSIGNMENT_TYPE_CHOICES = [
+        ('cohort', 'Cohort Assignment'),
+        ('individual', 'Individual Assignment'),
+    ]
+    
     STATUS_CHOICES = [
-        ('not_started', 'Not Started'),
+        ('assigned', 'Assigned'),
         ('in_progress', 'In Progress'),
-        ('draft', 'Draft'),
         ('submitted', 'Submitted'),
-        ('ai_reviewed', 'AI Reviewed'),
-        ('in_ai_review', 'In AI Review'),
-        ('mentor_review', 'Mentor Review'),
-        ('in_mentor_review', 'In Mentor Review'),
-        ('approved', 'Approved'),
+        ('reviewed', 'Reviewed'),
+        ('completed', 'Completed'),
         ('failed', 'Failed'),
-        ('rejected', 'Rejected'),
-        ('revised', 'Revised'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    mission = models.ForeignKey(
-        Mission,
-        on_delete=models.CASCADE,
-        related_name='submissions',
-        db_index=True
-    )
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='mission_submissions',
-        db_index=True
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='not_started',
-        db_index=True
-    )
-    ai_score = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text='AI review score 0-100'
-    )
-    mentor_score = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text='Mentor review score 0-100'
-    )
-    ai_feedback = models.TextField(blank=True)
-    mentor_feedback = models.TextField(
-        blank=True,
-        help_text='Premium tier only'
-    )
-    notes = models.TextField(blank=True, help_text='Student notes to reviewer')
-    portfolio_item_id = models.UUIDField(null=True, blank=True, help_text='Auto-linked on approval')
-    submitted_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    ai_reviewed_at = models.DateTimeField(null=True, blank=True)
-    mentor_reviewed_at = models.DateTimeField(null=True, blank=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
+    mission = models.ForeignKey(Mission, on_delete=models.CASCADE, related_name='assignments')
+    assignment_type = models.CharField(max_length=20, choices=ASSIGNMENT_TYPE_CHOICES)
+    cohort_id = models.UUIDField(blank=True, null=True, help_text='Cohort UUID if cohort assignment')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True, related_name='mission_assignments', db_column='student_id', to_field='uuid_id')
+    assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='assigned_missions', db_column='assigned_by', to_field='uuid_id')
+    due_date = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='assigned')
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'mission_assignments'
+        ordering = ['-assigned_at']
+        indexes = [
+            models.Index(fields=['cohort_id', 'status']),
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['mission', 'status']),
+        ]
+    
+    def __str__(self):
+        target = f"Cohort {self.cohort_id}" if self.cohort_id else f"Student {self.student.email}"
+        return f"{self.mission.title} -> {target}"
+
+
+class MissionSubmission(models.Model):
+    """Student submissions for missions"""
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+        ('under_review', 'Under Review'),
+        ('approved', 'Approved'),
+        ('needs_revision', 'Needs Revision'),
+        ('rejected', 'Rejected'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    assignment = models.ForeignKey(MissionAssignment, on_delete=models.CASCADE, related_name='submissions')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mission_submissions', db_column='student_id', to_field='uuid_id')
+    content = models.TextField(help_text='Submission content/description')
+    attachments = models.JSONField(default=list, help_text='Array of attachment URLs')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    score = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    feedback = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_submissions', db_column='reviewed_by', to_field='uuid_id')
+    reviewed_at = models.DateTimeField(blank=True, null=True)
+    submitted_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'mission_submissions'
+        ordering = ['-submitted_at', '-created_at']
         indexes = [
-            models.Index(fields=['user', 'status']),
-            models.Index(fields=['mission', 'status']),
-            models.Index(fields=['user', 'mission']),
-        ]
-        unique_together = [['mission', 'user']]
-    
-    def __str__(self):
-        return f"Submission: {self.mission.code} by {self.user.email} ({self.status})"
-
-
-class MissionArtifact(models.Model):
-    """Artifact (file, link, video) for mission submission."""
-    KIND_CHOICES = [
-        ('file', 'File'),
-        ('github', 'GitHub'),
-        ('notebook', 'Notebook'),
-        ('video', 'Video'),
-        ('screenshot', 'Screenshot'),
-    ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    submission = models.ForeignKey(
-        MissionSubmission,
-        on_delete=models.CASCADE,
-        related_name='artifacts',
-        db_index=True
-    )
-    kind = models.CharField(
-        max_length=20,
-        choices=KIND_CHOICES,
-        default='file',
-        db_index=True,
-        help_text='Type of artifact'
-    )
-    url = models.URLField(max_length=500, help_text='S3 signed URL, GitHub link, or video URL')
-    filename = models.CharField(max_length=255, blank=True)
-    size_bytes = models.BigIntegerField(null=True, blank=True)
-    metadata = models.JSONField(default=dict, blank=True, help_text='Additional metadata')
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        db_table = 'mission_artifacts'
-        indexes = [
-            models.Index(fields=['submission', 'kind']),
-            models.Index(fields=['submission', 'created_at']),
+            models.Index(fields=['assignment', 'status']),
+            models.Index(fields=['student', 'status']),
+            models.Index(fields=['status', 'submitted_at']),
         ]
     
     def __str__(self):
-        return f"Artifact: {self.kind} ({self.submission.mission.code})"
-
-
-class AIFeedback(models.Model):
-    """AI feedback for mission submission."""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    submission = models.OneToOneField(
-        MissionSubmission,
-        on_delete=models.CASCADE,
-        related_name='ai_feedback_detail',
-        db_index=True
-    )
-    score = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text='AI score 0-100'
-    )
-    strengths = models.JSONField(default=list, blank=True, help_text='List of strengths')
-    gaps = models.JSONField(default=list, blank=True, help_text='List of gaps')
-    suggestions = models.JSONField(default=list, blank=True, help_text='List of suggestions')
-    competencies_detected = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='Detected competencies with levels'
-    )
-    full_feedback = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text='Structured feedback (correctness, missed_requirements, etc.)'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        db_table = 'ai_feedback'
-        indexes = [
-            models.Index(fields=['submission']),
-        ]
-    
-    def __str__(self):
-        return f"AI Feedback: {self.submission.mission.code} ({self.score}/100)"
+        return f"{self.assignment.mission.title} - {self.student.email}"

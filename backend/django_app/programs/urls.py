@@ -39,6 +39,12 @@ from .director_dashboard_views import (
     director_cohorts_list,
     director_cohort_detail
 )
+from .views.director_students_views import (
+    director_students_list,
+    director_sponsors_list,
+    link_students_to_sponsor,
+    sponsor_linked_students
+)
 
 router = DefaultRouter()
 router.register(r'programs', ProgramViewSet, basename='program')
@@ -78,6 +84,12 @@ urlpatterns = [
     path('director/dashboard/summary/', director_dashboard_summary, name='director-dashboard-summary'),
     path('director/dashboard/cohorts/', director_cohorts_list, name='director-cohorts-list'),
     path('director/dashboard/cohorts/<uuid:cohort_id>/', director_cohort_detail, name='director-cohort-detail'),
+    
+    # Director students management endpoints
+    path('director/students/', director_students_list, name='director-students-list'),
+    path('director/sponsors/', director_sponsors_list, name='director-sponsors-list'),
+    path('director/students/link-sponsor/', link_students_to_sponsor, name='link-students-to-sponsor'),
+    path('director/sponsors/<str:sponsor_id>/students/', sponsor_linked_students, name='sponsor-linked-students'),
     
     # Sponsor assignments endpoint
     path('sponsor-assignments/', sponsor_assignments, name='sponsor-assignments'),
