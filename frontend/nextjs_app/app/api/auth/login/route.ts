@@ -134,11 +134,39 @@ export async function POST(request: NextRequest) {
     }
 
     const apiData = await apiResponse.json();
-    console.log('[Login API] API auth successful for user:', apiData.user?.email);
+    console.log('[Login API] API response status:', apiResponse.status);
+    console.log('[Login API] API response keys:', Object.keys(apiData));
+    console.log('[Login API] Has access_token:', !!apiData.access_token);
+    console.log('[Login API] Has refresh_token:', !!apiData.refresh_token);
+    console.log('[Login API] Has mfa_required:', !!apiData.mfa_required);
+
+    // Check if MFA is required
+    if (apiData.mfa_required) {
+      console.log('[Login API] MFA required for user');
+      return NextResponse.json({
+        mfa_required: true,
+        session_id: apiData.session_id,
+        detail: apiData.detail || 'MFA required',
+      }, { status: 200 });
+    }
 
     // Use the API response data
     const loginResponse = apiData;
+    console.log('[Login API] API auth successful for user:', loginResponse.user?.email);
     console.log('[Login API] Full login response:', JSON.stringify(loginResponse, null, 2));
+
+    // Ensure access_token exists
+    if (!loginResponse.access_token) {
+      console.error('[Login API] ERROR: No access_token in Django response!');
+      console.error('[Login API] Response structure:', JSON.stringify(loginResponse, null, 2));
+      return NextResponse.json(
+        {
+          error: 'Login failed',
+          detail: 'No access token received from backend. Please check backend logs.',
+        },
+        { status: 500 }
+      );
+    }
 
     // Create the response (include refresh_token so client can store it for auto-refresh)
     const nextResponse = NextResponse.json({
@@ -146,6 +174,8 @@ export async function POST(request: NextRequest) {
       access_token: loginResponse.access_token,
       refresh_token: loginResponse.refresh_token,
     });
+    
+    console.log('[Login API] Next.js response includes access_token:', !!nextResponse.body);
 
     // Set RBAC cookies for middleware enforcement (HttpOnly so client can't tamper)
     const normalizedRoles = extractNormalizedRoles(loginResponse.user)

@@ -53,6 +53,16 @@ export function getSettingsPath(user: User | null): string {
     if (hasAnalystRole && user.uuid_id) {
       return `/analyst/${user.uuid_id}/settings`
     }
+
+    // Check for finance role - uses different path structure
+    const hasFinanceRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'finance'
+    })
+    
+    if (hasFinanceRole && user.uuid_id) {
+      return `/finance/${user.uuid_id}/settings`
+    }
   }
 
   const basePath = getDashboardBasePath(user)
@@ -76,6 +86,16 @@ export function getProfilePath(user: User | null): string {
     
     if (hasAnalystRole && user.uuid_id) {
       return `/analyst/${user.uuid_id}/settings?tab=profile`
+    }
+
+    // Check for finance role - uses different path structure
+    const hasFinanceRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'finance'
+    })
+    
+    if (hasFinanceRole && user.uuid_id) {
+      return `/finance/${user.uuid_id}/settings`
     }
   }
 
