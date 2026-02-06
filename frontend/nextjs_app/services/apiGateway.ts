@@ -48,7 +48,11 @@ function getBaseUrl(path: string): string {
 
   // Check if path already includes /api/v1
   if (path.startsWith('/api/v1/')) {
-    return DJANGO_API_URL;
+    // If DJANGO_API_URL already ends with /api, remove it to avoid duplication
+    const baseUrl = DJANGO_API_URL.endsWith('/api') 
+      ? DJANGO_API_URL.replace(/\/api$/, '')
+      : DJANGO_API_URL;
+    return baseUrl;
   }
 
   const isFastApi = fastApiPaths.some(prefix => path.startsWith(prefix));
@@ -58,6 +62,10 @@ function getBaseUrl(path: string): string {
   }
 
   // Default to Django
+  // If DJANGO_API_URL already ends with /api, don't add it again
+  if (DJANGO_API_URL.endsWith('/api')) {
+    return `${DJANGO_API_URL}/v1`;
+  }
   return `${DJANGO_API_URL}/api/v1`;
 }
 
