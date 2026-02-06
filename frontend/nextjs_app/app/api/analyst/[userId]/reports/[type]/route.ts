@@ -87,10 +87,10 @@ const generateSignedUrl = (fileName: string, content: Buffer | string, format: s
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string; type: string } }
+  { params }: { params: Promise<{ userId: string; type: string }> }
 ) {
   try {
-    const { userId, type } = params;
+    const { userId, type } = await params;
     const { format = 'pdf', dateRange } = await request.json();
 
     // RBAC Check
@@ -175,10 +175,10 @@ export async function POST(
 // Email delivery endpoint
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { userId: string; type: string } }
+  { params }: { params: Promise<{ userId: string; type: string }> }
 ) {
   try {
-    const { userId, type } = params;
+    const { userId, type } = await params;
     const { action, recipient } = await request.json();
 
     // RBAC Check

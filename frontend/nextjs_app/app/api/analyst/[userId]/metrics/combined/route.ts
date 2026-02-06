@@ -139,11 +139,11 @@ async function setCachedMetrics(userId: string, data: any) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     // Check Redis cache first
-    const cachedData = await getCachedMetrics(params.userId);
+    const cachedData = await getCachedMetrics(userId);
     if (cachedData) {
       return NextResponse.json({
         ...cachedData,
@@ -167,18 +167,18 @@ export async function GET(
       payments,
       audit
     ] = await Promise.all([
-      fetchCurriculumProgress(params.userId),
-      fetchLabMetrics(params.userId),
-      fetchTalentScopeReadiness(params.userId),
-      fetchCareerMatches(params.userId),
-      fetchCommunityEngagement(params.userId),
-      fetchMissionCompletion(params.userId),
-      fetchCohortMetrics(params.userId),
+      fetchCurriculumProgress(userId),
+      fetchLabMetrics(userId),
+      fetchTalentScopeReadiness(userId),
+      fetchCareerMatches(userId),
+      fetchCommunityEngagement(userId),
+      fetchMissionCompletion(userId),
+      fetchCohortMetrics(userId),
       fetchSponsorROI('nairobi-poly-2026'), // Fixed cohort ID for demo
-      fetchSubscriptionStatus(params.userId),
-      fetchPortfolioViews(params.userId),
-      fetchPaymentStatus(params.userId),
-      fetchAuditLogs(params.userId)
+      fetchSubscriptionStatus(userId),
+      fetchPortfolioViews(userId),
+      fetchPaymentStatus(userId),
+      fetchAuditLogs(userId)
     ]);
 
     // Cross-correlate data for unified metrics
@@ -237,14 +237,14 @@ export async function GET(
     };
 
     // Cache the response for 1 minute
-    await setCachedMetrics(params.userId, response);
+    await setCachedMetrics(userId, response);
 
     return NextResponse.json(response);
   } catch (error) {
     console.error('Error aggregating metrics from 12 data sources:', error);
 
     // Try to return cached data if available, even if stale
-    const staleData = await getCachedMetrics(params.userId);
+    const staleData = await getCachedMetrics(userId);
     if (staleData) {
       return NextResponse.json({
         ...staleData,

@@ -52,7 +52,7 @@ const generateNewLabAlert = (userId: string) => {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const stream = new ReadableStream({
     start(controller) {
@@ -67,7 +67,7 @@ export async function GET(
       // Send new alerts every 15-45 seconds (randomized)
       const sendAlert = () => {
         try {
-          const newAlert = generateNewLabAlert(params.userId);
+          const newAlert = generateNewLabAlert(userId);
           const data = JSON.stringify(newAlert);
           controller.enqueue(`data: ${data}\n\n`);
 

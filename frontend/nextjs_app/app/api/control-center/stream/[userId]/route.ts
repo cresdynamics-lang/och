@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
-  const userId = params.userId;
+  const { userId } = await params;
 
   if (!userId) {
     return new Response('User ID required', { status: 400 });

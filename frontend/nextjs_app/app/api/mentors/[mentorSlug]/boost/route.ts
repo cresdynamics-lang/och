@@ -7,10 +7,10 @@ import { apiGateway } from '@/services/apiGateway'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { mentorSlug: string } }
+  { params }: { params: Promise<{ mentorSlug: string }> }
 ) {
   try {
-    const mentorSlug = params.mentorSlug
+    const { mentorSlug } = await params;
 
     if (!mentorSlug) {
       return NextResponse.json(

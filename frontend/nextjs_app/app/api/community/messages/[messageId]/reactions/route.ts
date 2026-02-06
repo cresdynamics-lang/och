@@ -6,10 +6,10 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
-    const messageId = params.messageId;
+    const { messageId } = await params;
     const body = await request.json();
     const { emoji } = body;
 
@@ -64,10 +64,10 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
-    const messageId = params.messageId;
+    const { messageId } = await params;
     const { searchParams } = new URL(request.url);
     const emoji = searchParams.get('emoji');
 

@@ -7,7 +7,7 @@ import { apiGateway } from '@/services/apiGateway'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { mentorSlug: string; studentId: string } }
+  { params }: { params: Promise<{ mentorSlug: string; studentId: string }> }
 ) {
   try {
     const { mentorSlug, studentId } = params

@@ -66,10 +66,10 @@ const mockSpaces = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { spaceSlug: string } }
+  { params }: { params: Promise<{ spaceSlug: string }> }
 ) {
   try {
-    const spaceSlug = params.spaceSlug;
+    const { spaceSlug } = await params;
     const space = mockSpaces[spaceSlug as keyof typeof mockSpaces];
 
     if (!space) {

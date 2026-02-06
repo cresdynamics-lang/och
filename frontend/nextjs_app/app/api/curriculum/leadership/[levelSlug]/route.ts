@@ -203,10 +203,10 @@ const mockLeadershipLevels = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { levelSlug: string } }
+  { params }: { params: Promise<{ levelSlug: string }> }
 ) {
   try {
-    const levelSlug = params.levelSlug;
+    const { levelSlug } = await params;
     const level = mockLeadershipLevels[levelSlug as keyof typeof mockLeadershipLevels];
 
     if (!level) {

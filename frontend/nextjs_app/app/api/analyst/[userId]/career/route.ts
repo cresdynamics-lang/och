@@ -65,10 +65,11 @@ const logAuditEvent = (userId: string, action: string, metadata?: any) => {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
+  const { userId } = await params;
+
   try {
-    const { userId } = params;
 
     // RBAC Check - would be implemented with proper auth
     const userRole = 'analyst'; // Mock - would come from JWT/auth
@@ -105,10 +106,10 @@ export async function GET(
 // Mock 1-click apply endpoint
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params;
+    const { userId } = await params;
     const { jobId, autoIncludePortfolio } = await request.json();
 
     // RBAC Check
@@ -146,7 +147,7 @@ export async function POST(
 
   } catch (error) {
     console.error('Career apply error:', error);
-    logAuditEvent(params.userId, 'career.apply.error', { error: error.message });
+    logAuditEvent(userId, 'career.apply.error', { error: error.message });
 
     return NextResponse.json(
       { error: 'Failed to submit application' },
