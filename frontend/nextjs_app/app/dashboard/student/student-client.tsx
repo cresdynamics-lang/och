@@ -53,19 +53,52 @@ export default function StudentClient() {
 
     console.log('StudentClient: User is student/mentee, proceeding with checks');
 
-    // Check FastAPI profiling status
+    // Check profiling status - fetch fresh status from Django API
     const checkProfiling = async () => {
       try {
-        const status = await fastapiClient.profiling.checkStatus();
+        // CRITICAL: Fetch fresh user data directly from Django API
+        // This ensures admin resets are immediately respected
+        const { djangoClient } = await import('@/services/djangoClient');
+        let currentProfilingComplete = user.profiling_complete;
         
-        if (!status.completed) {
-          console.log('✅ Profiling not completed - redirecting to FastAPI profiling');
-          hasCheckedRef.current = true;
+        try {
+          console.log('StudentClient: Fetching fresh user data from Django...');
+          const freshUser = await djangoClient.auth.getCurrentUser();
+          currentProfilingComplete = freshUser?.profiling_complete ?? false;
+          console.log('StudentClient: Fresh profiling_complete =', currentProfilingComplete);
+          
+          // Also trigger a background refresh of the auth state
+          if (reloadUser) {
+            reloadUser();
+          }
+        } catch (err) {
+          console.log('StudentClient: Failed to fetch fresh user, using cached data');
+        }
+        
+        // Check Django's profiling_complete as SOURCE OF TRUTH
+        if (!currentProfilingComplete) {
+          console.log('✅ Django profiling_complete=false - redirecting to profiler');
           router.push('/onboarding/ai-profiler');
           return;
         }
         
-        console.log('✅ Profiling completed');
+        // Django says profiling is complete, optionally verify with FastAPI
+        try {
+          const status = await fastapiClient.profiling.checkStatus();
+          
+          if (!status.completed) {
+            // FastAPI disagrees - trust FastAPI for active session state
+            console.log('⚠️ Django says complete but FastAPI says not complete - redirecting');
+            router.push('/onboarding/ai-profiler');
+            return;
+          }
+          
+          console.log('✅ Profiling completed (verified)');
+        } catch (fastapiError) {
+          // FastAPI unavailable but Django says complete - allow access
+          console.log('⚠️ FastAPI unavailable but Django says complete - allowing access');
+        }
+        
         setCheckingProfiling(false);
         setCheckingFoundations(true);
         
@@ -73,10 +106,17 @@ export default function StudentClient() {
         await checkFoundations();
       } catch (error: any) {
         console.error('❌ Failed to check profiling status:', error);
-        // On error, allow access but log it
-        // This prevents blocking dashboard access if FastAPI is down
+        
+        // On any error, redirect to profiler if profiling not complete
+        if (!user.profiling_complete) {
+          router.push('/onboarding/ai-profiler');
+          return;
+        }
+        
+        // Allow access if Django says complete
         setCheckingProfiling(false);
-        hasCheckedRef.current = true;
+        setCheckingFoundations(true);
+        await checkFoundations();
       }
     };
 
@@ -95,6 +135,15 @@ export default function StudentClient() {
         
         if (!foundationsStatus.foundations_available) {
           console.log('⚠️ Foundations not available:', foundationsStatus);
+          
+          // If profiling is not complete, redirect to profiler
+          if (foundationsStatus.reason === 'profiling_incomplete') {
+            console.log('✅ Redirecting to AI profiler (profiling incomplete)');
+            router.push('/onboarding/ai-profiler');
+            return;
+          }
+          
+          // Otherwise, just allow access (edge case)
           setCheckingFoundations(false);
           hasCheckedRef.current = true;
           return;
@@ -103,7 +152,6 @@ export default function StudentClient() {
         // If Foundations is not complete, redirect to Foundations
         if (!foundationsStatus.is_complete) {
           console.log('✅ Foundations not completed - redirecting to Foundations');
-          hasCheckedRef.current = true;
           router.push('/dashboard/student/foundations');
           return;
         }
@@ -126,13 +174,12 @@ export default function StudentClient() {
       }
     };
 
-    hasCheckedRef.current = true;
     checkProfiling();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, user]);
 
-  // Show loading only briefly, then show dashboard immediately
-  // This prevents flash of old dashboard
-  if ((checkingProfiling || checkingFoundations) && isAuthenticated && !hasCheckedRef.current) {
+  // Show loading while checking profiling or foundations
+  // This prevents dashboard from rendering and making API calls before redirect
+  if ((checkingProfiling || checkingFoundations) && isAuthenticated) {
     return (
       <div className="min-h-screen bg-och-midnight flex items-center justify-center">
         <Card className="p-8">

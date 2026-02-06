@@ -4,6 +4,7 @@ URL configuration for users app - Authentication endpoints.
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password
+from .views.auth_views import resend_verification_email, resend_verification_email
 from .views.auth_views import (
     SignupView,
     LoginView,
@@ -84,6 +85,8 @@ urlpatterns = [
     path('auth/register', register_user, name='register-no-slash'),
     path('auth/verify-email/', verify_email, name='verify_email'),
     path('auth/verify-email', verify_email, name='verify_email-no-slash'),
+    path('auth/resend-verification/', resend_verification_email, name='resend_verification'),
+    path('auth/resend-verification', resend_verification_email, name='resend_verification-no-slash'),
     path('auth/request-password-reset/', request_password_reset, name='request_password_reset'),
     path('auth/request-password-reset', request_password_reset, name='request_password_reset-no-slash'),
     path('auth/reset-password/', reset_password, name='reset_password'),

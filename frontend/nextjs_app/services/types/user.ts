@@ -35,6 +35,9 @@ export interface User {
   mentor_capacity_weekly?: number;
   mentor_specialties?: string[];
   mentor_availability?: any;
+  // Onboarding completion tracking
+  onboarding_complete?: boolean;
+  profile_complete?: boolean;
   // Profiling completion tracking (Tier 0)
   profiling_complete?: boolean;
   profiling_completed_at?: string;

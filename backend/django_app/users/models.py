@@ -12,12 +12,14 @@ import uuid
 class User(AbstractUser):
     """
     Enhanced User model with ABAC attributes and account lifecycle management.
+    Uses Django's default BigAutoField for ID (matches database schema from backup).
     """
-    # Use UUID string as primary key
-    id = models.CharField(max_length=36, primary_key=True, default=lambda: str(uuid.uuid4()), editable=False)
+    # ID field: Use Django's default BigAutoField (bigint in PostgreSQL)
+    # This matches the Wilson database backup schema
+    # Do NOT override id field - let Django handle it
     
-    # Separate UUID field for foreign key references
-    uuid_id = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    # UUID field for foreign key references (database has this column)
+    uuid_id = models.UUIDField(unique=True, default=uuid.uuid4, editable=False, db_index=True)
     
     # Override email to make it unique and indexed (AbstractUser has email but not unique by default)
     email = models.EmailField(unique=True, db_index=True)
@@ -457,7 +459,7 @@ class UserRole(models.Model):
         ('track', 'Track'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles', to_field='uuid_id')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='user_roles')
     
     # Scope for ABAC (per specification)
@@ -528,7 +530,7 @@ class ConsentScope(models.Model):
         ('employer_share', 'Employer Share'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consent_scopes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consent_scopes', to_field='uuid_id')
     scope_type = models.CharField(max_length=50, choices=SCOPE_TYPES)
     granted = models.BooleanField(default=False)
     granted_at = models.DateTimeField(null=True, blank=True)
@@ -553,7 +555,7 @@ class Entitlement(models.Model):
     """
     Entitlements for feature access control.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='entitlements')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='entitlements', to_field='uuid_id')
     feature = models.CharField(max_length=100, db_index=True)
     granted = models.BooleanField(default=True)
     granted_at = models.DateTimeField(auto_now_add=True)
@@ -570,3 +572,43 @@ class Entitlement(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.feature}"
+
+
+class SponsorStudentLink(models.Model):
+    """
+    Links sponsors to students they can enroll in cohorts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sponsor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sponsored_students',
+        to_field='uuid_id'
+    )
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='sponsor_links',
+        to_field='uuid_id'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_sponsor_links',
+        to_field='uuid_id'
+    )
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        db_table = 'sponsor_student_links'
+        unique_together = ['sponsor', 'student']
+        indexes = [
+            models.Index(fields=['sponsor', 'is_active']),
+            models.Index(fields=['student', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.sponsor.email} -> {self.student.email}"

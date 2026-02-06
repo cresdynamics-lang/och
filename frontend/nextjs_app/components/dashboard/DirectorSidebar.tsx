@@ -11,7 +11,8 @@ import {
   Calendar, 
   BarChart3, 
   Users, 
-  Settings 
+  Settings,
+  Target
 } from 'lucide-react'
 
 interface SidebarItem {
@@ -50,6 +51,12 @@ export function DirectorSidebar({ activeView, onViewChange }: DirectorSidebarPro
       label: 'Programs',
       icon: BookOpen,
       onClick: () => onViewChange('view-programs'),
+    },
+    {
+      id: 'missions',
+      label: 'Missions',
+      icon: Target,
+      href: '/dashboard/director/missions',
     },
     {
       id: 'cohorts',

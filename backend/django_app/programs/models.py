@@ -76,7 +76,7 @@ class Track(models.Model):
         null=True,
         blank=True,
         related_name='directed_tracks',
-        to_field='uuid_id'  # Reference the uuid_id column
+        to_field='uuid_id'
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -269,7 +269,7 @@ class Enrollment(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name='enrollments')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enrollments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enrollments', to_field='uuid_id')
     org = models.ForeignKey(
         'organizations.Organization',
         on_delete=models.SET_NULL,
@@ -404,7 +404,7 @@ class Waitlist(models.Model):
     """Waitlist model - FIFO queue for cohort enrollment when seats are full."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name='waitlist_entries')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='waitlist_entries')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='waitlist_entries', to_field='uuid_id')
     org = models.ForeignKey(
         'organizations.Organization',
         on_delete=models.SET_NULL,

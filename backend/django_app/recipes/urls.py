@@ -14,6 +14,7 @@ from .views import (
     RecipeSourceViewSet,
     RecipeSourceIngestView,
     LLMNormalizeRecipesView,
+    RecipeEnvStatusView,
     RecipeGenerateView
 )
 
@@ -27,6 +28,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('bookmarks/', BookmarkedRecipesView.as_view(), name='recipe-bookmarks'),
     path('stats/', RecipeStatsView.as_view(), name='recipe-stats'),
+    path('env-status/', RecipeEnvStatusView.as_view(), name='recipe-env-status'),
     path('users/<uuid:user_id>/recipes/', UserRecipesView.as_view(), name='user-recipes'),
     path('users/<uuid:user_id>/recipes/<uuid:recipe_id>/progress/', UserRecipeProgressView.as_view(), name='user-recipe-progress'),
     path('recipe-sources/<uuid:source_id>/ingest/', RecipeSourceIngestView.as_view(), name='recipe-source-ingest'),

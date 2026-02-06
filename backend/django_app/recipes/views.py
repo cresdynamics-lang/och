@@ -618,6 +618,37 @@ class LLMNormalizeRecipesView(APIView):
         return Response({'message': 'LLM normalization worker triggered'})
 
 
+class RecipeEnvStatusView(APIView):
+    """View for checking AI environment configuration status."""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """Check if AI services are configured."""
+        import os
+        from django.conf import settings
+        
+        # Check for OpenAI/ChatGPT API key
+        chatgpt_key = getattr(settings, 'CHAT_GPT_API_KEY', None) or os.environ.get('CHAT_GPT_API_KEY', '')
+        grok_configured = bool(chatgpt_key and chatgpt_key != 'your-openai-api-key' and chatgpt_key.startswith('sk-'))
+        
+        # Check for Groq/Llama (optional)
+        groq_key = os.environ.get('GROQ_API_KEY', '')
+        llama_configured = bool(groq_key and groq_key != 'your-groq-key')
+        
+        # Check for Supabase (used in some recipe features)
+        supabase_url = os.environ.get('SUPABASE_URL', '')
+        supabase_key = os.environ.get('SUPABASE_KEY', '')
+        supabase_configured = bool(supabase_url and supabase_key)
+        
+        return Response({
+            'grok': grok_configured,  # Frontend expects 'grok' key
+            'llama': llama_configured,
+            'supabase': supabase_configured,
+            'openai': grok_configured,  # Also include explicit openai status
+            'model': getattr(settings, 'AI_COACH_MODEL', 'gpt-4')
+        })
+
+
 class RecipeGenerateView(APIView):
     """View for generating recipes using LLM."""
     permission_classes = [permissions.IsAuthenticated]

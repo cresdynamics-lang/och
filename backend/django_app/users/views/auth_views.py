@@ -2,7 +2,10 @@
 Authentication views for signup, login, MFA, SSO, etc.
 """
 import os
+import logging
 from rest_framework import status, permissions
+
+logger = logging.getLogger(__name__)
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -184,13 +187,17 @@ class SignupView(APIView):
             requested_role = data.get('role', 'student')
             _assign_user_role(user, requested_role)
             
-            # Send magic link
-            code, mfa_code = create_mfa_code(user, method='magic_link', expires_minutes=10)
-            from users.utils.email_utils import send_magic_link_email
-            from django.conf import settings
-            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            magic_link_url = f"{frontend_url}/auth/verify?code={code}&email={user.email}"
-            send_magic_link_email(user, code, magic_link_url)
+            # Send magic link (non-blocking - user creation succeeds even if email fails)
+            try:
+                code, mfa_code = create_mfa_code(user, method='magic_link', expires_minutes=10)
+                from users.utils.email_utils import send_magic_link_email
+                from django.conf import settings
+                frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+                magic_link_url = f"{frontend_url}/auth/verify?code={code}&email={user.email}"
+                send_magic_link_email(user, code, magic_link_url)
+            except Exception as e:
+                # Log email failure but don't block account creation
+                logger.warning(f"Failed to send verification email to {user.email}: {str(e)}")
             
             _log_audit_event(user, 'create', 'user', 'success', {'method': 'passwordless'})
             
@@ -238,8 +245,6 @@ class SignupView(APIView):
                     send_verification_email(user, verification_url)
                 except Exception as e:
                     # Log email failure but don't block signup
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.warning(f"Failed to send verification email to {user.email}: {str(e)}")
             
             _log_audit_event(user, 'create', 'user', 'success', {'method': 'email_password'})
@@ -855,6 +860,9 @@ class MeView(APIView):
             'id': str(user_data.get('id', '')),
             'email': user_data.get('email', ''),
             'name': f"{user_data.get('first_name', '')} {user_data.get('last_name', '')}".strip(),
+            # Include profiling and foundations status for frontend redirect logic
+            'profiling_complete': user.profiling_complete,
+            'foundations_complete': user.foundations_complete,
         }
         
         # Format consent scopes as list of strings (e.g., ["share_with_mentor","public_portfolio:false"])
@@ -1102,8 +1110,6 @@ def register_user(request):
                 )
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Registration error: {str(e)}")
         return Response(
             {'error': 'Registration failed. Please try again.'},
@@ -1115,8 +1121,6 @@ def register_user(request):
 @permission_classes([AllowAny])
 def verify_email(request):
     """Verify user email with token or code (OTP)"""
-    import logging
-    logger = logging.getLogger(__name__)
     
     try:
         token = request.data.get('token')
@@ -1295,6 +1299,69 @@ def verify_email(request):
 
 
 @api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def resend_verification_email(request):
+    """
+    Admin endpoint to resend verification email to a user.
+    """
+    # Check if requester is admin
+    if not request.user.is_staff and not request.user.is_superuser:
+        return Response(
+            {'detail': 'Admin privileges required'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    user_id = request.data.get('user_id')
+    if not user_id:
+        return Response(
+            {'detail': 'user_id is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response(
+            {'detail': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Check if already verified
+    if user.email_verified:
+        return Response(
+            {'detail': 'Email is already verified'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Generate verification code
+        code, mfa_code = create_mfa_code(user, method='email', expires_minutes=60)
+        
+        # Send verification email
+        from users.utils.email_utils import send_verification_email
+        from django.conf import settings
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        verification_url = f"{frontend_url}/auth/verify-email?code={code}&email={user.email}"
+        send_verification_email(user, verification_url)
+        
+        logger.info(f"Verification email resent to {user.email} by admin {request.user.email}")
+        
+        return Response(
+            {
+                'detail': 'Verification email sent successfully',
+                'email': user.email
+            },
+            status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        logger.error(f"Failed to resend verification email to {user.email}: {str(e)}")
+        return Response(
+            {'detail': f'Failed to send verification email: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def request_password_reset(request):
     """Request password reset email"""
@@ -1317,8 +1384,6 @@ def request_password_reset(request):
             email_sent = email_service.send_password_reset_email(user)
             
             # Log the result for debugging
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info(f"Password reset email send attempt for {email}: {'SUCCESS' if email_sent else 'FAILED'}")
             
             if email_sent:
@@ -1339,8 +1404,6 @@ def request_password_reset(request):
             }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Password reset request error: {str(e)}")
         return Response(
             {'error': 'Password reset request failed. Please try again.'},
@@ -1398,8 +1461,6 @@ def reset_password(request):
             )
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Password reset error: {str(e)}")
         return Response(
             {'error': 'Password reset failed. Please try again.'},
@@ -1551,11 +1612,9 @@ class SessionsView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error revoking session: {str(e)}")
             return Response(
                 {'error': 'Failed to revoke session'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

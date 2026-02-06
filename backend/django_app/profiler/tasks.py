@@ -35,7 +35,7 @@ def generate_future_you_task(session_id: str):
             answers_data[answer.question_key] = answer.answer
         
         # Generate persona using OpenAI or AI Coach API
-        openai_key = os.environ.get('OPENAI_API_KEY')
+        openai_key = os.environ.get('CHAT_GPT_API_KEY')
         ai_coach_url = os.environ.get('AI_COACH_API_URL', 'http://localhost:8001/api/v1')
         ai_coach_key = os.environ.get('AI_COACH_API_KEY')
         

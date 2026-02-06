@@ -24,10 +24,14 @@ export default function CreateTrackPage() {
   })
 
   const [programs, setPrograms] = useState<any[]>([])
+  const [missions, setMissions] = useState<any[]>([])
+  const [selectedMissions, setSelectedMissions] = useState<string[]>([])
   const [loadingPrograms, setLoadingPrograms] = useState(false)
+  const [loadingMissions, setLoadingMissions] = useState(false)
 
   useEffect(() => {
     fetchPrograms()
+    fetchMissions()
   }, [])
 
   const fetchPrograms = async () => {
@@ -50,6 +54,26 @@ export default function CreateTrackPage() {
     }
   }
 
+  const fetchMissions = async () => {
+    try {
+      setLoadingMissions(true)
+      const response = await fetch('http://localhost:8000/api/v1/missions/', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setMissions(data.results || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch missions:', err)
+    } finally {
+      setLoadingMissions(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -66,7 +90,7 @@ export default function CreateTrackPage() {
           core: formData.competencies_core.split(',').map(s => s.trim()).filter(Boolean),
           advanced: formData.competencies_advanced.split(',').map(s => s.trim()).filter(Boolean)
         },
-        missions: formData.missions.split(',').map(s => s.trim()).filter(Boolean)
+        missions: selectedMissions
       }
 
       const response = await fetch('http://localhost:8000/api/v1/tracks/', {
@@ -200,13 +224,42 @@ export default function CreateTrackPage() {
 
               <div>
                 <label className="block text-sm font-medium text-white mb-2">Missions</label>
-                <textarea
-                  value={formData.missions}
-                  onChange={(e) => setFormData({...formData, missions: e.target.value})}
-                  placeholder="Mission IDs or names (comma-separated)"
-                  rows={2}
-                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white placeholder-och-steel/50 focus:border-och-mint focus:outline-none resize-none"
-                />
+                {loadingMissions ? (
+                  <p className="text-sm text-och-steel">Loading missions...</p>
+                ) : missions.length === 0 ? (
+                  <p className="text-sm text-och-steel">No missions available</p>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto border border-och-steel/30 rounded-lg p-3 bg-och-midnight">
+                    <div className="space-y-2">
+                      {missions.map((mission) => (
+                        <div key={mission.id} className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            id={`mission-${mission.id}`}
+                            checked={selectedMissions.includes(mission.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedMissions([...selectedMissions, mission.id])
+                              } else {
+                                setSelectedMissions(selectedMissions.filter(id => id !== mission.id))
+                              }
+                            }}
+                            className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint focus:ring-2 mt-1"
+                          />
+                          <label htmlFor={`mission-${mission.id}`} className="flex-1 text-sm text-white cursor-pointer">
+                            <div className="font-medium">{mission.title}</div>
+                            <div className="text-xs text-och-steel mt-1">
+                              Difficulty: {mission.difficulty}/5 • {mission.estimated_duration_min} min • {mission.mission_type}
+                            </div>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-och-steel mt-2">
+                  Selected: {selectedMissions.length} mission{selectedMissions.length !== 1 ? 's' : ''}
+                </p>
               </div>
 
               <div className="flex gap-4 pt-4">

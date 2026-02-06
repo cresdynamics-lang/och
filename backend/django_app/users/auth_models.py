@@ -58,7 +58,7 @@ class MFACode(models.Model):
     Temporary MFA codes (OTP, magic links).
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_codes')
-    code = models.CharField(max_length=10, db_index=True)
+    code = models.CharField(max_length=64, db_index=True)  # Increased for magic link tokens
     method = models.CharField(max_length=20)  # totp, sms, email
     expires_at = models.DateTimeField(db_index=True)
     used = models.BooleanField(default=False)

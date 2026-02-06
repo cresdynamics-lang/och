@@ -361,20 +361,12 @@ export function StudentDashboardHub() {
       }
 
       try {
-        // Map frontend track names to backend track codes
-        const trackMapping: Record<string, string> = {
-          'defender': 'CYBERDEF',
-          'offensive': 'OFFENSIVE_2',
-          'grc': 'GRC_2',
-          'innovation': 'INNOVATION_2',
-          'leadership': 'LEADERSHIP_2',
-        };
-
-        const trackKey = profiledTrack.toLowerCase();
-        const trackCode = trackMapping[trackKey] || `${profiledTrack.toUpperCase()}_2`;
-
+        // First, try to get track info from curriculum tracks API
+        // This will fail gracefully if no tracks exist in database
         try {
-          const progressResponse = await curriculumClient.getTrackProgress(trackCode);
+          // Try to fetch track by slug first (e.g., /api/v1/curriculum/tracks/defender/)
+          const trackSlug = profiledTrack.toLowerCase();
+          const progressResponse = await curriculumClient.getTrackProgress(trackSlug);
 
           // Check if response indicates user is not enrolled
           if (progressResponse && (progressResponse as any).enrolled === false) {
@@ -388,8 +380,14 @@ export function StudentDashboardHub() {
             // Direct progress object
             setCurriculumProgress(progressResponse);
           }
-        } catch (apiError) {
-          console.error('Track progress API error:', apiError);
+        } catch (apiError: any) {
+          // Track doesn't exist or user not enrolled - this is okay
+          // Just log for debugging but don't treat as error
+          if (apiError?.status === 404) {
+            console.log(`Track "${profiledTrack}" not found in curriculum - may need to be created`);
+          } else {
+            console.log('Track progress not available:', apiError?.message || 'Unknown error');
+          }
           setCurriculumProgress(null);
         }
       } catch (error) {

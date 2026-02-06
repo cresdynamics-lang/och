@@ -73,8 +73,9 @@ else:
     # Use PostgreSQL configuration from base.py
     pass  # DATABASES already configured in base.py
 
-# Use console backend for email testing in development
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Use SMTP backend with Resend for actual email sending
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Commented out - use for testing only
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Sends real emails via Resend
 
 # Logging configuration for development
 LOGGING = {

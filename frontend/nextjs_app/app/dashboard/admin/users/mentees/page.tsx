@@ -1,16 +1,20 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useUsers } from '@/hooks/useUsers'
+import { AddStudentModal } from '@/components/admin/AddStudentModal'
 
 export default function MenteesPage() {
-  const { users, isLoading } = useUsers({ page: 1, page_size: 100 })
+  const router = useRouter()
+  const { users, isLoading, refetch } = useUsers({ page: 1, page_size: 100 })
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<'all' | 'student'>('all')
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
 
   const students = useMemo(() => {
     const filtered = users.filter((u) => 
@@ -47,10 +51,21 @@ export default function MenteesPage() {
               <h1 className="text-4xl font-bold mb-2 text-och-gold">Students</h1>
               <p className="text-och-steel">Manage students</p>
             </div>
-            <Button variant="mint" size="sm">
+            <Button 
+              variant="mint" 
+              size="sm"
+              onClick={() => setIsAddModalOpen(true)}
+            >
               + Add Student
             </Button>
           </div>
+
+          {/* Add Student Modal */}
+          <AddStudentModal
+            isOpen={isAddModalOpen}
+            onClose={() => setIsAddModalOpen(false)}
+            onSuccess={() => refetch()}
+          />
 
           <Card>
             <div className="p-6">
@@ -94,10 +109,21 @@ export default function MenteesPage() {
                         </td>
                         <td className="p-3">
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                // TODO: Implement reset onboarding
+                                alert('Reset onboarding functionality coming soon')
+                              }}
+                            >
                               Reset Onboarding
                             </Button>
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => router.push(`/dashboard/admin/users/mentees/${u.id}`)}
+                            >
                               View Profile
                             </Button>
                           </div>
