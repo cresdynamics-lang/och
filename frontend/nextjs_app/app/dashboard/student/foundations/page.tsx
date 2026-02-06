@@ -65,10 +65,34 @@ export default function FoundationsPage() {
       hasLoadedRef.current = true
       setLoading(true)
       
-      // Check profiling status first
-      const profilingStatus = await fastapiClient.profiling.checkStatus()
-      if (!profilingStatus.completed) {
-        router.push('/onboarding/ai-profiler')
+      // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
+      // Don't rely on FastAPI alone - it may lose session data on restart
+      let profilingComplete = false
+      let profilingStatus: any = null
+      
+      try {
+        const { djangoClient } = await import('@/services/djangoClient')
+        const freshUser = await djangoClient.auth.getCurrentUser()
+        profilingComplete = freshUser?.profiling_complete ?? false
+        console.log('[Foundations] Django profiling_complete:', profilingComplete)
+      } catch (djangoError) {
+        console.warn('[Foundations] Failed to check Django, falling back to FastAPI')
+      }
+      
+      // Also try FastAPI for session data (blueprint, etc.)
+      try {
+        profilingStatus = await fastapiClient.profiling.checkStatus()
+        console.log('[Foundations] FastAPI status:', profilingStatus)
+        // If Django didn't respond, use FastAPI as fallback
+        if (!profilingComplete) {
+          profilingComplete = profilingStatus?.completed ?? false
+        }
+      } catch (fastapiError) {
+        console.warn('[Foundations] FastAPI status check failed:', fastapiError)
+      }
+      
+      if (!profilingComplete) {
+        setError('Please complete the AI profiler first.')
         hasLoadedRef.current = false
         setLoading(false)
         return
@@ -78,7 +102,7 @@ export default function FoundationsPage() {
       const foundationsStatus = await foundationsClient.getStatus()
       
       if (!foundationsStatus.foundations_available) {
-        setError('Please complete the AI profiler first or Foundations is not available')
+        setError('Foundations is not available. Please contact support.')
         hasLoadedRef.current = false
         setLoading(false)
         return
@@ -93,8 +117,8 @@ export default function FoundationsPage() {
         return
       }
 
-      // Load profiler blueprint for track confirmation
-      if (profilingStatus.session_id) {
+      // Load profiler blueprint for track confirmation (if FastAPI has session data)
+      if (profilingStatus?.session_id) {
         try {
           const blueprintData = await fastapiClient.profiling.getBlueprint(profilingStatus.session_id)
           setBlueprint(blueprintData)
@@ -103,7 +127,7 @@ export default function FoundationsPage() {
             recommended_track: blueprintData.track_recommendation?.primary_track?.key
           })
         } catch (err) {
-          console.warn('Failed to load blueprint:', err)
+          console.warn('[Foundations] Failed to load blueprint:', err)
         }
       }
 
@@ -227,8 +251,9 @@ export default function FoundationsPage() {
       hasLoadedRef.current = false
       isCompletingRef.current = false
       
-      // Redirect to dashboard immediately
-      router.push('/dashboard/student?foundations_complete=true')
+      // Per spec: Foundations completion → transitions to Tier 2 (Beginner Track / Curriculum)
+      // "You're Ready. Begin Your Track." → takes user to their curriculum track
+      window.location.href = '/dashboard/student/curriculum'
     } catch (err: any) {
       setError(err.message || 'Failed to complete Foundations')
       isCompletingRef.current = false

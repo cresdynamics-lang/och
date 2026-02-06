@@ -21,7 +21,14 @@ export default function CreateMissionPage() {
     requires_lab_integration: false,
     estimated_duration_min: 60,
     skills_tags: '',
-    track_id: ''
+    track_id: '',
+    subtasks: [] as Array<{
+      id: number
+      title: string
+      description: string
+      order_index: number
+      is_required: boolean
+    }>
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,7 +39,8 @@ export default function CreateMissionPage() {
     try {
       const payload = {
         ...formData,
-        skills_tags: formData.skills_tags.split(',').map(s => s.trim()).filter(Boolean)
+        skills_tags: formData.skills_tags.split(',').map(s => s.trim()).filter(Boolean),
+        subtasks: formData.subtasks
       }
 
       const response = await fetch('http://localhost:8000/api/v1/missions/', {
@@ -161,6 +169,96 @@ export default function CreateMissionPage() {
                   placeholder="network-security, incident-response, threat-analysis (comma-separated)"
                   className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white placeholder-och-steel/50 focus:border-och-mint focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-white">Mission Subtasks</label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const newSubtask = {
+                        id: formData.subtasks.length + 1,
+                        title: '',
+                        description: '',
+                        order_index: formData.subtasks.length + 1,
+                        is_required: true
+                      }
+                      setFormData({...formData, subtasks: [...formData.subtasks, newSubtask]})
+                    }}
+                  >
+                    + Add Subtask
+                  </Button>
+                </div>
+
+                {formData.subtasks.length === 0 ? (
+                  <p className="text-och-steel text-sm italic">No subtasks added yet. Click "Add Subtask" to create objectives for this mission.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {formData.subtasks.map((subtask, index) => (
+                      <div key={subtask.id} className="p-4 bg-och-midnight/50 border border-och-steel/30 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-och-mint">Subtask {index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = formData.subtasks.filter((_, i) => i !== index)
+                              // Reindex remaining subtasks
+                              updated.forEach((s, i) => {
+                                s.id = i + 1
+                                s.order_index = i + 1
+                              })
+                              setFormData({...formData, subtasks: updated})
+                            }}
+                            className="text-och-orange hover:text-och-orange/80 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={subtask.title}
+                          onChange={(e) => {
+                            const updated = [...formData.subtasks]
+                            updated[index].title = e.target.value
+                            setFormData({...formData, subtasks: updated})
+                          }}
+                          placeholder="Subtask title"
+                          className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white placeholder-och-steel/50 focus:border-och-mint focus:outline-none"
+                          required
+                        />
+                        <textarea
+                          value={subtask.description}
+                          onChange={(e) => {
+                            const updated = [...formData.subtasks]
+                            updated[index].description = e.target.value
+                            setFormData({...formData, subtasks: updated})
+                          }}
+                          placeholder="Subtask description and instructions"
+                          rows={2}
+                          className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white placeholder-och-steel/50 focus:border-och-mint focus:outline-none resize-none"
+                        />
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id={`subtask_required_${index}`}
+                            checked={subtask.is_required}
+                            onChange={(e) => {
+                              const updated = [...formData.subtasks]
+                              updated[index].is_required = e.target.checked
+                              setFormData({...formData, subtasks: updated})
+                            }}
+                            className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint focus:ring-2"
+                          />
+                          <label htmlFor={`subtask_required_${index}`} className="ml-2 text-sm text-white">
+                            Required
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">

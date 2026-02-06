@@ -73,8 +73,8 @@ export default function MissionDetailPage() {
     setStarting(true)
     try {
       // Create or update submission to start the mission
-      await apiGateway.post(`/student/missions/${missionId}/start`, {})
-      
+      await apiGateway.post(`/student/missions/${missionId}/start/`, {})
+
       // Navigate to mission execution page
       router.push(`/dashboard/student/missions/${missionId}/execute`)
     } catch (err: any) {
@@ -235,7 +235,14 @@ export default function MissionDetailPage() {
                         <span className="flex-shrink-0 w-6 h-6 rounded-full bg-och-defender/20 border border-och-defender/40 flex items-center justify-center mt-0.5">
                           <span className="text-xs font-bold text-och-defender">{idx + 1}</span>
                         </span>
-                        <span className="text-och-steel pt-0.5">{obj}</span>
+                        <div className="flex-1">
+                          <span className="text-white font-medium">
+                            {typeof obj === 'string' ? obj : obj.title}
+                          </span>
+                          {typeof obj === 'object' && obj.description && (
+                            <p className="text-och-steel text-sm mt-1">{obj.description}</p>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>
