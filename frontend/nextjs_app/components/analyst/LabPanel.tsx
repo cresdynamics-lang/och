@@ -79,19 +79,19 @@ export const LabPanel = ({ userId }: LabPanelProps) => {
 
         {/* Alert Summary */}
         <div className="mt-3 space-y-1">
-          <div className="text-sm text-och-steel-grey">
-            Active Alerts: <span className="text-white font-medium">{alertsData?.total || 0}</span>
+          <div className="text-sm text-white/80">
+            Active Alerts: <span className="text-white font-bold">{alertsData?.total || 0}</span>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-och-signal-orange rounded-full"></div>
-              <span className="text-och-signal-orange font-medium">
+              <span className="text-och-signal-orange font-bold">
                 {alertsData?.critical || 0} Critical
               </span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-och-sahara-gold rounded-full"></div>
-              <span className="text-och-sahara-gold font-medium">
+              <span className="text-och-sahara-gold font-bold">
                 {alertsData?.high || 0} High
               </span>
             </div>
@@ -140,8 +140,8 @@ export const LabPanel = ({ userId }: LabPanelProps) => {
         {alerts.length === 0 && !isLoading && !error && (
           <div className="bg-och-steel-grey/30 rounded-xl p-8 text-center">
             <div className="text-4xl mb-3">🔍</div>
-            <div className="text-och-steel-grey font-medium mb-2">No Active Alerts</div>
-            <div className="text-och-steel-grey text-sm">All threats contained</div>
+            <div className="text-white/80 font-medium mb-2">No Active Alerts</div>
+            <div className="text-white/60 text-sm">All threats contained</div>
           </div>
         )}
       </div>

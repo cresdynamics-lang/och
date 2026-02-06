@@ -69,13 +69,13 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
             📚 LEARNING
           </h3>
           <div className="space-y-2">
-            <div className="text-sm text-och-steel-grey">DEFENDER TRACK • LEVEL {trackProgress.currentLevel}</div>
+            <div className="text-sm text-white/80 font-medium">DEFENDER TRACK • LEVEL {trackProgress.currentLevel}</div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-och-steel-grey">{progressPercent}% Complete</span>
+              <span className="text-xs text-white/70 font-medium">{progressPercent}% Complete</span>
               <div className="flex-1">
                 <Progress value={progressPercent} className="h-2" />
               </div>
-              <span className="text-xs text-och-steel-grey">
+              <span className="text-xs text-white/70 font-medium">
                 {trackProgress.videosCompleted}/{trackProgress.videosTotal} videos,{' '}
                 {trackProgress.quizzesCompleted}/{trackProgress.quizzesTotal} quizzes
               </span>
@@ -92,8 +92,8 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
                   <Play className="w-5 h-5 text-och-defender-blue" />
                 </div>
                 <div className="flex-1">
-                  <div className="font-medium text-sm">{pending.nextVideo.title}</div>
-                  <div className="text-xs text-och-steel-grey">{pending.nextVideo.duration}</div>
+                  <div className="font-medium text-sm text-white">{pending.nextVideo.title}</div>
+                  <div className="text-xs text-white/70">{pending.nextVideo.duration}</div>
                 </div>
               </div>
               <Button
@@ -143,11 +143,11 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
                               <Badge className="bg-red-500 text-white text-xs flex-shrink-0">URGENT</Badge>
                             )}
                           </div>
-                          <div className="text-xs text-och-steel-grey mt-1">
+                          <div className="text-xs text-white/70 mt-1">
                             Due: {dueDate.toLocaleDateString()} {dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
-                        <div className="text-xs text-och-steel-grey ml-2 flex-shrink-0">
+                        <div className="text-xs text-white/70 ml-2 flex-shrink-0 font-medium">
                           Avg: {Math.round(quiz.classAvg * 100)}%
                         </div>
                       </div>
@@ -166,7 +166,7 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
 
           {/* Track Roadmap */}
           <div className="mt-4">
-            <div className="text-sm font-medium text-och-defender-blue mb-3">TRACK ROADMAP</div>
+            <div className="text-sm font-bold text-och-defender-blue mb-3">TRACK ROADMAP</div>
             {defenderTrack.map((level) => (
               <div
                 key={level.level}
@@ -179,17 +179,17 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
                   className="w-full p-3 bg-och-steel-grey/20 hover:bg-och-steel-grey/30 flex items-center justify-between transition-all focus:outline-none focus:ring-2 focus:ring-och-defender-blue"
                 >
                   <div className="flex items-center gap-2">
-                    <span id={`level-${level.level}-title`} className="font-medium text-sm">
+                    <span id={`level-${level.level}-title`} className="font-medium text-sm text-white">
                       {level.title}
                     </span>
                     {!level.isUnlocked && (
-                      <Lock className="w-4 h-4 text-och-steel-grey" />
+                      <Lock className="w-4 h-4 text-white/50" />
                     )}
                   </div>
                   {expandedLevels.has(level.level) ? (
-                    <ChevronUp className="w-4 h-4 text-och-steel-grey" />
+                    <ChevronUp className="w-4 h-4 text-white/70" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-och-steel-grey" />
+                    <ChevronDown className="w-4 h-4 text-white/70" />
                   )}
                 </button>
 
@@ -224,7 +224,7 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
                                 {recipe.status === 'completed' && (
                                   <CheckCircle2 className="w-4 h-4 text-och-cyber-mint" />
                                 )}
-                                <span className="text-sm">{recipe.title}</span>
+                                <span className="text-sm text-white">{recipe.title}</span>
                               </div>
                               {recipe.status === 'available' && (
                                 <div className="flex gap-2">
@@ -256,7 +256,7 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
                               )}
                             </div>
                             {recipe.description && (
-                              <div className="text-xs text-och-steel-grey mt-1">{recipe.description}</div>
+                              <div className="text-xs text-white/70 mt-1">{recipe.description}</div>
                             )}
                           </div>
                         ))}
@@ -274,7 +274,7 @@ export const LearningContentPanel = ({ content, userId, onContentUpdate }: Learn
               <div className="text-sm font-medium text-och-cyber-mint mb-2">
                 Ready to Advance!
               </div>
-              <div className="text-xs text-och-steel-grey mb-3">
+              <div className="text-xs text-white/80 mb-3">
                 You've reached {Math.round(trackProgress.percentComplete * 100)}% readiness. Unlock Level {trackProgress.currentLevel + 1} to continue.
               </div>
               <Button

@@ -25,7 +25,7 @@ export const CareerPipelinePanel = ({ career, userId, onUpdate }: CareerPipeline
         <h3 className="font-inter text-xl font-bold text-och-defender-blue flex items-center gap-2 mb-2">
           🎯 CAREER
         </h3>
-        <div className="text-xs text-och-steel-grey uppercase tracking-wider">
+        <div className="text-xs text-white/80 uppercase tracking-wider">
           SOC Job Pipeline
         </div>
       </div>
@@ -46,7 +46,7 @@ export const CareerPipelinePanel = ({ career, userId, onUpdate }: CareerPipeline
             <div className="text-lg font-bold text-och-cyber-mint">
               {career.portfolio.viewsThisWeek}
             </div>
-            <div className="text-xs text-och-steel-grey mt-1">views/wk</div>
+            <div className="text-xs text-white/70 mt-1">views/wk</div>
             {career.portfolio.weeklyGrowth > 0 && (
               <div className="text-xs text-och-cyber-mint font-medium mt-1">
                 +{career.portfolio.weeklyGrowth} today
@@ -57,13 +57,13 @@ export const CareerPipelinePanel = ({ career, userId, onUpdate }: CareerPipeline
             <div className="text-lg font-bold text-och-cyber-mint">
               {career.portfolio.employerViews}
             </div>
-            <div className="text-xs text-och-steel-grey mt-1">Employer</div>
+            <div className="text-xs text-white/70 mt-1">Employer</div>
           </div>
           <div className="text-center border-l border-och-steel-grey/30 pl-3">
             <div className="text-lg font-bold text-och-cyber-mint">
               {career.portfolio.totalViews}
             </div>
-            <div className="text-xs text-och-steel-grey mt-1">Total</div>
+            <div className="text-xs text-white/70 mt-1">Total</div>
           </div>
         </div>
       </div>

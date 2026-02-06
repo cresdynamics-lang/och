@@ -49,7 +49,7 @@ export const CareerFunnel = ({ pipeline }: CareerFunnelProps) => {
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-och-steel-grey uppercase tracking-wider mb-2">
+      <div className="text-xs text-white/80 uppercase tracking-wider mb-2 font-medium">
         PIPELINE FUNNEL
       </div>
       <div className="grid grid-cols-4 gap-2">
@@ -68,17 +68,17 @@ export const CareerFunnel = ({ pipeline }: CareerFunnelProps) => {
             >
               <div className="p-3 flex flex-col items-center gap-2">
                 {/* Icon */}
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? stage.iconBg : 'bg-och-steel-grey/20'}`}>
-                  <Icon className={`w-4 h-4 ${isActive ? stage.textColor : 'text-och-steel-grey'}`} />
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? stage.iconBg : 'bg-och-steel-grey/30'}`}>
+                  <Icon className={`w-4 h-4 ${isActive ? stage.textColor : 'text-white/50'}`} />
                 </div>
                 
                 {/* Count */}
-                <div className={`text-2xl font-bold ${isActive ? stage.textColor : 'text-och-steel-grey'}`}>
+                <div className={`text-2xl font-bold ${isActive ? stage.textColor : 'text-white/50'}`}>
                   {stage.count}
                 </div>
                 
                 {/* Label */}
-                <div className={`text-[10px] text-center font-medium uppercase tracking-wider ${isActive ? 'text-white' : 'text-och-steel-grey'}`}>
+                <div className={`text-[10px] text-center font-medium uppercase tracking-wider ${isActive ? 'text-white' : 'text-white/50'}`}>
                   {stage.label}
                 </div>
               </div>

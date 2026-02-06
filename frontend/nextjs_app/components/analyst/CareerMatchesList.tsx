@@ -71,7 +71,7 @@ export const CareerMatchesList = ({ matches, userId, onApply }: CareerMatchesLis
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-och-steel-grey uppercase tracking-wider mb-2">
+      <div className="text-xs text-white/80 uppercase tracking-wider mb-2 font-medium">
         TOP MATCHES
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -111,17 +111,17 @@ export const CareerMatchesList = ({ matches, userId, onApply }: CareerMatchesLis
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                  <div className="font-medium text-xs truncate">{match.company}</div>
+                  <div className="font-medium text-xs text-white truncate">{match.company}</div>
                   {getStatusBadge(match.status)}
                 </div>
-                <div className="text-[10px] text-och-steel-grey truncate">{match.position}</div>
+                <div className="text-[10px] text-white/70 truncate">{match.position}</div>
                 {match.location && (
-                  <div className="text-[10px] text-och-steel-grey mt-0.5 truncate">📍 {match.location}</div>
+                  <div className="text-[10px] text-white/70 mt-0.5 truncate">📍 {match.location}</div>
                 )}
               </div>
               <div className="text-right flex-shrink-0 ml-2">
                 <div className="text-base font-bold text-och-defender-blue">{match.matchScore}%</div>
-                <div className="text-[10px] text-och-steel-grey">Match</div>
+                <div className="text-[10px] text-white/70">Match</div>
               </div>
             </div>
 
@@ -162,7 +162,7 @@ export const CareerMatchesList = ({ matches, userId, onApply }: CareerMatchesLis
             </div>
 
             {match.salary && (
-              <div className="text-[10px] text-och-steel-grey mt-1.5 truncate">💰 {match.salary}</div>
+              <div className="text-[10px] text-white/70 mt-1.5 truncate">💰 {match.salary}</div>
             )}
           </div>
         );

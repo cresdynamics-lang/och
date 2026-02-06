@@ -65,7 +65,7 @@ export const AutoResumeGenerator = ({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="text-xs text-och-steel-grey uppercase tracking-wider">
+        <div className="text-xs text-white/80 uppercase tracking-wider font-medium">
           AUTO-RESUME
         </div>
         {readinessBadge === 'ready' && (
@@ -92,7 +92,7 @@ export const AutoResumeGenerator = ({
               <CheckCircle2 className="w-4 h-4 text-och-cyber-mint" />
               <span className="text-sm text-och-cyber-mint">Resume Generated</span>
             </div>
-            <span className="text-xs text-och-steel-grey">
+            <span className="text-xs text-white/70">
               {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''} left
             </span>
           </div>
@@ -126,7 +126,7 @@ export const AutoResumeGenerator = ({
               </>
             )}
           </Button>
-          <div className="text-xs text-och-steel-grey mt-2 text-center">
+          <div className="text-xs text-white/70 mt-2 text-center">
             7-day expiry • Auto-includes portfolio
           </div>
         </div>
