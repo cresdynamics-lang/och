@@ -49,7 +49,8 @@ export function getRedirectRoute(user: User | null): string {
   const route = getDashboardRoute(primaryRole)
 
   // Validate that the route exists and is accessible
-  if (!route || !route.startsWith('/dashboard/')) {
+  // Allow both /dashboard/* routes and /mentor/dashboard route
+  if (!route || (!route.startsWith('/dashboard/') && route !== '/mentor/dashboard')) {
     console.error('getRedirectRoute: Invalid route generated:', route, 'for role:', primaryRole)
     return '/dashboard/student' // Fallback to student dashboard
   }
@@ -88,20 +89,14 @@ export function isValidDashboardRoute(route: string): boolean {
     return false
   }
 
-  // Must start with /dashboard/
-  if (!route.startsWith('/dashboard/')) {
+  // Allow /dashboard/* routes and /mentor/dashboard route
+  if (!route.startsWith('/dashboard/') && route !== '/mentor/dashboard') {
     return false
   }
 
-  // Extract the role from the path
-  const role = route.split('/')[2]
-  if (!role) {
-    return false
-  }
-
-  // Check if it's a known role
-  const validRoles = Object.keys(ROLE_DASHBOARD_MAP)
-  return validRoles.some(validRole => ROLE_DASHBOARD_MAP[validRole as keyof typeof ROLE_DASHBOARD_MAP] === route)
+  // Check if it's a known route in the ROLE_DASHBOARD_MAP
+  const validRoutes = Object.values(ROLE_DASHBOARD_MAP)
+  return validRoutes.includes(route as any)
 }
 
 /**

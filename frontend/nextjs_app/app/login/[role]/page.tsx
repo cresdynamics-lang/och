@@ -231,7 +231,8 @@ function LoginForm() {
       }
 
       // Validate the final route
-      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/'))) {
+      // Allow /dashboard/*, /mentor/dashboard, and /students/* routes
+      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/') && route !== '/mentor/dashboard')) {
         console.warn('login: Invalid route generated, using fallback:', route);
         route = '/dashboard/student';
       }
