@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const protectedRoutes = ['/dashboard'];
+const protectedRoutes = ['/dashboard', '/sponsor'];
 const openRoutes = [
   '/dashboard/student',
   '/dashboard/student/coaching',
@@ -20,7 +20,6 @@ const openRoutes = [
   '/dashboard/student/profiling',
   '/dashboard/student/settings',
   '/dashboard/student/settings/profile',
-  '/dashboard/sponsor',
   '/curriculum',
   '/curriculum/learn',
   '/onboarding',
@@ -110,6 +109,11 @@ function canAccess(pathname: string, roles: string[]): boolean {
     return roles.includes('student') || roles.includes('mentee')
   }
 
+  // Handle sponsor routes
+  if (pathname.startsWith('/sponsor/')) {
+    return roles.includes('sponsor') || roles.includes('sponsor_admin')
+  }
+
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
     if (pathname.startsWith('/dashboard/director')) return roles.includes('program_director')
     if (pathname.startsWith('/dashboard/admin')) return roles.includes('admin')
@@ -196,7 +200,7 @@ export function middleware(request: NextRequest) {
         'director': ['program_director'],
         'admin': ['admin'],
         'mentor': ['mentor'],
-        'sponsor': ['sponsor_admin'],
+        'sponsor': ['sponsor', 'sponsor_admin'],
         'analyst': ['analyst'],
         'analytics': ['analyst', 'program_director'],
         'employer': ['employer'],
