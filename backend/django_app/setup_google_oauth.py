@@ -31,12 +31,13 @@ def setup_google_oauth():
     provider, created = SSOProvider.objects.update_or_create(
         name='google',
         defaults={
-            'provider_type': 'google',
+            'provider_type': 'oidc',
             'client_id': client_id,
             'client_secret': client_secret,
-            'authorization_url': 'https://accounts.google.com/o/oauth2/v2/auth',
-            'token_url': 'https://oauth2.googleapis.com/token',
-            'user_info_url': 'https://www.googleapis.com/oauth2/v2/userinfo',
+            'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_endpoint': 'https://oauth2.googleapis.com/token',
+            'userinfo_endpoint': 'https://openidconnect.googleapis.com/v1/userinfo',
+            'issuer': 'https://accounts.google.com',
             'scopes': ['openid', 'email', 'profile'],
             'is_active': True,
         }
