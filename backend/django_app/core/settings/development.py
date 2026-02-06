@@ -67,9 +67,11 @@ INSTALLED_APPS = INSTALLED_APPS + [
 ]
 
 # Use PostgreSQL for development (consistent with production)
+# TEMPORARILY USING SQLITE FOR LOCAL DEVELOPMENT
 # Override with environment variables if needed
-if os.environ.get('USE_SQLITE', 'false').lower() == 'true':
-    # Fallback to SQLite only if explicitly requested
+USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'true').lower() == 'true'  # Default to SQLite for local dev
+if USE_SQLITE_FORCE:
+    # Use SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',

@@ -37,17 +37,17 @@ const KpiCard = ({ label, value, target, status, trend }: KpiCardProps) => {
   };
 
   return (
-    <div className={`p-3 rounded-xl border ${statusColors[status]} group hover:shadow-lg transition-all`}>
+    <div className={`p-2.5 rounded-lg border ${statusColors[status]} group hover:shadow-lg transition-all`}>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-och-steel-grey uppercase tracking-wider">{label}</span>
-        <div className={`w-2 h-2 rounded-full ${status === 'success' ? 'bg-och-cyber-mint' : 'bg-och-sahara-gold'}`} />
+        <span className="text-[10px] font-medium text-och-steel-grey uppercase tracking-wider truncate">{label}</span>
+        <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1 ${status === 'success' ? 'bg-och-cyber-mint' : 'bg-och-sahara-gold'}`} />
       </div>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="flex items-center gap-2 text-xs text-och-steel-grey mt-1">
-        <Target className="w-3 h-3" />
-        <span>{target}</span>
+      <div className="text-xl font-bold truncate">{value}</div>
+      <div className="flex items-center gap-1 text-[10px] text-och-steel-grey mt-0.5">
+        <Target className="w-2.5 h-2.5 flex-shrink-0" />
+        <span className="truncate">{target}</span>
       </div>
-      <div className="text-xs font-medium mt-1">{trend}</div>
+      <div className="text-[10px] font-medium mt-0.5">{trend}</div>
     </div>
   );
 };
@@ -210,7 +210,7 @@ export const MetricsPanel = ({ userId }: MetricsPanelProps) => {
       </div>
 
       {/* Core KPIs */}
-      <div className="px-4 py-3 space-y-3 flex-shrink-0">
+      <div className="px-4 py-3 grid grid-cols-3 gap-2 flex-shrink-0">
         <KpiCard
           label="Readiness"
           value={`${metricsData.readiness}%`}

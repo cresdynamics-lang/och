@@ -10,7 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ mentorSlug: string; studentId: string }> }
 ) {
   try {
-    const { mentorSlug, studentId } = params
+    const { mentorSlug, studentId } = await params
 
     if (!mentorSlug || !studentId) {
       return NextResponse.json(

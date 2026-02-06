@@ -141,6 +141,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const { userId } = await params;
   try {
     // Check Redis cache first
     const cachedData = await getCachedMetrics(userId);

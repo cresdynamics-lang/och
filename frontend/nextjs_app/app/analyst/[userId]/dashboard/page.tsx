@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { SidePanelTabs } from '@/components/analyst/SidePanelTabs';
 import { PriorityTasksCompact } from '@/components/analyst/PriorityTasksCompact';
 import { LiveLabFeedCompact } from '@/components/analyst/LiveLabFeedCompact';
@@ -8,9 +8,13 @@ import { ProgressShelfMicro } from '@/components/analyst/ProgressShelfMicro';
 import { MobileBottomNav } from '@/components/analyst/MobileBottomNav';
 import { DashboardErrorBoundary } from '@/components/analyst/ErrorBoundary';
 import { SkipNavigation } from '@/components/analyst/SkipNavigation';
+import { useAnalystRealtime } from '@/hooks/useAnalystRealtime';
 
 export default function AnalystDashboard({ params }: { params: { userId: string } }) {
   const [mobileOverlay, setMobileOverlay] = useState<string | null>(null);
+  
+  // Initialize realtime SSE updates
+  useAnalystRealtime(params.userId);
 
   return (
     <>

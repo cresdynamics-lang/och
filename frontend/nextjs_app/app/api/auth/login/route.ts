@@ -207,11 +207,30 @@ export async function POST(request: NextRequest) {
     return nextResponse;
   } catch (error: any) {
     console.error('Login API route error:', error);
+    console.error('Error stack:', error?.stack);
+    console.error('Error message:', error?.message);
+
+    // Check if it's a connection error
+    const isConnectionError = 
+      error?.message?.includes('fetch failed') ||
+      error?.message?.includes('ECONNREFUSED') ||
+      error?.code === 'ECONNREFUSED' ||
+      error?.cause?.code === 'ECONNREFUSED';
+
+    if (isConnectionError) {
+      return NextResponse.json(
+        {
+          error: 'Connection failed',
+          detail: 'Cannot connect to backend server. Please ensure the Django API is running on port 8000.',
+        },
+        { status: 503 }
+      );
+    }
 
     return NextResponse.json(
       {
         error: 'Login failed',
-        detail: 'An unexpected error occurred',
+        detail: error?.message || 'An unexpected error occurred',
       },
       { status: 500 }
     );

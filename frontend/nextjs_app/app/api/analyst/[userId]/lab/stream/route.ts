@@ -54,6 +54,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const { userId } = await params;
+  
   const stream = new ReadableStream({
     start(controller) {
       // Send initial connection message

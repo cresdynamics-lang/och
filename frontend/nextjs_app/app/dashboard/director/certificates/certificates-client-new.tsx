@@ -75,7 +75,7 @@ export default function CertificatesClient() {
   const loadStatistics = async () => {
     try {
       const response = await apiClient.get('/api/v1/programs/director/certificates/statistics/')
-      setStats(response.data)
+      setStats((response as any).data)
     } catch (err) {
       console.error('Failed to load certificate statistics:', err)
     }
@@ -84,10 +84,11 @@ export default function CertificatesClient() {
   const downloadCertificate = async (certificateId: string) => {
     try {
       const response = await apiClient.get(`/api/v1/programs/director/certificates/${certificateId}/download/`, {
+        // @ts-ignore - responseType not in type but needed for blob
         responseType: 'blob'
       })
       
-      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const blob = new Blob([(response as any).data], { type: 'application/pdf' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

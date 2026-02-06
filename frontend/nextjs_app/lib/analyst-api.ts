@@ -7,7 +7,17 @@ export const ANALYST_ENDPOINTS = {
   labFeed: (userId: string) => `/api/analyst/${userId}/lab/feed`,
   progress: (userId: string) => `/api/analyst/${userId}/progress`,
   metrics: (userId: string) => `/api/analyst/${userId}/metrics`,
-  labStream: (userId: string) => `/api/analyst/${userId}/stream`
+  labStream: (userId: string) => `/api/analyst/${userId}/stream`,
+  // Content Integration Engine
+  content: (userId: string) => `/api/analyst/${userId}/content`,
+  progressAdvance: (userId: string) => `/api/analyst/${userId}/progress/advance`,
+  quizStart: (userId: string, quizId: string) => `/api/analyst/${userId}/quiz/${quizId}/start`,
+  // Advanced Tools
+  toolsAnalyze: (userId: string) => `/api/analyst/${userId}/tools/analyze`,
+  // Career Pipeline
+  career: (userId: string) => `/api/analyst/${userId}/career`,
+  careerApply: (userId: string) => `/api/analyst/${userId}/career/apply`,
+  resumeGenerate: (userId: string) => `/api/analyst/${userId}/resume/generate`,
 };
 
 // API response types

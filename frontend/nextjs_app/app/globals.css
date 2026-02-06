@@ -114,6 +114,166 @@ h3 {
   background-size: 1000px 100%;
 }
 
+/* Print Styles for Daily Digest + Resume */
+@media print {
+  @page {
+    margin: 1in;
+    size: letter;
+  }
+
+  body {
+    background: white;
+    color: black;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+
+  /* Hide non-essential elements */
+  nav,
+  button:not(.print-keep),
+  .no-print,
+  [role="navigation"],
+  [role="complementary"] {
+    display: none !important;
+  }
+
+  /* Ensure content is visible */
+  main,
+  [role="main"],
+  .print-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Resume-specific styles */
+  .resume-section {
+    page-break-inside: avoid;
+    margin-bottom: 1em;
+  }
+
+  .resume-header {
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.5em;
+    margin-bottom: 1em;
+  }
+
+  /* Daily Digest styles */
+  .digest-section {
+    page-break-inside: avoid;
+    margin-bottom: 1.5em;
+  }
+
+  .digest-header {
+    font-size: 18pt;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 0.25em;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th,
+  td {
+    border: 1px solid #000;
+    padding: 0.25em;
+    text-align: left;
+  }
+
+  th {
+    background: #f0f0f0;
+    font-weight: bold;
+  }
+
+  /* Links */
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Avoid breaking */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    page-break-after: avoid;
+  }
+
+  /* Charts and images */
+  img,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Colors for print */
+  .bg-och-defender-blue,
+  .bg-och-cyber-mint,
+  .bg-och-signal-orange {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+  }
+
+  /* Badges */
+  .badge {
+    border: 1px solid #000;
+    padding: 0.125em 0.25em;
+    display: inline-block;
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus visible styles for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--och-defender);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+}
+
+.skip-to-main:focus {
+  left: 50%;
+  transform: translateX(-50%);
+  top: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--och-defender);
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
 /* Smooth transitions */
 .transition-smooth {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);

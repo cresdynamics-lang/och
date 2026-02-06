@@ -12,6 +12,7 @@ import { SIEMQueryBuilder } from './SIEMQueryBuilder';
 import { YARARuleEditor } from './YARARuleEditor';
 import { WiresharkLab } from './WiresharkLab';
 import { ThreatIntelFeed } from './ThreatIntelFeed';
+import { SigmaIOCHunter } from './SigmaIOCHunter';
 
 interface ToolsPanelProps {
   userId: string;
@@ -92,6 +93,17 @@ export const ToolsPanel = ({ userId }: ToolsPanelProps) => {
         logAction('tool.launch', { tool: 'threat-intel' });
         setActiveModal('threat-intel');
       }
+    },
+    {
+      id: 'sigma',
+      icon: FileText,
+      title: 'Sigma IOC Hunter',
+      subtitle: recentTools?.sigma?.recentIOC || '192.168.4.17',
+      shortcut: '⌘ S',
+      onClick: () => {
+        logAction('tool.launch', { tool: 'sigma' });
+        setActiveModal('sigma');
+      }
     }
   ];
 
@@ -119,6 +131,11 @@ export const ToolsPanel = ({ userId }: ToolsPanelProps) => {
             e.preventDefault();
             logAction('tool.shortcut', { tool: 'threat-intel', shortcut: '⌘ I' });
             setActiveModal('threat-intel');
+            break;
+          case 's':
+            e.preventDefault();
+            logAction('tool.shortcut', { tool: 'sigma', shortcut: '⌘ S' });
+            setActiveModal('sigma');
             break;
         }
       }
@@ -242,6 +259,13 @@ export const ToolsPanel = ({ userId }: ToolsPanelProps) => {
 
       {activeModal === 'threat-intel' && (
         <ThreatIntelFeed
+          onClose={closeModal}
+          userId={userId}
+        />
+      )}
+
+      {activeModal === 'sigma' && (
+        <SigmaIOCHunter
           onClose={closeModal}
           userId={userId}
         />
