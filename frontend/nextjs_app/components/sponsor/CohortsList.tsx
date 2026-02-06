@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { sponsorClient, SponsorCohort } from '@/services/sponsorClient'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/Button'
 import { Users, FileText, TrendingUp, Plus } from 'lucide-react'
 
 export function CohortsList() {

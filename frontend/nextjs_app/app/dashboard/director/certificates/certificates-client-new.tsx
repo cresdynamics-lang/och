@@ -63,7 +63,7 @@ export default function CertificatesClient() {
       if (statusFilter !== 'all') params.append('status', statusFilter)
       if (programFilter !== 'all') params.append('program_id', programFilter)
       
-      const response = await apiClient.get(`/api/v1/programs/director/certificates/list_certificates/?${params}`)
+      const response = await apiClient.get(`/api/v1/programs/director/certificates/list_certificates/?${params}`) as any
       setCertificates(response.data.certificates || [])
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load certificates')

@@ -21,7 +21,17 @@ import {
 // Memoize NavigationHeader to prevent unnecessary re-renders
 const NavigationHeader = memo(function NavigationHeader({ currentPath }: { currentPath: string }) {
   const router = useRouter()
-  const handleStartTrial = () => router.push('/signup/student')
+  const handleStartTrial = () => {
+    try {
+      router.push('/signup/student')
+    } catch (error) {
+      console.error('Router error:', error)
+      // Fallback: redirect using window.location
+      if (typeof window !== 'undefined') {
+        window.location.href = '/signup/student'
+      }
+    }
+  }
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-och-midnight/95 backdrop-blur-md border-b border-och-steel/20">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

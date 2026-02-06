@@ -65,7 +65,7 @@ export default function CalendarTemplatePage() {
 
   const fetchPrograms = async () => {
     try {
-      const data = await apiGateway.get('/programs/')
+      const data = await apiGateway.get('/programs/') as any
       setPrograms(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch programs:', error)
@@ -74,7 +74,7 @@ export default function CalendarTemplatePage() {
 
   const fetchTracks = async (programId: string) => {
     try {
-      const data = await apiGateway.get(`/tracks/?program_id=${programId}`)
+      const data = await apiGateway.get(`/tracks/?program_id=${programId}`) as any
       setTracks(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch tracks:', error)
@@ -83,7 +83,7 @@ export default function CalendarTemplatePage() {
 
   const fetchTemplates = async () => {
     try {
-      const data = await apiGateway.get('/calendar-templates/')
+      const data = await apiGateway.get('/calendar-templates/') as any
       setTemplates(data.results || data.data || data || [])
     } catch (error) {
       console.error('Failed to fetch templates:', error)
@@ -136,7 +136,7 @@ export default function CalendarTemplatePage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">

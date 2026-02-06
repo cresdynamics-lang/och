@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/auth/login`;
     console.log('[Login API] Forwarding to API URL:', apiUrl);
 
-    const djangoResponse = await fetch(djangoUrl, {
+    const apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -113,12 +113,12 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ email, password }),
     });
 
-    console.log('[Login API] Django response status:', djangoResponse.status);
+    console.log('[Login API] API response status:', apiResponse.status);
 
-    if (!djangoResponse.ok) {
-      console.log('[Login API] Django auth failed with status:', djangoResponse.status);
-      const errorText = await djangoResponse.text();
-      console.log('[Login API] Django error response:', errorText);
+    if (!apiResponse.ok) {
+      console.log('[Login API] API auth failed with status:', apiResponse.status);
+      const errorText = await apiResponse.text();
+      console.log('[Login API] API error response:', errorText);
       return NextResponse.json(
         {
           error: 'Login failed',
@@ -128,11 +128,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const djangoData = await djangoResponse.json();
-    console.log('[Login API] Django auth successful for user:', djangoData.user?.email);
+    const apiData = await apiResponse.json();
+    console.log('[Login API] API auth successful for user:', apiData.user?.email);
 
-    // Use the Django response data
-    const loginResponse = djangoData;
+    // Use the API response data
+    const loginResponse = apiData;
     console.log('[Login API] Full login response:', JSON.stringify(loginResponse, null, 2));
 
     // Create the response (include refresh_token so client can store it for auto-refresh)
