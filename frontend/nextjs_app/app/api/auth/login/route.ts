@@ -101,8 +101,8 @@ export async function POST(request: NextRequest) {
 
     console.log('[Login API] Received login attempt:', { email, passwordLength: password?.length });
 
-    // Forward authentication to OCH API backend
-    const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/auth/login`;
+    // Forward authentication to Django backend
+    const apiUrl = `${process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000'}/api/v1/auth/login`;
     console.log('[Login API] Forwarding to API URL:', apiUrl);
 
     const apiResponse = await fetch(apiUrl, {
