@@ -17,11 +17,14 @@ from users.auth_models import SSOProvider
 def setup_google_oauth():
     """Create or update Google OAuth provider with credentials from .env"""
     
-    client_id = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
-    client_secret = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+    # Support both naming conventions
+    client_id = os.getenv('GOOGLE_OAUTH_CLIENT_ID') or os.getenv('GOOGLE_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET') or os.getenv('GOOGLE_CLIENT_SECRET')
     
     if not client_id or not client_secret:
-        print("❌ Error: GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set in .env")
+        print("❌ Error: Google OAuth credentials must be set in .env")
+        print("   Required: GOOGLE_OAUTH_CLIENT_ID (or GOOGLE_CLIENT_ID)")
+        print("   Required: GOOGLE_OAUTH_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET)")
         return False
     
     # Create or update Google SSO provider
