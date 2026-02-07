@@ -8,10 +8,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from django.conf import settings
 from .models import PortfolioItem
 from users.models import User
 import json
 import uuid
+import os
 
 
 @api_view(['GET'])
@@ -27,8 +31,8 @@ def get_portfolio_items(request, user_id):
             {'detail': 'You can only access your own portfolio'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
-    items = PortfolioItem.objects.filter(user_id=user_id).order_by('-created_at')
+
+    items = PortfolioItem.objects.filter(user=request.user).order_by('-created_at')
     
     items_data = []
     for item in items:
@@ -86,7 +90,7 @@ def get_portfolio_item(request, item_id):
         )
     
     # Only allow users to access their own portfolio items
-    if item.user_id != request.user.id:
+    if item.user != request.user:
         return Response(
             {'detail': 'You can only access your own portfolio items'},
             status=status.HTTP_403_FORBIDDEN
@@ -134,12 +138,12 @@ def create_portfolio_item(request, user_id):
             {'detail': 'You can only create items in your own portfolio'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+
     data = request.data
-    
+
     # Create portfolio item
     item = PortfolioItem.objects.create(
-        user_id=user_id,
+        user=request.user,
         title=data.get('title', 'Untitled'),
         summary=data.get('summary', ''),
         item_type=data.get('type', 'mission'),
@@ -177,7 +181,7 @@ def update_portfolio_item_logic(request, item_id):
         )
     
     # Only allow users to update their own portfolio items
-    if item.user_id != request.user.id:
+    if item.user != request.user:
         return Response(
             {'detail': 'You can only update your own portfolio items'},
             status=status.HTTP_403_FORBIDDEN
@@ -243,7 +247,7 @@ def delete_portfolio_item_logic(request, item_id):
         )
     
     # Only allow users to delete their own portfolio items
-    if item.user_id != request.user.id:
+    if item.user != request.user:
         return Response(
             {'detail': 'You can only delete your own portfolio items'},
             status=status.HTTP_403_FORBIDDEN
@@ -266,8 +270,8 @@ def get_portfolio_health(request, user_id):
             {'detail': 'You can only access your own portfolio health'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
-    items = PortfolioItem.objects.filter(user_id=user_id)
+
+    items = PortfolioItem.objects.filter(user=request.user)
     total_items = items.count()
     approved_items = items.filter(status='approved').count()
     pending_items = items.filter(status__in=['draft', 'submitted', 'pending']).count()
@@ -319,4 +323,62 @@ def get_portfolio_health(request, user_id):
         'averageScore': 0,  # TODO: Calculate from mentor reviews
         'topSkills': top_skills_list,
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_portfolio_file(request, user_id):
+    """
+    POST /api/v1/student/dashboard/portfolio/{user_id}/upload
+    Upload a file for portfolio evidence
+    """
+    # Only allow users to upload files to their own portfolio
+    if str(request.user.id) != str(user_id):
+        return Response(
+            {'detail': 'You can only upload files to your own portfolio'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if 'file' not in request.FILES:
+        return Response(
+            {'detail': 'No file provided'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    uploaded_file = request.FILES['file']
+
+    # Validate file size (50MB max)
+    max_size = 50 * 1024 * 1024  # 50MB
+    if uploaded_file.size > max_size:
+        return Response(
+            {'detail': 'File size exceeds 50MB limit'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Generate unique filename
+    file_extension = os.path.splitext(uploaded_file.name)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = f"portfolio/{user_id}/{unique_filename}"
+
+    # Save file
+    saved_path = default_storage.save(file_path, ContentFile(uploaded_file.read()))
+
+    # Determine file type
+    file_type = 'link'
+    if uploaded_file.content_type.startswith('image/'):
+        file_type = 'image'
+    elif uploaded_file.content_type.startswith('video/'):
+        file_type = 'video'
+    elif uploaded_file.content_type == 'application/pdf':
+        file_type = 'pdf'
+
+    # Build file URL
+    file_url = f"/media/{saved_path}"
+
+    return Response({
+        'url': file_url,
+        'name': uploaded_file.name,
+        'size': uploaded_file.size,
+        'type': file_type,
+    }, status=status.HTTP_201_CREATED)
 

@@ -698,7 +698,12 @@ def mentor_mission_submissions(request, mentor_id):
     except Exception:
         pass
 
-    qs = MissionSubmission.objects.filter(user_id__in=list(mentee_ids)).select_related('user', 'mission').order_by('-created_at')
+    # Convert BIGINT mentee_id values to UUID values
+    mentee_uuids = User.objects.filter(
+        id__in=list(mentee_ids)
+    ).values_list('uuid_id', flat=True)
+
+    qs = MissionSubmission.objects.filter(student_id__in=list(mentee_uuids)).select_related('student', 'assignment', 'assignment__mission').order_by('-created_at')
     if status_filter:
         qs = qs.filter(status=status_filter)
 
@@ -709,15 +714,15 @@ def mentor_mission_submissions(request, mentor_id):
     for sub in rows:
         results.append({
             'id': str(sub.id),
-            'mission_id': str(sub.mission_id),
-            'mission_title': getattr(sub.mission, 'title', ''),
-            'mentee_id': str(sub.user_id),
-            'mentee_name': sub.user.get_full_name() or sub.user.email,
-            'mentee_email': sub.user.email,
+            'mission_id': str(sub.assignment.mission_id) if sub.assignment else None,
+            'mission_title': sub.assignment.mission.title if sub.assignment and sub.assignment.mission else 'Unknown',
+            'mentee_id': str(sub.student_id),
+            'mentee_name': sub.student.get_full_name() or sub.student.email,
+            'mentee_email': sub.student.email,
             'submitted_at': sub.submitted_at.isoformat() if sub.submitted_at else None,
             'status': sub.status,
-            'mentor_score': float(sub.mentor_score) if sub.mentor_score is not None else None,
-            'ai_score': float(sub.ai_score) if sub.ai_score is not None else None,
+            'mentor_score': float(sub.score) if sub.score is not None else None,
+            'ai_score': float(sub.score) if sub.score is not None else None,
         })
 
     return Response({
@@ -1998,19 +2003,24 @@ def mentor_mission_submissions(request, mentor_id):
         mentor=mentor,
         status='active'
     ).values_list('mentee_id', flat=True)
-    
+
+    # Convert BIGINT mentee_id values to UUID values
+    mentee_uuids = User.objects.filter(
+        id__in=assignments
+    ).values_list('uuid_id', flat=True)
+
     status_filter = request.query_params.get('status', 'all')
     limit = int(request.query_params.get('limit', 50))
     offset = int(request.query_params.get('offset', 0))
-    
+
     # Get submissions for mentor's mentees
-    queryset = MissionSubmission.objects.filter(user_id__in=assignments)
-    
+    queryset = MissionSubmission.objects.filter(student_id__in=mentee_uuids).select_related('student', 'assignment', 'assignment__mission')
+
     if status_filter == 'pending_review':
         queryset = queryset.filter(status__in=['submitted', 'ai_reviewed'])
     elif status_filter == 'in_review':
         queryset = queryset.filter(status='in_review')
-    
+
     total_count = queryset.count()
     submissions = queryset.order_by('-submitted_at')[offset:offset + limit]
     
@@ -2018,14 +2028,14 @@ def mentor_mission_submissions(request, mentor_id):
     for submission in submissions:
         submissions_data.append({
             'id': str(submission.id),
-            'mission_id': str(submission.mission_id) if submission.mission_id else None,
-            'mission_title': submission.mission.title if hasattr(submission, 'mission') and submission.mission else 'Unknown',
-            'mentee_id': str(submission.user.id),
-            'mentee_name': submission.user.get_full_name() or submission.user.email,
+            'mission_id': str(submission.assignment.mission_id) if submission.assignment else None,
+            'mission_title': submission.assignment.mission.title if submission.assignment and submission.assignment.mission else 'Unknown',
+            'mentee_id': str(submission.student.id),
+            'mentee_name': submission.student.get_full_name() or submission.student.email,
             'status': submission.status,
             'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
-            'ai_score': float(submission.ai_score) if submission.ai_score else None,
-            'mentor_score': float(submission.mentor_score) if submission.mentor_score else None,
+            'ai_score': float(submission.score) if submission.score else None,
+            'mentor_score': float(submission.score) if submission.score else None,
         })
     
     return Response({
@@ -2233,26 +2243,31 @@ def mentor_influence_index(request, mentor_id):
     # Get assignments
     assignments = MenteeMentorAssignment.objects.filter(mentor=mentor, status='active')
     mentee_ids = assignments.values_list('mentee_id', flat=True)
-    
+
+    # Convert BIGINT mentee_id values to UUID values
+    mentee_uuids = User.objects.filter(
+        id__in=mentee_ids
+    ).values_list('uuid_id', flat=True)
+
     # Calculate metrics (simplified - would integrate with actual TalentScope influence tracking)
     total_feedback = MissionSubmission.objects.filter(
-        user_id__in=mentee_ids,
-        mentor_feedback__isnull=False
-    ).exclude(mentor_feedback='').count()
-    
+        student_id__in=mentee_uuids,
+        feedback__isnull=False
+    ).exclude(feedback='').count()
+
     total_sessions = MentorSession.objects.filter(
         mentor=mentor,
         type='group'
     ).count()
-    
+
     approved_missions = MissionSubmission.objects.filter(
-        user_id__in=mentee_ids,
+        student_id__in=mentee_uuids,
         status='approved'
     ).count()
-    
+
     total_reviewed = MissionSubmission.objects.filter(
-        user_id__in=mentee_ids,
-        mentor_reviewed_at__isnull=False
+        student_id__in=mentee_uuids,
+        reviewed_at__isnull=False
     ).count()
     
     # Calculate period (default to last 30 days if not specified)

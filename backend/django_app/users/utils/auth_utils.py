@@ -111,13 +111,21 @@ def create_user_session(user, device_fingerprint, device_name=None, ip_address=N
     # Use raw SQL to insert session (bypasses Django ORM foreign key checks)
     try:
         with connection.cursor() as cursor:
-            # Disable foreign key checks for this transaction
-            cursor.execute('PRAGMA foreign_keys=OFF')
-            cursor.execute("""
-                INSERT INTO user_sessions 
-                (id, user_id, device_fingerprint, device_name, device_type, ip_address, ua, 
+            # Check database vendor for proper SQL syntax
+            is_postgres = connection.vendor == 'postgresql'
+
+            # Disable foreign key checks for this transaction (database-specific)
+            if not is_postgres:
+                cursor.execute('PRAGMA foreign_keys=OFF')
+
+            # Use appropriate placeholder for database
+            placeholder = '%s' if is_postgres else '?'
+
+            cursor.execute(f"""
+                INSERT INTO user_sessions
+                (id, user_id, device_fingerprint, device_name, device_type, ip_address, ua,
                  refresh_token_hash, is_trusted, mfa_verified, risk_score, created_at, last_activity, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
             """, (
                 session_id_str,
                 str(user.uuid_id),  # Ensure string format
@@ -127,14 +135,16 @@ def create_user_session(user, device_fingerprint, device_name=None, ip_address=N
                 ip_address,
                 user_agent,
                 refresh_token_hash,
-                0,  # False as integer for SQLite BOOLEAN
-                0,  # False as integer for SQLite BOOLEAN
+                False if is_postgres else 0,  # Use proper boolean for PostgreSQL
+                False if is_postgres else 0,  # Use proper boolean for PostgreSQL
                 0.0,
                 now,
                 now,
                 expires_at
             ))
-            cursor.execute('PRAGMA foreign_keys=ON')
+
+            if not is_postgres:
+                cursor.execute('PRAGMA foreign_keys=ON')
         
         # Fetch the session using ORM (now that it exists in DB)
         session = UserSession.objects.get(id=session_uuid)

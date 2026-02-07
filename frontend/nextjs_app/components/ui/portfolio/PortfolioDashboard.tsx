@@ -86,7 +86,7 @@ export function PortfolioDashboard() {
   const healthScore = healthMetrics?.healthScore ? Math.round(healthMetrics.healthScore * 10) : 0;
   const readinessScore = 742; // TODO: Implement TalentScope API
 
-  const [statusFilter, setStatusFilter] = useState<PortfolioItemStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<PortfolioItemStatus | 'all' | 'pending'>('all');
   const [typeFilter, setTypeFilter] = useState<PortfolioItemType | 'all'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,9 +104,17 @@ export function PortfolioDashboard() {
 
   // Filter items
   const filteredItems = items.filter((item) => {
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+    let matchesStatus = false;
+    if (statusFilter === 'all') {
+      matchesStatus = true;
+    } else if (statusFilter === 'pending') {
+      // "Pending" includes both submitted and in_review
+      matchesStatus = item.status === 'submitted' || item.status === 'in_review';
+    } else {
+      matchesStatus = item.status === statusFilter;
+    }
     const matchesType = typeFilter === 'all' || item.type === typeFilter;
-    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.summary?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesType && matchesSearch;
   });
@@ -275,13 +283,14 @@ export function PortfolioDashboard() {
               <div className="flex items-center gap-3 flex-wrap">
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as PortfolioItemStatus | 'all')}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
                   className="h-12 px-4 bg-och-midnight/60 border border-slate-700 rounded-xl text-sm font-medium text-white focus:border-och-gold/50 outline-none transition-all cursor-pointer"
                 >
                   <option value="all">All Status</option>
                   <option value="draft">Draft</option>
                   <option value="submitted">Submitted</option>
-                  <option value="in_review">In Review</option>
+                  <option value="pending">Pending Review (Submitted + In Review)</option>
+                  <option value="in_review">In Review Only</option>
                   <option value="approved">Approved</option>
                   <option value="published">Published</option>
                 </select>
@@ -321,18 +330,18 @@ export function PortfolioDashboard() {
             {/* STATUS OVERVIEW */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                {[
-                 { label: 'Drafts', status: 'draft' as PortfolioItemStatus, count: items.filter(i => i.status === 'draft').length, color: 'slate-400', icon: FileText },
-                 { label: 'Submitted', status: 'submitted' as PortfolioItemStatus, count: items.filter(i => i.status === 'submitted').length, color: 'blue-400', icon: ArrowUpRight },
-                 { label: 'In Review', status: 'in_review' as PortfolioItemStatus, count: pendingReviews.length, color: 'amber-400', icon: Clock },
-                 { label: 'Approved', status: 'approved' as PortfolioItemStatus, count: approvedItems.length, color: 'emerald-400', icon: CheckCircle },
+                 { label: 'Drafts', status: 'draft', count: items.filter(i => i.status === 'draft').length, color: 'slate-400', icon: FileText },
+                 { label: 'Submitted', status: 'submitted', count: items.filter(i => i.status === 'submitted').length, color: 'blue-400', icon: ArrowUpRight },
+                 { label: 'In Review', status: 'pending', count: pendingReviews.length, color: 'amber-400', icon: Clock },
+                 { label: 'Approved', status: 'approved', count: approvedItems.length, color: 'emerald-400', icon: CheckCircle },
                ].map((phase, i) => (
                  <button
                    key={i}
-                   onClick={() => setStatusFilter(phase.status)}
+                   onClick={() => setStatusFilter(phase.status as any)}
                    className={clsx(
                      "p-4 rounded-xl border transition-all group text-left",
-                     statusFilter === phase.status 
-                       ? "bg-och-gold/10 border-och-gold/40 shadow-lg shadow-och-gold/10" 
+                     statusFilter === phase.status
+                       ? "bg-och-gold/10 border-och-gold/40 shadow-lg shadow-och-gold/10"
                        : "bg-och-midnight/40 border-slate-700 hover:border-slate-600 hover:bg-och-midnight/60"
                    )}
                  >
@@ -345,11 +354,27 @@ export function PortfolioDashboard() {
                ))}
             </div>
 
+            {/* ACTIVE FILTER INDICATOR */}
+            {statusFilter !== 'all' && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-och-gold/5 border border-och-gold/20 rounded-xl">
+                <Filter className="w-4 h-4 text-och-gold" />
+                <span className="text-sm font-semibold text-och-gold">
+                  Showing {filteredItems.length} {statusFilter === 'draft' ? 'draft' : statusFilter === 'submitted' ? 'submitted' : statusFilter === 'pending' ? 'pending review' : statusFilter === 'approved' ? 'approved' : statusFilter} items
+                </span>
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className="ml-auto text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+
             {/* REPOSITORY GRID */}
             {filteredItems.length > 0 ? (
               <div className={clsx(
-                viewMode === 'grid' 
-                  ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" 
+                viewMode === 'grid'
+                  ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
                   : "flex flex-col gap-4"
               )}>
                 <AnimatePresence mode="popLayout">
@@ -362,8 +387,8 @@ export function PortfolioDashboard() {
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <PortfolioItemCard 
-                        item={item} 
+                      <PortfolioItemCard
+                        item={item}
                         canRequestReview={canRequestReview}
                       />
                     </motion.div>
@@ -441,12 +466,12 @@ export function PortfolioDashboard() {
 
       <AnimatePresence>
         {isFormOpen && (
-          <PortfolioItemForm 
-            onClose={() => {
-              setIsFormOpen(false)
+          <PortfolioItemForm
+            onClose={async () => {
+              setIsFormOpen(false);
               // Refetch items after closing form to ensure new items appear
-              refetch()
-            }} 
+              await refetch();
+            }}
           />
         )}
       </AnimatePresence>
