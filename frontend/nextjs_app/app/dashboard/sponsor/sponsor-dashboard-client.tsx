@@ -143,24 +143,55 @@ export default function SponsorDashboardClient() {
       setSummary(dashboardSummary as SponsorDashboardSummary)
       setCohorts((cohortsData as any).results || [])
     } catch (err: any) {
-      console.error('Dashboard load error:', err)
+      // Extract error details
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const errorMessage = err?.message || err?.data?.detail || err?.data?.error || 'Unknown error';
+      
+      // Only log meaningful errors (not empty objects)
+      if (errorStatus > 0 || errorMessage !== 'Unknown error') {
+        console.log('Dashboard load error:', {
+          status: errorStatus,
+          message: errorMessage,
+          error: err
+        });
+      }
 
+      // Check if it's a connection/network error or API endpoint doesn't exist
+      const isConnectionError = errorMessage.includes('fetch failed') ||
+                               errorMessage.includes('Failed to fetch') ||
+                               errorMessage.includes('NetworkError') ||
+                               errorMessage.includes('ECONNREFUSED') ||
+                               errorMessage.includes('Cannot connect to backend server')
+      
       // Check if it's an authentication error (401)
-      const isAuthError = err?.status === 401 ||
-                         err?.response?.status === 401 ||
-                         err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials') ||
-                         err?.message?.includes('Unauthorized')
+      const isAuthError = errorStatus === 401 ||
+                         errorMessage.includes('401') ||
+                         errorMessage.includes('Authentication') ||
+                         errorMessage.includes('credentials') ||
+                         errorMessage.includes('Unauthorized')
 
-      if (isAuthError) {
+      // Check if it's a 404 (endpoint doesn't exist)
+      const isNotFoundError = errorStatus === 404 ||
+                             errorMessage.includes('404') ||
+                             errorMessage.includes('Not Found')
+
+      // Check if it's a 500 (server error)
+      const isServerError = errorStatus === 500 ||
+                           errorMessage.includes('500') ||
+                           errorMessage.includes('Internal Server Error')
+
+      // Check if error has no meaningful status (empty error object)
+      const isEmptyError = !errorStatus && errorMessage === 'Unknown error' && !err?.data
+
+      // Load mock data if API is unavailable or endpoint doesn't exist
+      if (isConnectionError || isNotFoundError || isServerError || isAuthError || isEmptyError) {
         // Load mock data for demonstration purposes
-        console.log('Loading mock sponsor dashboard data...')
+        console.log('API endpoint unavailable, loading mock sponsor dashboard data...')
         setSummary(MOCK_DASHBOARD_SUMMARY)
         setCohorts(MOCK_COHORTS)
         setError(null) // Clear error when showing mock data
       } else {
-        setError(err.message || 'Failed to load dashboard')
+        setError(errorMessage || 'Failed to load dashboard')
       }
     } finally {
       setLoading(false)

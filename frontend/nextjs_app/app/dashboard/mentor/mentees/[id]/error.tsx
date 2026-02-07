@@ -25,7 +25,7 @@ export default function Error({
           <Button onClick={reset} variant="defender" className="flex-1">
             Try again
           </Button>
-          <Button onClick={() => window.location.href = '/dashboard'} variant="outline" className="flex-1">
+          <Button onClick={() => window.location.href = '/dashboard/mentor'} variant="outline" className="flex-1">
             Go to Dashboard
           </Button>
         </div>

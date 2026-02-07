@@ -146,6 +146,12 @@ function LoginForm() {
       }
 
       const result = await login(formData);
+      console.log('[Login] Login result:', { 
+        hasResult: !!result, 
+        hasUser: !!result?.user,
+        hasToken: !!result?.access_token,
+        userRoles: result?.user?.roles 
+      });
 
       if (!result || !result.user) {
         throw new Error('Login failed: No user data received');
@@ -158,102 +164,390 @@ function LoginForm() {
       }
 
       localStorage.setItem('access_token', token);
-
-      const userRoles = result?.user?.roles || []
-      const isStudent = userRoles.some((r: any) => {
-        const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase()
-        return roleName === 'student' || roleName === 'mentee'
-      })
-
-      if (isStudent) {
-        try {
-          const { fastapiClient } = await import('@/services/fastapiClient')
-          const fastapiStatus = await fastapiClient.profiling.checkStatus()
-
-          if (!fastapiStatus.completed) {
-            setIsRedirecting(true)
-            hasRedirectedRef.current = true
-            window.location.href = '/onboarding/ai-profiler'
-            return
-          }
-        } catch (fastapiError: any) {
-          if ((result as any)?.profiling_required) {
-            setIsRedirecting(true)
-            hasRedirectedRef.current = true
-            window.location.href = '/onboarding/ai-profiler'
-            return
-          }
-        }
-      } else if ((result as any)?.profiling_required) {
-        setIsRedirecting(true)
-        hasRedirectedRef.current = true
-        router.push('/profiling')
-        return
-      }
+      console.log('[Login] Token stored, proceeding with redirect logic');
 
       const redirectTo = searchParams.get('redirect');
-      let route: string = '/dashboard/student';
+      // Route will be determined below based on user roles
 
       await new Promise(resolve => setTimeout(resolve, 500));
 
       let updatedUser = result?.user || user;
+      console.log('[Login] Initial user from result:', { 
+        hasUser: !!result?.user, 
+        hasRoles: !!(result?.user?.roles?.length),
+        roles: result?.user?.roles 
+      });
+      console.log('[Login] User from auth hook:', { 
+        hasUser: !!user, 
+        hasRoles: !!(user?.roles?.length),
+        roles: user?.roles 
+      });
 
       let retries = 0;
       while ((!updatedUser || !updatedUser.roles || updatedUser.roles.length === 0) && retries < 5) {
         await new Promise(resolve => setTimeout(resolve, 200));
         updatedUser = user || result?.user;
         retries++;
+        console.log(`[Login] Retry ${retries}:`, { 
+          hasUser: !!updatedUser, 
+          hasRoles: !!(updatedUser?.roles?.length),
+          roles: updatedUser?.roles 
+        });
       }
-
-      let dashboardFromCookie: string | null = null;
-      if (typeof document !== 'undefined') {
-        const cookies = document.cookie.split(';');
-        const dashboardCookie = cookies.find(c => c.trim().startsWith('och_dashboard='));
-        if (dashboardCookie) {
-          dashboardFromCookie = dashboardCookie.split('=')[1]?.trim() || null;
+      
+      // If still no roles, try to fetch user from API
+      if (!updatedUser || !updatedUser.roles || updatedUser.roles.length === 0) {
+        console.warn('[Login] No roles found, attempting to fetch user from API');
+        try {
+          const { djangoClient } = await import('@/services/djangoClient');
+          const fullUser = await djangoClient.auth.getCurrentUser();
+          if (fullUser) {
+            updatedUser = fullUser;
+            console.log('[Login] Fetched user from API:', { 
+              hasRoles: !!(fullUser?.roles?.length),
+              roles: fullUser?.roles,
+              profiling_complete: fullUser?.profiling_complete
+            });
+          }
+        } catch (fetchError) {
+          console.error('[Login] Failed to fetch user from API:', fetchError);
         }
       }
 
-      if (redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/students/'))) {
-        route = redirectTo;
-      } else {
-        if (!updatedUser || !updatedUser.roles || updatedUser.roles.length === 0) {
-          if (dashboardFromCookie) {
-            route = dashboardFromCookie;
-          } else {
-            route = '/dashboard/student';
+      // Check if user is a student/mentee and needs profiling
+      const userRolesForProfiling = updatedUser?.roles || [];
+      const isStudent = userRolesForProfiling.some((r: any) => {
+        const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase();
+        return roleName === 'student' || roleName === 'mentee';
+      });
+
+      if (isStudent) {
+        console.log('[Login] User is student/mentee, checking profiling status');
+        
+        // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
+        const profilingComplete = updatedUser?.profiling_complete ?? false;
+        console.log('[Login] Django profiling_complete:', profilingComplete);
+        
+        if (!profilingComplete) {
+          console.log('[Login] Profiling not complete - redirecting to AI profiler');
+          setIsRedirecting(true);
+          hasRedirectedRef.current = true;
+          window.location.href = '/onboarding/ai-profiler';
+          return;
+        }
+        
+        // Django says complete, optionally verify with FastAPI (non-blocking)
+        // Don't block redirect if FastAPI check fails - Django is source of truth
+        try {
+          const { fastapiClient } = await import('@/services/fastapiClient');
+          const fastapiStatus = await fastapiClient.profiling.checkStatus();
+          console.log('[Login] FastAPI profiling status:', fastapiStatus);
+          
+          if (!fastapiStatus.completed) {
+            console.log('[Login] FastAPI says not complete - redirecting to profiler');
+            setIsRedirecting(true);
+            hasRedirectedRef.current = true;
+            window.location.href = '/onboarding/ai-profiler';
+            return;
           }
+          console.log('[Login] FastAPI confirms profiling complete - proceeding to dashboard');
+        } catch (fastapiError: any) {
+          // FastAPI unavailable or error - trust Django's profiling_complete status
+          // Don't block redirect - Django is the source of truth
+          console.log('[Login] FastAPI check failed (non-critical):', fastapiError?.message || 'Unknown error');
+          console.log('[Login] Django says complete - proceeding to dashboard');
+          // Continue to dashboard redirect - don't return here
+        }
+      } else if ((result as any)?.profiling_required) {
+        setIsRedirecting(true);
+        hasRedirectedRef.current = true;
+        router.push('/profiling');
+        return;
+      }
+
+      // CRITICAL: Check for mentor role FIRST before any route determination
+      // Mentors should NEVER be redirected to student dashboard
+      const userRoles = updatedUser?.roles || [];
+      const hasMentorRole = userRoles.some((r: any) => {
+        const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+        return roleName === 'mentor';
+      });
+      
+      console.log('[Login] Role check:', { 
+        hasMentorRole, 
+        userRoles, 
+        rolesCount: userRoles.length,
+        updatedUserRoles: updatedUser?.roles 
+      });
+      
+      // Initialize route variable
+      let route: string;
+      
+      // CRITICAL: If user is a mentor, ALWAYS use mentor dashboard - NO EXCEPTIONS
+      if (hasMentorRole) {
+        route = '/dashboard/mentor';
+        console.log('[Login] ✅ MENTOR DETECTED - FORCING /dashboard/mentor route');
+        console.log('[Login] Mentor role check passed - route set to /dashboard/mentor');
+      } else {
+        // Only determine route for non-mentors
+        route = '/dashboard/student'; // Default fallback
+        
+        let dashboardFromCookie: string | null = null;
+        if (typeof document !== 'undefined') {
+          const cookies = document.cookie.split(';');
+          const dashboardCookie = cookies.find(c => c.trim().startsWith('och_dashboard='));
+          if (dashboardCookie) {
+            dashboardFromCookie = dashboardCookie.split('=')[1]?.trim() || null;
+          }
+        }
+
+        if (redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/students/'))) {
+          route = redirectTo;
+          console.log('[Login] Using redirectTo route:', route);
         } else {
-          // Use getRedirectRoute as the primary routing mechanism
-          // This ensures users are routed to the correct dashboard based on their role priority
-          route = getRedirectRoute(updatedUser);
+          if (!updatedUser || !updatedUser.roles || updatedUser.roles.length === 0) {
+            if (dashboardFromCookie) {
+              route = dashboardFromCookie;
+              console.log('[Login] Using dashboard cookie route:', route);
+            } else {
+              route = '/dashboard/student';
+              console.log('[Login] Using default student route:', route);
+            }
+          } else {
+            // Use getRedirectRoute as the primary routing mechanism
+            // This ensures users are routed to the correct dashboard based on their role priority
+            route = getRedirectRoute(updatedUser);
+            console.log('[Login] Route from getRedirectRoute:', route);
+            console.log('[Login] User roles:', updatedUser?.roles);
+          }
+        }
+      }
+
+      console.log('[Login] Final route before validation:', route);
+      
+      // CRITICAL: Final mentor check - ensure mentors NEVER get student dashboard
+      // This is a safety net that runs AFTER all route determination logic
+      if (updatedUser?.roles) {
+        const hasMentorRoleFinal = updatedUser.roles.some((r: any) => {
+          const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+          return roleName === 'mentor';
+        });
+        
+        if (hasMentorRoleFinal) {
+          // If mentor detected, FORCE mentor dashboard - override ANY other route
+          if (route !== '/dashboard/mentor') {
+            console.error('[Login] 🚨 CRITICAL ERROR: Mentor detected but route is:', route);
+            console.error('[Login] 🚨 FORCING route to /dashboard/mentor');
+            route = '/dashboard/mentor';
+          }
+        }
+      }
+      
+      // CRITICAL: Check for mentor role AGAIN - mentors should NEVER be associated with student routes
+      if (updatedUser?.roles) {
+        const hasMentorRoleCheck = updatedUser.roles.some((r: any) => {
+          const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+          return roleName === 'mentor';
+        });
+        if (hasMentorRoleCheck && route === '/dashboard/student') {
+          console.error('[Login] 🚨 CRITICAL ERROR - Mentor detected but route is student dashboard!');
+          console.error('[Login] 🚨 FORCING route to /dashboard/mentor');
+          console.log('[Login] 🚫 Mentors are NEVER associated with student routes');
+          route = '/dashboard/mentor';
+        }
+      }
+      
+      // Check for other roles that should override default student route
+      if (route === '/dashboard/student' && updatedUser?.roles) {
+        // Check for sponsor role
+        const hasSponsorRole = updatedUser.roles.some((r: any) => {
+          const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+          return roleName === 'sponsor_admin' || roleName === 'sponsor';
+        });
+        if (hasSponsorRole) {
+          console.log('[Login] FORCING sponsor route - user has sponsor role but route was student');
+          route = '/dashboard/sponsor';
         }
       }
 
       // Validate the final route
-      // Allow /dashboard/*, /mentor/dashboard, and /students/* routes
-      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/') && route !== '/mentor/dashboard')) {
+      // Allow /dashboard/* and /students/* routes
+      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/'))) {
         console.warn('login: Invalid route generated, using fallback:', route);
-        route = '/dashboard/student';
+        // CRITICAL: Check for mentor role BEFORE falling back to student
+        if (updatedUser?.roles) {
+          const hasMentorRoleCheck = updatedUser.roles.some((r: any) => {
+            const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+            return roleName === 'mentor';
+          });
+          if (hasMentorRoleCheck) {
+            console.log('[Login] Invalid route but user is mentor - using mentor dashboard');
+            route = '/dashboard/mentor';
+          } else {
+            // Only fallback to student if user is NOT a mentor
+            route = '/dashboard/student';
+          }
+        } else {
+          // No roles - default to student (but this should rarely happen)
+          route = '/dashboard/student';
+        }
       }
 
       // Additional validation for dashboard routes
       if (route.startsWith('/dashboard/')) {
         const { isValidDashboardRoute, getFallbackRoute } = await import('@/utils/redirect');
-        if (!isValidDashboardRoute(route)) {
+        const isValid = isValidDashboardRoute(route);
+        console.log('[Login] Route validation:', { route, isValid });
+        if (!isValid) {
           console.warn('login: Dashboard route validation failed, using fallback for user:', updatedUser?.id);
-          route = getFallbackRoute(updatedUser);
+          // Before falling back, check if user has mentor role
+          if (updatedUser?.roles) {
+            const hasMentorRole = updatedUser.roles.some((r: any) => {
+              const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+              return roleName === 'mentor';
+            });
+            if (hasMentorRole) {
+              console.log('[Login] Route validation failed but user is mentor - using mentor dashboard');
+              route = '/dashboard/mentor';
+            } else {
+              route = getFallbackRoute(updatedUser);
+            }
+          } else {
+            route = getFallbackRoute(updatedUser);
+          }
+          console.log('[Login] Fallback route:', route);
         }
       }
 
+      // CRITICAL: ABSOLUTE FINAL CHECK - Force mentor route if mentor detected
+      // This runs RIGHT BEFORE redirect to ensure nothing can override it
+      if (updatedUser?.roles && Array.isArray(updatedUser.roles)) {
+        const finalMentorCheck = updatedUser.roles.some((r: any) => {
+          const roleName = typeof r === 'string' ? r : (r?.role || r?.name || r?.role_display_name || '').toLowerCase().trim();
+          const isMentor = roleName === 'mentor';
+          if (isMentor) {
+            console.log('[Login] 🔍 FINAL CHECK: Mentor role found:', { roleName, role: r });
+          }
+          return isMentor;
+        });
+        
+        if (finalMentorCheck) {
+          if (route !== '/dashboard/mentor') {
+            console.error('[Login] 🚨🚨🚨 CRITICAL: Mentor detected in FINAL CHECK but route is:', route);
+            console.error('[Login] 🚨🚨🚨 FORCING route to /dashboard/mentor');
+            route = '/dashboard/mentor';
+          } else {
+            console.log('[Login] ✅ FINAL CHECK: Mentor route confirmed as /dashboard/mentor');
+          }
+        }
+      }
+      
+      console.log('[Login] Redirecting to:', route);
+      console.log('[Login] User object:', { 
+        id: updatedUser?.id, 
+        email: updatedUser?.email, 
+        roles: updatedUser?.roles,
+        rolesCount: updatedUser?.roles?.length || 0
+      });
+      
       setIsRedirecting(true);
+      setIsLoggingIn(false); // Stop showing "Signing in..." 
       hasRedirectedRef.current = true;
-      await new Promise(resolve => setTimeout(resolve, 500));
-      window.location.href = route;
+      
+      // Force immediate redirect - use window.location.replace (doesn't add to history)
+      console.log('[Login] Executing immediate redirect to:', route);
+      console.log('[Login] Current pathname:', typeof window !== 'undefined' ? window.location.pathname : 'N/A');
+      
+      // Use both methods to ensure redirect happens
+      if (typeof window !== 'undefined') {
+        try {
+          console.log('[Login] Attempting window.location.replace to:', route);
+          window.location.replace(route);
+          // If we reach here, redirect might have been blocked - try href as backup
+          setTimeout(() => {
+            if (window.location.pathname.includes('/login/')) {
+              console.warn('[Login] window.location.replace may have failed, trying window.location.href');
+              window.location.href = route;
+            }
+          }, 100);
+        } catch (redirectError) {
+          console.error('[Login] window.location.replace failed:', redirectError);
+          window.location.href = route;
+        }
+      }
+      
+      // Fallback: If still on login page after 1 second, force redirect
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          const currentPath = window.location.pathname;
+          if (currentPath.includes('/login/')) {
+            console.warn('[Login] Still on login page after 1s, forcing redirect with router to:', route);
+            router.replace(route);
+          }
+        }
+      }, 1000);
 
     } catch (err: any) {
+      console.error('[Login] Error during login flow:', err);
       setIsLoggingIn(false);
       setIsRedirecting(false);
+      
+      // Even if there's an error, try to redirect if we have a user
+      if (user && user.roles && user.roles.length > 0) {
+        console.log('[Login] Error occurred but user is authenticated, attempting redirect');
+        let fallbackRoute = getRedirectRoute(user);
+        
+        // CRITICAL: Ensure mentors NEVER get student dashboard, even in error cases
+        if (user.roles && Array.isArray(user.roles)) {
+          const hasMentorRole = user.roles.some((r: any) => {
+            const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+            return roleName === 'mentor';
+          });
+          if (hasMentorRole && fallbackRoute === '/dashboard/student') {
+            console.error('[Login] 🚨 CRITICAL: Mentor detected in error fallback but route is student dashboard!');
+            fallbackRoute = '/dashboard/mentor';
+          }
+        }
+        
+        console.log('[Login] Fallback redirect route:', fallbackRoute);
+        setTimeout(() => {
+          window.location.replace(fallbackRoute);
+        }, 500);
+        return; // Exit early to prevent error display
+      }
+      
+      // Also check if login was successful but error occurred during redirect logic
+      const token = localStorage.getItem('access_token');
+      if (token) {
+        console.log('[Login] Token exists, user might be authenticated, attempting to fetch user and redirect');
+        try {
+          const { djangoClient } = await import('@/services/djangoClient');
+          const currentUser = await djangoClient.auth.getCurrentUser();
+          if (currentUser && currentUser.roles && currentUser.roles.length > 0) {
+            let redirectRoute = getRedirectRoute(currentUser);
+            
+            // CRITICAL: Ensure mentors NEVER get student dashboard, even in error cases
+            if (currentUser.roles && Array.isArray(currentUser.roles)) {
+              const hasMentorRole = currentUser.roles.some((r: any) => {
+                const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase().trim();
+                return roleName === 'mentor';
+              });
+              if (hasMentorRole && redirectRoute === '/dashboard/student') {
+                console.error('[Login] 🚨 CRITICAL: Mentor detected in token fallback but route is student dashboard!');
+                redirectRoute = '/dashboard/mentor';
+              }
+            }
+            
+            console.log('[Login] Redirecting authenticated user to:', redirectRoute);
+            setTimeout(() => {
+              window.location.replace(redirectRoute);
+            }, 500);
+            return; // Exit early
+          }
+        } catch (fetchErr) {
+          console.error('[Login] Failed to fetch user for redirect:', fetchErr);
+        }
+      }
 
       let message = 'Login failed. Please check your credentials.';
 

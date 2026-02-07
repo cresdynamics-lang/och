@@ -152,7 +152,23 @@ export default function TalentBrowsePage() {
       setFavoritedProfiles(new Set(favoritesArray.map((log: any) => log.profile?.id || log.profile_id)))
       setShortlistedProfiles(new Set(shortlistsArray.map((log: any) => log.profile?.id || log.profile_id)))
     } catch (err: any) {
-      console.error('Failed to load favorites/shortlists:', err)
+      // Silently handle missing endpoints - don't log empty errors
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const isNotFound = errorStatus === 404;
+      const isConnectionError = err?.message?.includes('Cannot connect to backend server') ||
+                               err?.message?.includes('fetch failed');
+      
+      // Only log if it's not a 404 or connection error
+      if (!isNotFound && !isConnectionError) {
+        // Only log if error has meaningful content
+        const hasErrorContent = err?.message || err?.data || (err && Object.keys(err).length > 0);
+        if (hasErrorContent) {
+          console.error('Failed to load favorites/shortlists:', err);
+        }
+      }
+      // Silently set empty state for missing endpoints
+      setFavoritedProfiles(new Set());
+      setShortlistedProfiles(new Set());
 
       // Check if it's an authentication error (401)
       const isAuthError = err?.status === 401 ||
@@ -185,7 +201,19 @@ export default function TalentBrowsePage() {
       const response = await marketplaceClient.browseTalent(params)
       setTalent(response.results || [])
     } catch (err: any) {
-      console.error('Failed to load talent:', err)
+      // Silently handle missing endpoints - don't log empty errors
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const isNotFound = errorStatus === 404;
+      const isConnectionError = err?.message?.includes('Cannot connect to backend server') ||
+                               err?.message?.includes('fetch failed');
+      
+      // Only log if it's not a 404 or connection error and has meaningful content
+      if (!isNotFound && !isConnectionError) {
+        const hasErrorContent = err?.message || err?.data || (err && Object.keys(err).length > 0);
+        if (hasErrorContent) {
+          console.error('Failed to load talent:', err);
+        }
+      }
 
       // Check if it's an authentication error (401)
       const isAuthError = err?.status === 401 ||

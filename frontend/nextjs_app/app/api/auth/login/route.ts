@@ -80,7 +80,7 @@ function getDashboardForRole(role: string | null): string {
   switch (role) {
     case 'admin': dashboard = '/dashboard/admin'; break
     case 'program_director': dashboard = '/dashboard/director'; break
-    case 'mentor': dashboard = '/mentor/dashboard'; break
+    case 'mentor': dashboard = '/dashboard/mentor'; break
     case 'analyst': dashboard = '/dashboard/analyst'; break
     case 'sponsor_admin': dashboard = '/dashboard/sponsor'; break
     case 'employer': dashboard = '/dashboard/employer'; break

@@ -40,6 +40,13 @@ export default function MentorMessagesPage() {
       // Don't set loading state to prevent UI flicker
       const assignments = await mentorClient.getMentorAssignments(user.id.toString())
       
+      // CRITICAL: Ensure assignments is an array before calling map
+      if (!assignments || !Array.isArray(assignments)) {
+        console.log('[loadMenteesSilently] No assignments found or invalid response')
+        setMentees([])
+        return
+      }
+      
       const menteesList = assignments.map(assignment => ({
         id: assignment.mentee_id,
         assignmentId: assignment.id,
@@ -57,6 +64,8 @@ export default function MentorMessagesPage() {
       }
     } catch (err) {
       console.error('Failed to silently refresh mentees:', err)
+      // Set empty array on error to prevent undefined map calls
+      setMentees([])
       // Don't show error to user for silent refresh
     }
   }
@@ -67,6 +76,14 @@ export default function MentorMessagesPage() {
     try {
       // Get all assignments for this mentor
       const assignments = await mentorClient.getMentorAssignments(user.id.toString())
+      
+      // CRITICAL: Ensure assignments is an array before calling map
+      if (!assignments || !Array.isArray(assignments)) {
+        console.log('[loadMentees] No assignments found or invalid response')
+        setMentees([])
+        setIsInitialLoad(false)
+        return
+      }
       
       const menteesList = assignments.map(assignment => ({
         id: assignment.mentee_id,
@@ -88,6 +105,8 @@ export default function MentorMessagesPage() {
       setIsInitialLoad(false)
     } catch (err) {
       console.error('Failed to load mentees:', err)
+      // Set empty array on error to prevent undefined map calls
+      setMentees([])
       setIsInitialLoad(false)
     }
   }

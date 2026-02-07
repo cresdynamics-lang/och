@@ -26,10 +26,22 @@ export function useMentorAssignedTracks(mentorId: string | undefined) {
       console.log('[useMentorAssignedTracks] Loading assignments for mentor:', mentorId)
       
       // Fetch mentor assignments directly (more efficient than checking each cohort)
-      const [assignments, tracksResponse] = await Promise.all([
-        programsClient.getMentorAssignments(mentorId),
-        programsClient.getTracks(),
-      ])
+      // Handle 404 gracefully - mentors may have no assignments yet
+      let assignments: MentorAssignment[] = [];
+      try {
+        assignments = await programsClient.getMentorAssignments(mentorId);
+      } catch (err: any) {
+        // 404 is expected if mentor has no assignments - handle gracefully
+        if (err?.status === 404 || err?.response?.status === 404) {
+          console.log('[useMentorAssignedTracks] No assignments found for mentor (404) - this is normal');
+          assignments = [];
+        } else {
+          // Re-throw other errors
+          throw err;
+        }
+      }
+      
+      const tracksResponse = await programsClient.getTracks();
 
       console.log('[useMentorAssignedTracks] Raw assignments:', assignments)
       console.log('[useMentorAssignedTracks] Assignments count:', Array.isArray(assignments) ? assignments.length : 'not an array')

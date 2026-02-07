@@ -30,12 +30,18 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/subscription', roles: ['mentee', 'student'] },
   
   // Mentor routes
-  { path: '/mentor/dashboard', roles: ['mentor'] },
-  { path: '/mentor/dashboard/profile', roles: ['mentor'] },
-  { path: '/mentor/dashboard/sessions', roles: ['mentor'] },
-  { path: '/mentor/dashboard/missions', roles: ['mentor'] },
-  { path: '/mentor/dashboard/scoring', roles: ['mentor'] },
-  { path: '/mentor/dashboard/talentscope', roles: ['mentor'] },
+  { path: '/dashboard/mentor', roles: ['mentor'] },
+  { path: '/dashboard/mentor/profile', roles: ['mentor'] },
+  { path: '/dashboard/mentor/sessions', roles: ['mentor'] },
+  { path: '/dashboard/mentor/missions', roles: ['mentor'] },
+  { path: '/dashboard/mentor/scoring', roles: ['mentor'] },
+  { path: '/dashboard/mentor/talentscope', roles: ['mentor'] },
+  { path: '/dashboard/mentor/mentees', roles: ['mentor'] },
+  { path: '/dashboard/mentor/analytics', roles: ['mentor'] },
+  { path: '/dashboard/mentor/cohorts-tracks', roles: ['mentor'] },
+  { path: '/dashboard/mentor/messages', roles: ['mentor'] },
+  { path: '/dashboard/mentor/tracks', roles: ['mentor'] },
+  { path: '/dashboard/mentor/all-cohorts', roles: ['mentor'] },
   
   // Program Director routes - accessible by program_director and admin
   { path: '/dashboard/director', roles: ['program_director', 'admin'] },
@@ -216,6 +222,16 @@ export function hasRouteAccess(user: User | null, path: string): boolean {
   // Double-check: Admin has access to everything
   if (userRoles.includes('admin')) return true
   
+  // CRITICAL: Check for mentor role accessing mentor routes
+  // Mentors should ALWAYS have access to mentor routes
+  const isMentor = userRoles.includes('mentor')
+  const isMentorRoute = path.startsWith('/dashboard/mentor')
+  
+  if (isMentor && isMentorRoute) {
+    console.log('✅ hasRouteAccess: Mentor accessing mentor route - granting access to:', path)
+    return true
+  }
+  
   // Find most-specific matching route permission (longest path wins)
   const matching = ROUTE_PERMISSIONS
     .filter(p => path === p.path || path.startsWith(p.path + '/') || path.startsWith(p.path))
@@ -296,7 +312,7 @@ export function getDashboardRoute(role: Role | null): string {
   const routeMap: Record<Role, string> = {
     'student': '/dashboard/student',           // Student role → Student Dashboard
     'mentee': '/dashboard/student',            // Mentee role → Student Dashboard
-    'mentor': '/mentor/dashboard',              // Mentor role → Mentor Dashboard
+    'mentor': '/dashboard/mentor',              // Mentor role → Mentor Dashboard
     'admin': '/dashboard/admin',               // Admin role → Admin Dashboard
     'program_director': '/dashboard/director', // Program Director role → Director Dashboard
     'sponsor_admin': '/dashboard/sponsor',     // Sponsor/Employer Admin → Sponsor Dashboard

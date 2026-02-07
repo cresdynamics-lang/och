@@ -211,12 +211,32 @@ export function StudentDashboardHub() {
 
       try {
         // Make all API calls in parallel for better performance
+        // Wrap each call to suppress expected errors (404s, empty responses)
         const [dashboardResponse, actionsResponse, missionsResponse] = await Promise.allSettled([
-          apiGateway.get<any>('/student/dashboard/overview').catch(() => null),
-          apiGateway.get<any[]>('/student/dashboard/next-actions').catch(() => []),
+          apiGateway.get<any>('/student/dashboard/overview').catch((err: any) => {
+            // Suppress 404s and connection errors - these are expected for new users
+            if (err?.status === 404 || err?.status === 0) {
+              return null;
+            }
+            // Re-throw unexpected errors
+            throw err;
+          }),
+          apiGateway.get<any[]>('/student/dashboard/next-actions').catch((err: any) => {
+            // Suppress 404s and connection errors
+            if (err?.status === 404 || err?.status === 0) {
+              return [];
+            }
+            throw err;
+          }),
           apiGateway.get<any>('/student/missions', {
             params: { status: 'in_progress', page_size: 3 }
-          }).catch(() => ({ results: [] }))
+          }).catch((err: any) => {
+            // Suppress 404s and connection errors
+            if (err?.status === 404 || err?.status === 0) {
+              return { results: [] };
+            }
+            throw err;
+          })
         ]);
 
         // Handle dashboard overview data
@@ -245,7 +265,12 @@ export function StudentDashboardHub() {
           const actions = actionsResponse.value;
           setNextActions(Array.isArray(actions) ? actions : []);
         } else {
-          console.error('Failed to fetch next actions:', actionsResponse.reason);
+          // Only log if it's not a 404 or connection error (expected for new users)
+          const error = actionsResponse.reason;
+          if (error?.status !== 404 && error?.status !== 0) {
+            console.error('Failed to fetch next actions:', error);
+          }
+          setNextActions([]);
         }
 
         // Handle active missions
@@ -253,7 +278,12 @@ export function StudentDashboardHub() {
           const missionsData = missionsResponse.value;
           setActiveMissions(Array.isArray(missionsData?.results) ? missionsData.results : []);
         } else {
-          console.error('Failed to fetch missions:', missionsResponse.reason);
+          // Only log if it's not a 404 or connection error (expected for new users)
+          const error = missionsResponse.reason;
+          if (error?.status !== 404 && error?.status !== 0) {
+            console.error('Failed to fetch missions:', error);
+          }
+          setActiveMissions([]);
         }
 
       } catch (error) {

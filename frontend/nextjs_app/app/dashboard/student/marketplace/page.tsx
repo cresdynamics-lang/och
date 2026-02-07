@@ -13,7 +13,7 @@ import { Eye, EyeOff, CheckCircle, XCircle, TrendingUp, Clock, User, Mail, Build
 import Link from 'next/link'
 
 export default function MarketplaceProfilePage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [profile, setProfile] = useState<MarketplaceProfile | null>(null)
   const [contactRequests, setContactRequests] = useState<EmployerInterestLog[]>([])
@@ -521,19 +521,30 @@ export default function MarketplaceProfilePage() {
     return 'steel'
   }
 
-  if (loading && !profile) {
+  // Wait for auth to load before checking authentication
+  if (authLoading || (loading && !profile)) {
     return (
       <div className="min-h-screen bg-och-midnight p-6">
         <div className="max-w-7xl mx-auto">
           <Card className="p-8">
-            <div className="text-center text-och-steel">Loading marketplace...</div>
+            <div className="text-center text-och-steel">
+              {authLoading ? 'Loading...' : 'Loading marketplace...'}
+            </div>
           </Card>
         </div>
       </div>
     )
   }
 
-  if (error && !profile) {
+  // Check for token even if isAuthenticated is false (might be loading)
+  const hasToken = typeof window !== 'undefined' && (
+    localStorage.getItem('access_token') ||
+    document.cookie.includes('access_token=')
+  );
+
+  // Only show error if auth has finished loading AND there's no token AND no profile
+  // If token exists, allow access even if profile failed to load (will show mock data)
+  if (!authLoading && !isAuthenticated && !hasToken && error && !profile) {
     return (
       <div className="min-h-screen bg-och-midnight p-6">
         <div className="max-w-7xl mx-auto">

@@ -81,6 +81,38 @@ export default function MarketplacePage() {
         activeJobs: activeJobsCount,
       })
     } catch (err: any) {
+      // Extract error details
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const errorMessage = err?.message || err?.data?.detail || err?.data?.error || '';
+      
+      // Check if it's a connection/network error or API endpoint doesn't exist
+      const isConnectionError = errorMessage.includes('fetch failed') ||
+                               errorMessage.includes('Failed to fetch') ||
+                               errorMessage.includes('NetworkError') ||
+                               errorMessage.includes('ECONNREFUSED') ||
+                               errorMessage.includes('Cannot connect to backend server');
+      
+      const isNotFoundError = errorStatus === 404 ||
+                             errorMessage.includes('404') ||
+                             errorMessage.includes('Not Found');
+      
+      // For 404s or connection errors, use default stats instead of showing error
+      if (isNotFoundError || isConnectionError) {
+        setStats({
+          totalTalent: 0,
+          jobReady: 0,
+          activeJobs: 0,
+        });
+        // Don't log error - silently handle missing endpoints
+      } else {
+        // Only log unexpected errors
+        console.error('Failed to load marketplace stats:', err);
+        setStats({
+          totalTalent: 0,
+          jobReady: 0,
+          activeJobs: 0,
+        });
+      }
       console.error('Failed to load stats:', err)
 
       // Check if it's an authentication error (401)

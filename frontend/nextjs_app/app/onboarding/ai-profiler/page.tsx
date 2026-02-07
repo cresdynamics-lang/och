@@ -289,9 +289,27 @@ export default function AIProfilerPage() {
         // NOTE: Don't redirect based on FastAPI status alone
         // FastAPI may have stale session data after admin reset
       } catch (apiError: any) {
-        // Don't fall back to mock - show the real error
-        console.error('[AIProfiler] Error checking FastAPI status:', apiError)
-        throw apiError
+        // Handle FastAPI being unavailable gracefully
+        // If it's a 404 or connection error, FastAPI is likely not running
+        // This is OK - we'll start a new session
+        if (apiError?.status === 404 || apiError?.status === 0 || 
+            apiError?.message?.includes('fetch') || 
+            apiError?.message?.includes('ECONNREFUSED')) {
+          console.log('[AIProfiler] FastAPI unavailable (expected if not running) - will start new session')
+          status = {
+            completed: false,
+            session_id: null,
+            has_active_session: false
+          }
+        } else {
+          // For other errors, log but don't throw - allow user to proceed
+          console.warn('[AIProfiler] FastAPI check failed (non-critical):', apiError)
+          status = {
+            completed: false,
+            session_id: null,
+            has_active_session: false
+          }
+        }
       }
 
       // Check if there's an active session
@@ -371,42 +389,88 @@ export default function AIProfilerPage() {
   const initializeProfiling = async () => {
     try {
       setLoading(true)
+      setError(null)
 
       // Start new profiling session
-      const sessionResponse = await fastapiClient.profiling.startSession()
-      setSession({
-        session_id: sessionResponse.session_id,
-        status: sessionResponse.status,
-        progress: sessionResponse.progress
-      })
+      let sessionResponse: any
+      try {
+        sessionResponse = await fastapiClient.profiling.startSession()
+        setSession({
+          session_id: sessionResponse.session_id,
+          status: sessionResponse.status,
+          progress: sessionResponse.progress
+        })
+      } catch (sessionError: any) {
+        // Handle FastAPI being unavailable
+        if (sessionError?.status === 404 || sessionError?.status === 0 || 
+            sessionError?.message?.includes('fetch') || 
+            sessionError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for session start')
+          setError('Profiling service is currently unavailable. Please ensure FastAPI is running on port 8001 and try again.')
+          setLoading(false)
+          return
+        }
+        throw sessionError
+      }
 
       // Get enhanced questions grouped by module, then flatten
-      const enhanced = await fastapiClient.profiling.getEnhancedQuestions()
-      const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
-        .flat()
-        .map((q: any) => ({
-          id: q.id,
-          question: q.question,
-          category: q.category,
-          module: q.module,
-          options: q.options,
-        }))
-      setQuestions(allQuestions)
+      let enhanced: any
+      try {
+        enhanced = await fastapiClient.profiling.getEnhancedQuestions()
+        const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
+          .flat()
+          .map((q: any) => ({
+            id: q.id,
+            question: q.question,
+            category: q.category,
+            module: q.module,
+            options: q.options,
+          }))
+        setQuestions(allQuestions)
+      } catch (questionsError: any) {
+        // Handle FastAPI being unavailable for questions
+        if (questionsError?.status === 404 || questionsError?.status === 0 || 
+            questionsError?.message?.includes('fetch') || 
+            questionsError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for questions')
+          setError('Unable to load profiling questions. Please ensure FastAPI is running on port 8001 and try again.')
+          setLoading(false)
+          return
+        }
+        throw questionsError
+      }
 
       // Initialize module progress
-      const modProgress = await fastapiClient.profiling.getModuleProgress(sessionResponse.session_id)
-      setModuleProgress(modProgress)
-      setCurrentModule((modProgress.current_module as ModuleKey) || null)
+      try {
+        const modProgress = await fastapiClient.profiling.getModuleProgress(sessionResponse.session_id)
+        setModuleProgress(modProgress)
+        setCurrentModule((modProgress.current_module as ModuleKey) || null)
+      } catch (progressError: any) {
+        // Handle FastAPI being unavailable for progress - non-critical, log and continue
+        if (progressError?.status === 404 || progressError?.status === 0 || 
+            progressError?.message?.includes('fetch') || 
+            progressError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for progress - continuing without progress data')
+          // Don't set error - progress is optional, user can still proceed
+        } else {
+          throw progressError
+        }
+      }
 
       setLoading(false)
     } catch (err: any) {
       console.error('[AIProfiler] Failed to initialize profiling:', err)
       
-      const errorMessage = err?.status === 401
+      const isAuthError = err?.status === 401
+      const isNetworkError = err?.status === 404 || err?.status === 0 || 
+                            err?.message?.includes('fetch') || 
+                            err?.message?.includes('ECONNREFUSED')
+      
+      const errorMessage = isAuthError
         ? 'Authentication required. Please log in to continue.'
-        : err?.message?.includes('fetch') || err?.message?.includes('ECONNREFUSED')
-        ? 'Cannot connect to profiling service. Make sure FastAPI is running on port 8001.'
-        : err.message || 'Failed to initialize profiling'
+        : isNetworkError
+        ? 'Cannot connect to profiling service. Please ensure FastAPI is running on port 8001.'
+        : err?.message || 'Failed to initialize profiling'
       
       setError(errorMessage)
       setLoading(false)
