@@ -73,8 +73,11 @@ else:
     # Use PostgreSQL configuration from base.py
     pass  # DATABASES already configured in base.py
 
-# Use console backend for email testing in development
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Use .env MAIL_* (SMTP) when MAIL_HOST is set; otherwise console for local testing
+if os.environ.get('MAIL_HOST'):
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Logging configuration for development
 LOGGING = {

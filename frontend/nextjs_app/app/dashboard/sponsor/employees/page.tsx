@@ -1,24 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { sponsorClient } from '@/services/sponsorClient'
+import { sponsorClient, type SponsoredStudentListItem } from '@/services/sponsorClient'
 import Link from 'next/link'
 
-interface SponsoredStudent {
-  id: string
-  name: string
-  email: string
-  cohort_name: string
-  cohort_id: string
-  readiness_score?: number
-  completion_pct?: number
-  portfolio_items: number
-  enrollment_status: string
-  consent_employer_share: boolean
-}
-
 export default function SponsoredStudentsPage() {
-  const [students, setStudents] = useState<SponsoredStudent[]>([])
+  const [students, setStudents] = useState<SponsoredStudentListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 

@@ -286,6 +286,64 @@ def get_session_feedback(request, session_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def mentor_reviews_list(request):
+    """
+    GET /api/v1/mentorship/mentor-reviews
+    List mentor reviews (session feedback) for director Mentor Reviews dashboard.
+    Query params: mentor_id (optional), min_rating (optional).
+    """
+    mentor_id = request.query_params.get('mentor_id')
+    min_rating = request.query_params.get('min_rating')
+    qs = SessionFeedback.objects.select_related(
+        'mentor', 'mentee', 'session', 'session__assignment'
+    ).order_by('-submitted_at')
+    if mentor_id:
+        qs = qs.filter(mentor_id=mentor_id)
+    if min_rating is not None:
+        try:
+            qs = qs.filter(overall_rating__gte=int(min_rating))
+        except ValueError:
+            pass
+    reviews = []
+    for fb in qs:
+        cohort_id = None
+        cohort_name = None
+        assignment = getattr(fb.session, 'assignment', None) if fb.session else None
+        if assignment and getattr(assignment, 'cohort_id', None):
+            cohort_id = assignment.cohort_id
+            if cohort_id:
+                try:
+                    from programs.models import Cohort
+                    c = Cohort.objects.filter(id=cohort_id).first()
+                    cohort_name = c.name if c else None
+                except Exception:
+                    cohort_name = None
+        feedback_text = fb.additional_comments or ''
+        if fb.strengths:
+            feedback_text = (feedback_text + '\n\nStrengths: ' + fb.strengths).strip()
+        if fb.areas_for_improvement:
+            feedback_text = (feedback_text + '\n\nAreas for improvement: ' + fb.areas_for_improvement).strip()
+        reviews.append({
+            'id': str(fb.id),
+            'mentor_id': str(fb.mentor.id),
+            'mentor_name': fb.mentor.get_full_name() or fb.mentor.email,
+            'mentor_email': fb.mentor.email,
+            'student_id': str(fb.mentee.id),
+            'student_name': fb.mentee.get_full_name() or fb.mentee.email,
+            'student_email': fb.mentee.email,
+            'cohort_id': cohort_id,
+            'cohort_name': cohort_name,
+            'rating': fb.overall_rating,
+            'feedback': feedback_text or '',
+            'reviewed_at': fb.submitted_at.isoformat(),
+            'director_comments': [],
+            'status': 'approved',
+        })
+    return Response({'reviews': reviews})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def mentor_feedback_summary(request, mentor_id):
     """
     GET /api/v1/mentors/{mentor_id}/feedback-summary

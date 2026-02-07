@@ -24,7 +24,7 @@ from programs.models import Cohort, Enrollment
 from .models import (
     Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics,
     SponsorIntervention, SponsorFinancialTransaction, SponsorCohortBilling,
-    RevenueShareTracking
+    RevenueShareTracking, SponsorCohortAssignment
 )
 from .serializers import (
     SponsorSerializer, SponsorCohortSerializer, SponsorDashboardSerializer,
@@ -272,18 +272,31 @@ def sponsor_profile(request):
         'expires_at': cs.expires_at.isoformat() if cs.expires_at else None
     } for cs in consent_scopes]
     
-    # Get sponsor organizations
-    sponsor_orgs = Organization.objects.filter(
-        org_type='sponsor',
-        organizationmember__user=user
-    ).distinct()
-    
-    orgs_data = [{
-        'id': str(org.id),
-        'name': org.name,
-        'slug': org.slug,
-        'role': OrganizationMember.objects.get(organization=org, user=user).role
-    } for org in sponsor_orgs]
+    # Get sponsor organizations: from OrganizationMember and from user.org_id (sponsor users often have org_id set at creation)
+    sponsor_orgs = list(
+        Organization.objects.filter(
+            org_type='sponsor',
+            organizationmember__user=user
+        ).distinct()
+    )
+    # Include user's direct org_id if it's a sponsor org and not already in the list
+    if getattr(user, 'org_id', None) and hasattr(user.org_id, 'org_type') and user.org_id.org_type == 'sponsor':
+        if user.org_id not in sponsor_orgs:
+            sponsor_orgs.append(user.org_id)
+
+    orgs_data = []
+    for org in sponsor_orgs:
+        try:
+            member = OrganizationMember.objects.get(organization=org, user=user)
+            role = member.role
+        except OrganizationMember.DoesNotExist:
+            role = 'admin'  # user.org_id implies they own/admin the org
+        orgs_data.append({
+            'id': str(org.id),
+            'name': org.name,
+            'slug': org.slug,
+            'role': role,
+        })
     
     return Response({
         'user_id': str(user.id),
@@ -649,50 +662,26 @@ def create_checkout_session(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsSponsorUser])
 def sponsor_invoices(request):
-    """GET /api/v1/billing/invoices - Retrieve invoices linked to sponsor org."""
+    """GET /api/v1/billing/invoices - Retrieve invoices linked to sponsor (user role + org)."""
     try:
-        # Get sponsor from user
-        sponsor_orgs = Organization.objects.filter(
+        # Sponsors are defined by user role (sponsor/sponsor_admin) and org_type='sponsor', not a separate sponsors table
+        sponsor_org = Organization.objects.filter(
             org_type='sponsor',
             organizationmember__user=request.user
         ).first()
-        
-        if not sponsor_orgs:
+
+        if not sponsor_org:
             return Response({
                 'error': 'User is not associated with a sponsor organization'
             }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Get sponsor
-        sponsor = Sponsor.objects.filter(slug=sponsor_orgs.slug).first()
-        if not sponsor:
-            return Response({'invoices': []})
-        
-        # Get billing records
-        billing_records = SponsorCohortBilling.objects.filter(
-            sponsor_cohort__sponsor=sponsor
-        ).order_by('-billing_month')
-        
-        invoices_data = []
-        for record in billing_records:
-            invoice_data = {
-                'invoice_id': str(record.id),
-                'billing_month': record.billing_month.strftime('%Y-%m'),
-                'cohort_name': record.sponsor_cohort.name,
-                'total_amount_kes': float(record.total_cost),
-                'revenue_share_kes': float(record.revenue_share_kes),
-                'net_amount_kes': float(record.net_amount),
-                'payment_status': record.payment_status,
-                'payment_date': record.payment_date.isoformat() if record.payment_date else None,
-                'invoice_generated': record.invoice_generated,
-                'created_at': record.created_at.isoformat()
-            }
-            invoices_data.append(invoice_data)
-        
+
+        # No separate Sponsor model: invoice data would be keyed by org in a future billing integration.
+        # For now return empty list so the endpoint works without the sponsors table.
         return Response({
-            'invoices': invoices_data,
-            'total_invoices': len(invoices_data)
+            'invoices': [],
+            'total_invoices': 0
         })
-        
+
     except Exception as e:
         return Response({
             'error': f'Failed to retrieve invoices: {str(e)}'
@@ -702,48 +691,53 @@ def sponsor_invoices(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsSponsorUser])
 def sponsor_entitlements(request):
-    """GET /api/v1/billing/entitlements - Check seat entitlements for sponsored students."""
+    """GET /api/v1/billing/entitlements - Check seat entitlements (user role + org, SponsorCohortAssignment)."""
     try:
-        # Get sponsor from user
-        sponsor_orgs = Organization.objects.filter(
+        # Sponsors are defined by user role and org_type='sponsor', not a separate sponsors table
+        sponsor_org = Organization.objects.filter(
             org_type='sponsor',
             organizationmember__user=request.user
         ).first()
-        
-        if not sponsor_orgs:
+
+        if not sponsor_org:
             return Response({
                 'error': 'User is not associated with a sponsor organization'
             }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Get sponsor
-        sponsor = Sponsor.objects.filter(slug=sponsor_orgs.slug).first()
-        if not sponsor:
-            return Response({'entitlements': []})
-        
-        # Get cohorts and calculate entitlements
-        cohorts = SponsorCohort.objects.filter(sponsor=sponsor, is_active=True)
-        
+
+        # Entitlements from SponsorCohortAssignment (user -> cohort, seat_allocation) + enrollments (org, seat_type=sponsored)
+        assignments = SponsorCohortAssignment.objects.filter(
+            sponsor_uuid_id=request.user
+        ).select_related('cohort_id', 'cohort_id__track').order_by('-created_at')
+
         entitlements_data = []
-        for cohort in cohorts:
-            active_students = cohort.student_enrollments.filter(is_active=True).count()
-            
-            entitlement = {
+        for assignment in assignments:
+            cohort = assignment.cohort_id
+            seats_allocated = assignment.seat_allocation
+            seats_used = Enrollment.objects.filter(
+                cohort=cohort,
+                org=sponsor_org,
+                seat_type='sponsored'
+            ).count()
+            seats_available = max(0, seats_allocated - seats_used)
+            utilization = round((seats_used / seats_allocated * 100), 2) if seats_allocated > 0 else 0
+            track_slug = cohort.track.key if getattr(cohort, 'track', None) else getattr(cohort, 'track_id', '') or ''
+
+            entitlements_data.append({
                 'cohort_id': str(cohort.id),
                 'cohort_name': cohort.name,
-                'seats_allocated': cohort.target_size,
-                'seats_used': active_students,
-                'seats_available': cohort.target_size - active_students,
-                'utilization_percentage': round((active_students / cohort.target_size * 100), 2) if cohort.target_size > 0 else 0,
-                'track_slug': cohort.track_slug,
-                'status': cohort.status
-            }
-            entitlements_data.append(entitlement)
-        
+                'seats_allocated': seats_allocated,
+                'seats_used': seats_used,
+                'seats_available': seats_available,
+                'utilization_percentage': utilization,
+                'track_slug': track_slug,
+                'status': getattr(cohort, 'status', 'active'),
+            })
+
         return Response({
             'entitlements': entitlements_data,
             'total_cohorts': len(entitlements_data)
         })
-        
+
     except Exception as e:
         return Response({
             'error': f'Failed to retrieve entitlements: {str(e)}'

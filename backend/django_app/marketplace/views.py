@@ -28,7 +28,7 @@ class IsEmployer(permissions.BasePermission):
     Only users with an Employer profile or employer role can access these endpoints.
     Checks for:
     1. Direct employer_profile relationship
-    2. UserRole with 'sponsor_admin' role (which is the employer role)
+    2. UserRole with 'sponsor_admin' or legacy 'sponsor' role (employer roles)
     """
 
     def has_permission(self, request, view):
@@ -39,9 +39,9 @@ class IsEmployer(permissions.BasePermission):
         if hasattr(request.user, 'employer_profile'):
             return True
         
-        # Check if user has sponsor_admin role (employer role)
+        # Check if user has sponsor_admin (or legacy sponsor) role
         if request.user.user_roles.filter(
-            role__name='sponsor_admin',
+            role__name__in=['sponsor_admin', 'sponsor'],
             is_active=True
         ).exists():
             return True

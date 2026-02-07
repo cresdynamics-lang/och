@@ -17,11 +17,19 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadAnalytics = async (type: string) => {
+  const tabIdToAction: Record<string, string> = {
+    'funnel': 'enrollment_funnel',
+    'cohort-comparison': 'cohort_comparison',
+    'mentor-analytics': 'mentor_analytics',
+    'revenue-analytics': 'revenue_analytics',
+    'predictive-analytics': 'predictive_analytics'
+  }
+
+  const loadAnalytics = async (actionName: string) => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await apiClient.get<any>(`/api/v1/programs/director/advanced-analytics/${type}/`)
+      const response = await apiClient.get<any>(`/api/v1/director/advanced-analytics/${actionName}/`)
       setData(response)
     } catch (err: any) {
       setError(err.message || 'Failed to load analytics')
@@ -31,7 +39,8 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
   }
 
   useEffect(() => {
-    loadAnalytics(activeTab.replace('-', '_'))
+    const actionName = tabIdToAction[activeTab]
+    if (actionName) loadAnalytics(actionName)
   }, [activeTab])
 
   const tabs = [
@@ -56,7 +65,7 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
       return (
         <div className="text-center py-12">
           <p className="text-och-orange mb-4">{error}</p>
-          <Button variant="defender" size="sm" onClick={() => loadAnalytics(activeTab.replace('-', '_'))}>
+          <Button variant="defender" size="sm" onClick={() => tabIdToAction[activeTab] && loadAnalytics(tabIdToAction[activeTab])}>
             Retry
           </Button>
         </div>
@@ -74,7 +83,7 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                 <Card key={key}>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">{key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</p>
-                    <p className="text-2xl font-bold text-och-defender">{value.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold text-och-defender">{typeof value === 'number' ? value.toFixed(1) : value}%</p>
                   </div>
                 </Card>
               ))}
@@ -89,7 +98,7 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                     <h3 className="text-white font-semibold">{stage.stage}</h3>
                     <div className="flex items-center gap-4 mt-2">
                       <span className="text-och-steel">{stage.count} users</span>
-                      <Badge variant="defender">{stage.percentage.toFixed(1)}%</Badge>
+                      <Badge variant="defender">{typeof stage.percentage === 'number' ? stage.percentage.toFixed(1) : stage.percentage}%</Badge>
                     </div>
                   </div>
                 </div>
@@ -106,25 +115,25 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Completion Rate</p>
-                    <p className="text-2xl font-bold text-och-mint">{data.benchmarks.avg_completion_rate.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold text-och-mint">{typeof data.benchmarks.avg_completion_rate === 'number' ? data.benchmarks.avg_completion_rate.toFixed(1) : 0}%</p>
                   </div>
                 </Card>
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Seat Utilization</p>
-                    <p className="text-2xl font-bold text-och-defender">{data.benchmarks.avg_seat_utilization.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold text-och-defender">{typeof data.benchmarks.avg_seat_utilization === 'number' ? data.benchmarks.avg_seat_utilization.toFixed(1) : 0}%</p>
                   </div>
                 </Card>
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Attendance</p>
-                    <p className="text-2xl font-bold text-och-orange">{data.benchmarks.avg_attendance.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold text-och-orange">{data.benchmarks.avg_attendance != null && typeof data.benchmarks.avg_attendance === 'number' ? data.benchmarks.avg_attendance.toFixed(1) + '%' : 'N/A'}</p>
                   </div>
                 </Card>
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Satisfaction</p>
-                    <p className="text-2xl font-bold text-och-gold">{data.benchmarks.avg_satisfaction.toFixed(1)}/5</p>
+                    <p className="text-2xl font-bold text-och-gold">{data.benchmarks.avg_satisfaction != null && typeof data.benchmarks.avg_satisfaction === 'number' ? data.benchmarks.avg_satisfaction.toFixed(1) + '/5' : 'N/A'}</p>
                   </div>
                 </Card>
               </div>
@@ -156,8 +165,8 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                           {cohort.seat_utilization}%
                         </Badge>
                       </td>
-                      <td className="p-3 text-och-steel">{cohort.avg_attendance}%</td>
-                      <td className="p-3 text-och-steel">{cohort.avg_satisfaction}/5</td>
+                      <td className="p-3 text-och-steel">{cohort.avg_attendance != null ? `${cohort.avg_attendance}%` : 'N/A'}</td>
+                      <td className="p-3 text-och-steel">{cohort.avg_satisfaction != null ? `${cohort.avg_satisfaction}/5` : 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -180,7 +189,7 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Utilization</p>
-                    <p className="text-2xl font-bold text-och-defender">{data.summary.avg_utilization.toFixed(1)}%</p>
+                    <p className="text-2xl font-bold text-och-defender">{typeof data.summary.avg_utilization === 'number' ? data.summary.avg_utilization.toFixed(1) : 0}%</p>
                   </div>
                 </Card>
                 <Card>
@@ -220,11 +229,11 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                       <td className="p-3 text-white">{mentor.total_mentees}</td>
                       <td className="p-3">
                         <Badge variant={mentor.utilization > 100 ? 'orange' : mentor.utilization > 80 ? 'mint' : 'defender'}>
-                          {mentor.utilization.toFixed(1)}%
+                          {typeof mentor.utilization === 'number' ? mentor.utilization.toFixed(1) : 0}%
                         </Badge>
                       </td>
-                      <td className="p-3 text-och-steel">{mentor.sessions_completed}</td>
-                      <td className="p-3 text-och-steel">{mentor.avg_satisfaction}/5</td>
+                      <td className="p-3 text-och-steel">{mentor.sessions_completed ?? 'N/A'}</td>
+                      <td className="p-3 text-och-steel">{mentor.avg_satisfaction != null ? `${mentor.avg_satisfaction}/5` : 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -241,19 +250,19 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Total Revenue</p>
-                    <p className="text-2xl font-bold text-och-mint">${data.summary.total_revenue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-och-mint">${(Number(data.summary.total_revenue) || 0).toLocaleString()}</p>
                   </div>
                 </Card>
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Avg Revenue/Program</p>
-                    <p className="text-2xl font-bold text-och-defender">${data.summary.avg_revenue_per_program.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-och-defender">${(Number(data.summary.avg_revenue_per_program) || 0).toLocaleString()}</p>
                   </div>
                 </Card>
                 <Card>
                   <div className="p-4">
                     <p className="text-och-steel text-sm mb-1">Paid Enrollments</p>
-                    <p className="text-2xl font-bold text-och-orange">{data.summary.total_paid_enrollments}</p>
+                    <p className="text-2xl font-bold text-och-orange">{data.summary.total_paid_enrollments ?? 0}</p>
                   </div>
                 </Card>
               </div>
@@ -267,9 +276,9 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                       <div key={program.program_id} className="flex justify-between items-center p-3 bg-och-midnight/30 rounded">
                         <div>
                           <p className="text-white font-medium">{program.program_name}</p>
-                          <p className="text-och-steel text-sm">{program.enrollments} enrollments</p>
+                          <p className="text-och-steel text-sm">{program.enrollments ?? 0} enrollments</p>
                         </div>
-                        <p className="text-och-mint font-bold">${program.total_revenue.toLocaleString()}</p>
+                        <p className="text-och-mint font-bold">${(Number(program.total_revenue) || 0).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>
@@ -283,9 +292,9 @@ export default function AdvancedAnalytics({ onClose }: AdvancedAnalyticsProps) {
                       <div key={month.month} className="flex justify-between items-center p-3 bg-och-midnight/30 rounded">
                         <div>
                           <p className="text-white font-medium">{month.month}</p>
-                          <p className="text-och-steel text-sm">{month.enrollments} enrollments</p>
+                          <p className="text-och-steel text-sm">{month.enrollments ?? 0} enrollments</p>
                         </div>
-                        <p className="text-och-defender font-bold">${month.revenue.toLocaleString()}</p>
+                        <p className="text-och-defender font-bold">${(Number(month.revenue) || 0).toLocaleString()}</p>
                       </div>
                     ))}
                   </div>

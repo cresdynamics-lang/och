@@ -34,15 +34,22 @@ export default function FinancePage() {
   const loadFinanceData = async () => {
     try {
       setLoading(true)
-      // TODO: Implement API endpoints
-      // const [invoicesData, refundsData] = await Promise.all([
-      //   sponsorClient.getInvoices(),
-      //   sponsorClient.getRefunds(),
-      // ])
-      // setInvoices(invoicesData)
-      // setRefunds(refundsData)
-      setInvoices([])
-      setRefunds([])
+      const [invoicesRes, _refunds] = await Promise.all([
+        sponsorClient.getInvoices().catch(() => ({ invoices: [], total_invoices: 0 })),
+        Promise.resolve([] as RefundRequest[]),
+      ])
+      const list = invoicesRes?.invoices ?? []
+      setInvoices(
+        list.map((inv) => ({
+          id: inv.invoice_id,
+          invoice_number: `INV-${inv.billing_month}`,
+          amount: inv.net_amount_kes ?? inv.total_amount_kes ?? 0,
+          status: (inv.payment_status === 'invoiced' ? 'pending' : inv.payment_status) as 'pending' | 'paid' | 'overdue',
+          due_date: inv.created_at ?? new Date().toISOString(),
+          cohort_id: undefined,
+        }))
+      )
+      setRefunds(_refunds)
     } catch (error) {
       console.error('Failed to load finance data:', error)
     } finally {

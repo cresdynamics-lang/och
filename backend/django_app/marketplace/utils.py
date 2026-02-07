@@ -13,9 +13,9 @@ def get_employer_for_user(user):
     if hasattr(user, 'employer_profile'):
         return user.employer_profile
     
-    # If user has sponsor_admin role but no employer_profile, auto-create one
+    # If user has sponsor_admin (or legacy sponsor) role but no employer_profile, auto-create one
     from users.models import UserRole
-    if user.user_roles.filter(role__name='sponsor_admin', is_active=True).exists():
+    if user.user_roles.filter(role__name__in=['sponsor_admin', 'sponsor'], is_active=True).exists():
         # Auto-create employer profile for sponsor_admin users
         employer = Employer.objects.create(
             user=user,

@@ -2,110 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { sponsorClient, SponsorDashboardSummary, SponsorCohort } from '@/services/sponsorClient'
-
-// Mock data for sponsor dashboard when API is not available
-const MOCK_DASHBOARD_SUMMARY: SponsorDashboardSummary = {
-  org_id: 'och-employer',
-  seats_total: 50,
-  seats_used: 35,
-  seats_at_risk: 3,
-  budget_total: 15000,
-  budget_used: 10500,
-  budget_used_pct: 70,
-  avg_readiness: 78.5,
-  avg_completion_pct: 65.2,
-  graduates_count: 12,
-  active_cohorts_count: 4,
-  alerts: [
-    '3 students at risk of falling behind',
-    'Budget utilization at 70%',
-    '2 cohorts approaching milestone deadlines'
-  ],
-  cache_updated_at: new Date().toISOString()
-}
-
-const MOCK_COHORTS: SponsorCohort[] = [
-  {
-    cohort_id: 'defender-q1-2025',
-    cohort_name: 'Defender Q1 2025',
-    track_name: 'Defender',
-    seats_total: 25,
-    seats_used: 22,
-    seats_sponsored: 15,
-    seats_remaining: 3,
-    avg_readiness: 82.3,
-    completion_pct: 68.5,
-    graduates_count: 8,
-    at_risk_count: 2,
-    next_milestone: {
-      title: 'Mid-term Assessment',
-      date: '2025-02-15',
-      type: 'assessment'
-    },
-    flags: ['high_performer'],
-    budget_remaining: 2500
-  },
-  {
-    cohort_id: 'offensive-q2-2025',
-    cohort_name: 'Offensive Q2 2025',
-    track_name: 'Offensive',
-    seats_total: 25,
-    seats_used: 18,
-    seats_sponsored: 12,
-    seats_remaining: 7,
-    avg_readiness: 75.8,
-    completion_pct: 62.1,
-    graduates_count: 4,
-    at_risk_count: 1,
-    next_milestone: {
-      title: 'Final Project Submission',
-      date: '2025-03-30',
-      type: 'project'
-    },
-    flags: ['needs_attention'],
-    budget_remaining: 3200
-  },
-  {
-    cohort_id: 'blue-team-q1-2025',
-    cohort_name: 'Blue Team Q1 2025',
-    track_name: 'Blue Team',
-    seats_total: 20,
-    seats_used: 16,
-    seats_sponsored: 10,
-    seats_remaining: 4,
-    avg_readiness: 79.1,
-    completion_pct: 71.3,
-    graduates_count: 6,
-    at_risk_count: 0,
-    next_milestone: {
-      title: 'Certification Exam',
-      date: '2025-02-28',
-      type: 'exam'
-    },
-    flags: [],
-    budget_remaining: 1800
-  },
-  {
-    cohort_id: 'red-team-q2-2025',
-    cohort_name: 'Red Team Q2 2025',
-    track_name: 'Red Team',
-    seats_total: 15,
-    seats_used: 12,
-    seats_sponsored: 8,
-    seats_remaining: 3,
-    avg_readiness: 74.2,
-    completion_pct: 58.9,
-    graduates_count: 3,
-    at_risk_count: 1,
-    next_milestone: {
-      title: 'Penetration Testing Lab',
-      date: '2025-03-15',
-      type: 'lab'
-    },
-    flags: ['budget_concern'],
-    budget_remaining: 1200
-  }
-]
 import { ROIMetricCard } from '@/components/sponsor/ROIMetricCard'
 import { SponsorCohortRow } from '@/components/sponsor/SponsorCohortRow'
 import { QuickSeatActions } from '@/components/sponsor/QuickSeatActions'
@@ -144,24 +40,7 @@ export default function SponsorDashboardClient() {
       setCohorts((cohortsData as any).results || [])
     } catch (err: any) {
       console.error('Dashboard load error:', err)
-
-      // Check if it's an authentication error (401)
-      const isAuthError = err?.status === 401 ||
-                         err?.response?.status === 401 ||
-                         err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials') ||
-                         err?.message?.includes('Unauthorized')
-
-      if (isAuthError) {
-        // Load mock data for demonstration purposes
-        console.log('Loading mock sponsor dashboard data...')
-        setSummary(MOCK_DASHBOARD_SUMMARY)
-        setCohorts(MOCK_COHORTS)
-        setError(null) // Clear error when showing mock data
-      } else {
-        setError(err.message || 'Failed to load dashboard')
-      }
+      setError(err?.message || err?.response?.data?.detail || 'Failed to load dashboard')
     } finally {
       setLoading(false)
     }
@@ -184,7 +63,7 @@ export default function SponsorDashboardClient() {
         calculateROIScore(c).toFixed(1),
         (c.avg_readiness || 0).toFixed(1),
         `${c.graduates_count || 0}/${c.seats_used}`,
-        `BWP ${c.budget_remaining ? (c.seats_total * 300 - c.budget_remaining) : 0}`,
+        `Ksh ${c.budget_remaining ? (c.seats_total * 300 - c.budget_remaining) : 0}`,
         getRiskLevel(c),
       ]),
     ].map(row => row.join(',')).join('\n')
@@ -217,32 +96,40 @@ export default function SponsorDashboardClient() {
     return 'low'
   }
 
-  // Filter cohorts
+  // Filter cohorts (support both legacy dashboard shape and API shape)
+  const cohortName = (c: SponsorCohort & { cohort_name?: string }) => c.cohort_name ?? c.name ?? ''
+  const trackName = (c: SponsorCohort & { track_name?: string }) => (c as any).track_name ?? c.track_slug ?? ''
   const filteredCohorts = cohorts.filter((cohort) => {
-    const matchesSearch = filters.search === '' || 
-      cohort.cohort_name.toLowerCase().includes(filters.search.toLowerCase())
-    const matchesRisk = filters.risk === 'all' || getRiskLevel(cohort) === filters.risk
-    const matchesTrack = filters.track === 'all' || cohort.track_name === filters.track
+    const name = cohortName(cohort)
+    const matchesSearch = filters.search === '' || name.toLowerCase().includes(filters.search.toLowerCase())
+    const matchesRisk = filters.risk === 'all' || getRiskLevel(cohort as any) === filters.risk
+    const matchesTrack = filters.track === 'all' || trackName(cohort) === filters.track
     return matchesSearch && matchesRisk && matchesTrack
   })
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-och-steel">Loading dashboard...</div>
+      <div className="w-full max-w-7xl py-8 px-4 sm:px-6 lg:pl-0 lg:pr-6 xl:pr-8 flex items-center justify-center min-h-[50vh]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-2 border-och-mint/40 border-t-och-mint rounded-full animate-spin" aria-hidden />
+          <p className="text-och-steel text-sm font-medium">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
   if (error || !summary) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6 max-w-md">
-          <h2 className="text-xl font-bold text-och-orange mb-2">Error Loading Dashboard</h2>
-          <p className="text-och-steel mb-4">{error || 'No data available'}</p>
+      <div className="flex items-center justify-center min-h-[50vh] px-4">
+        <div className="bg-och-midnight/80 border border-och-steel/30 rounded-2xl p-8 max-w-md w-full shadow-xl shadow-black/20">
+          <div className="rounded-full w-12 h-12 bg-och-orange/20 flex items-center justify-center mb-4">
+            <span className="text-2xl" aria-hidden>⚠️</span>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Unable to load dashboard</h2>
+          <p className="text-och-steel text-sm mb-6">{error || 'No data available. Sign in or check your connection.'}</p>
           <button
             onClick={loadDashboard}
-            className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors"
+            className="w-full px-4 py-3 bg-och-defender text-white rounded-xl font-semibold hover:bg-och-defender/90 transition-colors focus:outline-none focus:ring-2 focus:ring-och-mint focus:ring-offset-2 focus:ring-offset-och-midnight"
           >
             Retry
           </button>
@@ -262,52 +149,44 @@ export default function SponsorDashboardClient() {
     : summary.budget_used_pct || 0
 
   return (
-    <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:pl-0 lg:pr-6 xl:pr-8">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-och-mint">Sponsor Dashboard</h1>
-          <p className="text-och-steel">
-            Monitor sponsored cohorts, track ROI, and manage employee enrollment.
+    <div className="w-full max-w-7xl py-8 px-4 sm:px-6 lg:pl-0 lg:pr-6 xl:pr-8">
+        <div className="mb-10">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-2 text-white tracking-tight">
+            Sponsor Dashboard
+          </h1>
+          <p className="text-och-steel text-base max-w-2xl">
+            Manage sponsored students, monitor cohort participation, and oversee financial commitments.
           </p>
         </div>
         
         {/* Hero ROI Metrics */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
           <ROIMetricCard
-            title="SEATS UTILIZED"
+            title="Seats utilized"
             value={summary.seats_used}
-            subtitle={`${seatsUtilization}% of ${summary.seats_total}`}
-            trend={{ value: 12, direction: 'up', label: 'MoM' }}
+            subtitle={`${seatsUtilization}% of ${summary.seats_total} total`}
+            trend={seatsUtilization > 0 ? { value: seatsUtilization, direction: 'up', label: '' } : undefined}
             icon="👥"
             roiColor={{ bg: 'bg-och-mint/20' }}
           />
           <ROIMetricCard
-            title="AVG READINESS"
+            title="Avg readiness"
             value={summary.avg_readiness.toFixed(1)}
             subtitle="Graduate readiness score"
-            trend={{ value: 0, direction: 'neutral' }}
             icon="📊"
             roiColor={{ bg: 'bg-och-defender/20' }}
           />
           <ROIMetricCard
-            title="GRADUATES READY"
+            title="Graduates"
             value={summary.graduates_count}
-            subtitle="Q4 2025"
-            trend={{ value: 5, direction: 'up' }}
+            subtitle={`Across ${summary.active_cohorts_count} active cohort${summary.active_cohorts_count !== 1 ? 's' : ''}`}
             icon="🎓"
             roiColor={{ bg: 'bg-och-gold/20' }}
           />
           <ROIMetricCard
-            title="FORECAST GRADUATES"
-            value={42}
-            subtitle="84% Confidence"
-            trend={{ value: 0, direction: 'neutral' }}
-            icon="🔮"
-            roiColor={{ bg: 'bg-och-mint/20' }}
-          />
-          <ROIMetricCard
-            title="BUDGET UTILIZED"
-            value={`BWP ${(budgetUsed / 1000).toFixed(0)}K`}
-            subtitle={`${budgetUtilization}% of BWP ${(budgetTotal / 1000).toFixed(0)}K`}
+            title="Budget utilized"
+            value={`Ksh ${(budgetUsed / 1000).toFixed(0)}K`}
+            subtitle={`${budgetUtilization}% of Ksh ${(budgetTotal / 1000).toFixed(0)}K`}
             trend={{ value: budgetUtilization, direction: budgetUtilization >= 75 ? 'up' : 'neutral' }}
             icon="💰"
             roiColor={{ bg: budgetUtilization >= 75 ? 'bg-och-orange/20' : 'bg-och-gold/20' }}
@@ -317,38 +196,34 @@ export default function SponsorDashboardClient() {
         {/* Connections Row */}
         <ConnectionsRow
           employeesCount={summary.seats_used}
-          employeesShared={23} // TODO: Get from API
-          directorName="Jane Smith" // TODO: Get from API
-          directorTrack="Cyber Leadership" // TODO: Get from API
           financeTotal={summary.budget_total}
-          financePending={3} // TODO: Get from API
-          teamMembers={3} // TODO: Get from API
-          teamAdmins={2} // TODO: Get from API
         />
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Cohorts Table - Takes 3 columns */}
           <div className="lg:col-span-3">
-            <div className="bg-och-midnight border border-och-steel/20 rounded-xl overflow-hidden">
+            <div className="bg-och-midnight/60 border border-och-steel/20 rounded-2xl overflow-hidden shadow-lg shadow-black/10">
               {/* Table Header with Filters */}
-              <div className="p-6 border-b border-och-steel/20">
+              <div className="p-5 sm:p-6 border-b border-och-steel/20 bg-och-midnight/40">
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">📊 Sponsored Cohorts</h2>
+                  <h2 className="text-lg font-bold text-white tracking-tight">
+                    Sponsored cohorts
+                  </h2>
                   
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
                     <input
                       type="text"
-                      placeholder="Search: Cohort..."
+                      placeholder="Search cohorts..."
                       value={filters.search}
                       onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                      className="px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-mint"
+                      className="px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-mint focus:border-transparent w-full md:w-44"
                     />
                     
                     <select
                       value={filters.risk}
                       onChange={(e) => setFilters({ ...filters, risk: e.target.value })}
-                      className="px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-och-mint"
+                      className="px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-och-mint"
                     >
                       <option value="all">Risk: All</option>
                       <option value="high">Risk: High</option>
@@ -359,19 +234,19 @@ export default function SponsorDashboardClient() {
                     <select
                       value={filters.track}
                       onChange={(e) => setFilters({ ...filters, track: e.target.value })}
-                      className="px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-och-mint"
+                      className="px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-och-mint"
                     >
                       <option value="all">Track: All</option>
-                      {Array.from(new Set(cohorts.map(c => c.track_name))).map(track => (
+                      {Array.from(new Set(cohorts.map(c => (c as any).track_name).filter(Boolean))).map((track: string) => (
                         <option key={track} value={track}>{track}</option>
                       ))}
                     </select>
                     
                     <button
                       onClick={handleBulkExport}
-                      className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors text-sm font-semibold flex items-center gap-2"
+                      className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/90 transition-colors text-sm font-semibold flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-och-mint focus:ring-offset-2 focus:ring-offset-och-midnight"
                     >
-                      💰 Export ROI Report
+                      Export ROI report
                     </button>
                   </div>
                 </div>
@@ -461,24 +336,23 @@ export default function SponsorDashboardClient() {
                           key={cohort.cohort_id}
                           cohort={{
                             cohort_id: cohort.cohort_id,
-                            cohort_name: cohort.cohort_name,
-                            track: cohort.track_name,
-                            seats_used: cohort.seats_used,
-                            seats_total: cohort.seats_total,
-                            roi_score: calculateROIScore(cohort),
-                            readiness_avg: cohort.avg_readiness || 0,
-                            readiness_trend: 0, // TODO: Get from API
-                            graduates_ready: cohort.graduates_count,
-                            graduates_total: cohort.seats_used,
-                            budget_used: cohort.budget_remaining 
-                              ? (cohort.seats_total * 300 - cohort.budget_remaining)
-                              : cohort.seats_used * 300,
-                            budget_total: cohort.seats_total * 300,
-                            risk_level: getRiskLevel(cohort),
+                            cohort_name: cohortName(cohort) || cohort.name,
+                            track: trackName(cohort) || undefined,
+                            seats_used: (cohort as any).seats_used ?? cohort.students_enrolled ?? 0,
+                            seats_total: (cohort as any).seats_total ?? cohort.target_size ?? 0,
+                            roi_score: calculateROIScore(cohort as any),
+                            readiness_avg: (cohort as any).avg_readiness ?? 0,
+                            graduates_ready: (cohort as any).graduates_count ?? 0,
+                            graduates_total: (cohort as any).seats_used ?? cohort.students_enrolled ?? 0,
+                            budget_used: (cohort as any).budget_remaining
+                              ? ((cohort as any).seats_total * 300 - (cohort as any).budget_remaining)
+                              : ((cohort as any).seats_used ?? cohort.students_enrolled ?? 0) * 300,
+                            budget_total: ((cohort as any).seats_total ?? cohort.target_size ?? 0) * 300,
+                            risk_level: getRiskLevel(cohort as any),
                           }}
                           selected={selectedCohorts.includes(cohort.cohort_id)}
                           onSelect={handleSelectCohort}
-                          currency="BWP"
+                          currency="Ksh"
                         />
                       ))
                     )}

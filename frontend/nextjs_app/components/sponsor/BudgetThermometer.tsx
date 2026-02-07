@@ -7,7 +7,7 @@ interface BudgetThermometerProps {
   className?: string
 }
 
-export function BudgetThermometer({ used, total, currency = 'BWP', className = '' }: BudgetThermometerProps) {
+export function BudgetThermometer({ used, total, currency = 'Ksh', className = '' }: BudgetThermometerProps) {
   const percentage = total > 0 ? (used / total) * 100 : 0
   const colorClass = percentage >= 90 ? 'bg-red-500' : percentage >= 75 ? 'bg-amber-500' : 'bg-emerald-500'
   

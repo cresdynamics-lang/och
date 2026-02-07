@@ -134,6 +134,41 @@ class UserViewSet(viewsets.ModelViewSet):
             'total_users': total_users,
             'active_users': active_users,
         }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='upload_avatar')
+    def upload_avatar(self, request):
+        """
+        POST /api/v1/users/upload_avatar/
+        Upload avatar for current user. Accepts multipart/form-data with 'avatar' file.
+        """
+        user = request.user
+        avatar_file = request.FILES.get('avatar')
+        if not avatar_file:
+            return Response(
+                {'error': 'No avatar file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+        if avatar_file.content_type not in allowed_types:
+            return Response(
+                {'error': 'Invalid file type. Use JPEG, PNG, GIF, or WebP'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if avatar_file.size > 5 * 1024 * 1024:  # 5MB
+            return Response(
+                {'error': 'File size must be under 5MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        ext = os.path.splitext(avatar_file.name)[1] or '.jpg'
+        safe_name = f"{uuid.uuid4().hex}{ext}"
+        path = os.path.join('avatars', str(user.id), safe_name)
+        saved_path = default_storage.save(path, ContentFile(avatar_file.read()))
+        url = default_storage.url(saved_path)
+        if url.startswith('/'):
+            url = request.build_absolute_uri(url)
+        user.avatar_url = url
+        user.save(update_fields=['avatar_url'])
+        return Response({'avatar_url': url}, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['get'])
     def me(self, request):

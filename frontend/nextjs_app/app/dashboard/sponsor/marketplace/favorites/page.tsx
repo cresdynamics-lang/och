@@ -5,9 +5,8 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { marketplaceClient, type EmployerInterestLog, type MarketplaceProfile } from '@/services/marketplaceClient'
-import { Heart, ArrowLeft, Loader2, Check } from 'lucide-react'
+import { Heart, ArrowLeft, Loader2, Check, Bookmark, Mail } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { TalentProfileModal } from '@/components/marketplace/TalentProfileModal'
 
 export default function FavoritesPage() {
@@ -114,7 +113,7 @@ export default function FavoritesPage() {
   return (
     <div className="min-h-screen bg-och-midnight p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-6">
           <Button
             variant="outline"
             onClick={() => router.push('/dashboard/sponsor/marketplace')}
@@ -123,105 +122,119 @@ export default function FavoritesPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Marketplace
           </Button>
-          <h1 className="text-4xl font-bold mb-2 text-och-gold">Favorites</h1>
-          <p className="text-och-steel">Your favorited talent profiles</p>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-1 text-och-gold">Favorites</h1>
+          <p className="text-och-steel text-sm">Saved candidates you want to watch.</p>
         </div>
 
         {loading ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-              Loading favorites...
-            </div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+            Loading favorites…
           </Card>
         ) : error ? (
-          <Card className="p-8">
-            <div className="text-center text-red-400">{error}</div>
-          </Card>
+          <Card className="p-6 text-center text-red-400 text-sm">{error}</Card>
         ) : favorites.length === 0 ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">
-              <Heart className="w-16 h-16 mx-auto mb-4 text-och-steel/50" />
-              <p className="text-lg mb-2">No favorites yet</p>
-              <p className="text-sm">Start browsing talent and add profiles to your favorites</p>
-              <Button
-                variant="gold"
-                className="mt-4"
-                onClick={() => router.push('/dashboard/sponsor/marketplace/talent')}
-              >
-                Browse Talent
-              </Button>
-            </div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            <Heart className="w-10 h-10 mx-auto mb-3 text-och-steel/60" />
+            No favorites yet. Add candidates from the Talent view.
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {favorites.map((log) => (
-              <Card key={log.id} className="p-6 hover:border-och-gold/50 transition-colors">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-1">
-                        {log.profile.mentee_name}
-                      </h3>
-                      <p className="text-sm text-och-steel">
-                        {log.profile.primary_role || 'Cybersecurity Professional'}
-                      </p>
-                    </div>
-                    <Badge variant={log.profile.tier === 'professional' ? 'mint' : 'steel'}>
-                      {log.profile.tier === 'professional' ? 'Professional' : 'Starter'}
-                    </Badge>
-                  </div>
-
-                  {log.profile.readiness_score !== null && (
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-och-steel">Readiness Score</span>
-                        <Badge variant={log.profile.readiness_score >= 80 ? 'mint' : log.profile.readiness_score >= 60 ? 'gold' : 'steel'}>
-                          {log.profile.readiness_score}%
-                        </Badge>
-                      </div>
-                    </div>
-                  )}
-
-                  {log.profile.skills && log.profile.skills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-och-steel mb-2">Skills</p>
-                      <div className="flex flex-wrap gap-1">
-                        {log.profile.skills.slice(0, 3).map((skill) => (
-                          <Badge key={skill} variant="defender" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {log.profile.skills.length > 3 && (
-                          <Badge variant="steel" className="text-xs">
-                            +{log.profile.skills.length - 3}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-4 border-t border-och-defender/20">
-                    <p className="text-xs text-och-steel mb-2">
-                      Favorited on {new Date(log.created_at).toLocaleDateString()}
-                    </p>
-                    <Button
-                      variant="gold"
-                      className="w-full text-xs"
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-och-midnight/80 border-b border-och-steel/20 text-xs uppercase tracking-wide text-och-steel">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Talent</th>
+                    <th className="px-4 py-3 text-left">Readiness</th>
+                    <th className="px-4 py-3 text-left">Role</th>
+                    <th className="px-4 py-3 text-left">Tier</th>
+                    <th className="px-4 py-3 text-left">Favorited</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-och-steel/20">
+                  {favorites.map((log) => (
+                    <tr
+                      key={log.id}
+                      className="hover:bg-och-steel/10 transition-colors cursor-pointer"
                       onClick={() => {
                         setSelectedProfile(log.profile)
                         setModalOpen(true)
-                        // Log view action
                         marketplaceClient.logInterest(log.profile.id, 'view').catch(console.error)
                       }}
                     >
-                      View Profile
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-white">
+                            {log.profile.mentee_name}
+                          </span>
+                          <span className="text-xs text-och-steel">
+                            {log.profile.mentee_email || 'Contact via marketplace'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {log.profile.readiness_score != null ? (
+                          <span className="text-och-mint font-semibold">
+                            {Number(log.profile.readiness_score).toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-och-steel">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {log.profile.primary_role || '—'}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <Badge variant={log.profile.tier === 'professional' ? 'mint' : 'steel'} className="text-[11px]">
+                          {log.profile.tier}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs text-och-steel">
+                        {new Date(log.created_at).toLocaleDateString()}
+                      </td>
+                      <td
+                        className="px-4 py-3 align-top text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleInterest(log.profile.id, 'shortlist')}
+                            disabled={!!actionLoading[`${log.profile.id}-shortlist`]}
+                          >
+                            {actionLoading[`${log.profile.id}-shortlist`] ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : shortlistedProfiles.has(log.profile.id) ||
+                              actionSuccess[log.profile.id]?.has('shortlist') ? (
+                              <Check className="w-3 h-3" />
+                            ) : (
+                              <Bookmark className="w-3 h-3" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="gold"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleInterest(log.profile.id, 'contact_request')}
+                            disabled={!!actionLoading[`${log.profile.id}-contact_request`]}
+                          >
+                            {actionLoading[`${log.profile.id}-contact_request`] ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Mail className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )}
 
         {/* Profile Detail Modal - Always render, controlled by open prop */}

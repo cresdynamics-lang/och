@@ -13,17 +13,18 @@ class IsProgramDirector(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        # Check if user has program_director role
-        from users.models import UserRole, Role
-        director_role = Role.objects.filter(name='program_director').first()
-        if not director_role:
-            return False
+        # Use raw SQL to avoid UUID/bigint issues
+        from django.db import connection
         
-        return UserRole.objects.filter(
-            user=request.user,
-            role=director_role,
-            is_active=True
-        ).exists()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+                LIMIT 1
+            """, [request.user.id])
+            
+            return cursor.fetchone() is not None
 
 
 class IsDirectorOrAdmin(permissions.BasePermission):
@@ -37,17 +38,18 @@ class IsDirectorOrAdmin(permissions.BasePermission):
         if request.user.is_staff or request.user.is_superuser:
             return True
         
-        # Check if user has program_director role
-        from users.models import UserRole, Role
-        director_role = Role.objects.filter(name='program_director').first()
-        if not director_role:
-            return False
+        # Use raw SQL to avoid UUID/bigint issues
+        from django.db import connection
         
-        return UserRole.objects.filter(
-            user=request.user,
-            role=director_role,
-            is_active=True
-        ).exists()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+                LIMIT 1
+            """, [request.user.id])
+            
+            return cursor.fetchone() is not None
 
 
 class CanManageProgram(permissions.BasePermission):

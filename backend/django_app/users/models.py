@@ -581,13 +581,15 @@ class SponsorStudentLink(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='sponsored_students',
-        to_field='uuid_id'
+        to_field='uuid_id',
+        db_column='sponsor_uuid_id'
     )
     student = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='sponsor_links',
-        to_field='uuid_id'
+        to_field='uuid_id',
+        db_column='student_uuid_id'
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
@@ -596,7 +598,8 @@ class SponsorStudentLink(models.Model):
         null=True,
         blank=True,
         related_name='created_sponsor_links',
-        to_field='uuid_id'
+        to_field='uuid_id',
+        db_column='created_by'
     )
     is_active = models.BooleanField(default=True)
     

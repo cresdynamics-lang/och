@@ -5,6 +5,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import connection
 from django.db.models import Q
 from django.utils import timezone
 from django.conf import settings
@@ -12,18 +13,19 @@ from datetime import timedelta
 from organizations.models import Organization, OrganizationMember
 from programs.models import Cohort, Enrollment
 from users.models import User, ConsentScope, UserRole, Role
+from users.models import SponsorStudentLink
 from users.utils.consent_utils import check_consent
 from .models import (
     SponsorDashboardCache,
     SponsorCohortDashboard,
     SponsorStudentAggregates,
-    SponsorCode
+    SponsorCode,
+    SponsorReportRequest,
 )
 from .serializers import (
     SponsorDashboardSummarySerializer,
     SponsorCohortListSerializer,
     SponsorCohortDetailSerializer,
-    SponsorStudentAggregateSerializer,
     SponsorCodeSerializer,
     SponsorCodeGenerateSerializer,
     SponsorSeatAssignSerializer,
@@ -288,7 +290,9 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
     def students(self, request):
         """
         GET /api/v1/sponsor/dashboard/students?cohort_id={uuid}
-        Get student aggregates (consent-gated).
+        List all students in enrollments created by this sponsor (org=org, seat_type=sponsored).
+        Consent-gates PII (name/email); aggregates supply readiness/completion when synced.
+        Uses raw SQL with explicit cast on users.id to avoid varchar=bigint type mismatch.
         """
         org = self.get_org(request)
         if not org:
@@ -296,19 +300,217 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
                 {'detail': 'User is not associated with a sponsor organization'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
         cohort_id = request.query_params.get('cohort_id')
-        queryset = SponsorStudentAggregates.objects.filter(org=org)
-        
-        if cohort_id:
-            queryset = queryset.filter(cohort_id=cohort_id)
-        
-        # Only show consented profiles
-        queryset = queryset.filter(consent_employer_share=True)
-        
-        serializer = SponsorStudentAggregateSerializer(queryset, many=True)
-        return Response(serializer.data)
+        # Raw query with cast so join works when users.id is bigint and enrollments.user_id is varchar
+        with connection.cursor() as cursor:
+            sql = """
+                SELECT e.id AS enrollment_id, e.cohort_id, e.user_id, e.status AS enrollment_status,
+                       u.uuid_id AS user_uuid_id, u.email, u.first_name, u.last_name,
+                       c.name AS cohort_name
+                FROM enrollments e
+                INNER JOIN users u ON u.id::text = e.user_id::text
+                INNER JOIN cohorts c ON c.id = e.cohort_id
+                WHERE e.org_id = %s AND e.seat_type = %s
+            """
+            params = [org.id, 'sponsored']
+            if cohort_id:
+                sql += " AND e.cohort_id = %s"
+                params.append(cohort_id)
+            sql += " ORDER BY e.joined_at DESC"
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+        enrollment_rows = [dict(zip(columns, row)) for row in rows]
+        if not enrollment_rows:
+            return Response([])
+        cohort_ids = list({r['cohort_id'] for r in enrollment_rows})
+        user_ids = list({r['user_id'] for r in enrollment_rows})
+        aggregate_map = {}
+        agg_qs = SponsorStudentAggregates.objects.filter(
+            org=org,
+            cohort_id__in=cohort_ids,
+            student_id__in=user_ids
+        )
+        for agg in agg_qs:
+            key = (str(agg.cohort_id), str(agg.student_id))
+            aggregate_map[key] = agg
+        students = []
+        for r in enrollment_rows:
+            key = (str(r['cohort_id']), str(r['user_id']))
+            agg = aggregate_map.get(key)
+            if agg:
+                name = agg.name_anonymized
+                consent = agg.consent_employer_share
+                readiness_score = float(agg.readiness_score) if agg.readiness_score is not None else None
+                completion_pct = float(agg.completion_pct) if agg.completion_pct is not None else None
+                portfolio_items = agg.portfolio_items or 0
+            else:
+                consent = False
+                name = f"Student #{str(r['enrollment_id'])[:8]}"
+                readiness_score = None
+                completion_pct = None
+                portfolio_items = 0
+            if consent:
+                first = r['first_name'] or ''
+                last = r['last_name'] or ''
+                name = f"{first} {last}".strip() or (r['email'] or '')
+            students.append({
+                'id': str(r['user_uuid_id']),
+                'name': name,
+                'email': r['email'] if consent else '',
+                'cohort_name': r['cohort_name'] or '',
+                'cohort_id': str(r['cohort_id']),
+                'readiness_score': readiness_score,
+                'completion_pct': completion_pct,
+                'portfolio_items': portfolio_items,
+                'enrollment_status': r['enrollment_status'],
+                'consent_employer_share': consent,
+            })
+        return Response(students)
     
+    @action(detail=False, methods=['get'], url_path='cohort-enrollments')
+    def cohort_enrollments(self, request):
+        """
+        GET /api/v1/sponsor/dashboard/cohort-enrollments/?cohort_id={uuid}
+        List enrollments in a programs Cohort for this sponsor (seat_type=sponsored, org=sponsor org).
+        """
+        org = self.get_org(request)
+        if not org:
+            return Response(
+                {'detail': 'User is not associated with a sponsor organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        cohort_id = request.query_params.get('cohort_id')
+        if not cohort_id:
+            return Response({'detail': 'cohort_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            cohort = Cohort.objects.get(id=cohort_id)
+        except Cohort.DoesNotExist:
+            return Response({'detail': 'Cohort not found'}, status=status.HTTP_404_NOT_FOUND)
+        from sponsors.models import SponsorCohortAssignment
+        if not SponsorCohortAssignment.objects.filter(
+            cohort_id=cohort, sponsor_uuid_id=request.user
+        ).exists():
+            return Response({'detail': 'Not assigned to this cohort'}, status=status.HTTP_403_FORBIDDEN)
+        enrollments = Enrollment.objects.filter(
+            cohort=cohort,
+            org=org,
+            seat_type='sponsored'
+        ).select_related('user').order_by('-joined_at')
+        students = []
+        for e in enrollments:
+            u = e.user
+            students.append({
+                'enrollment_id': str(e.id),
+                'student_id': str(u.uuid_id),
+                'name': f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email,
+                'email': u.email,
+                'enrollment_status': e.status,
+                'completion_percentage': 0,
+                'joined_at': e.joined_at.isoformat(),
+                'last_activity_at': None,
+                'has_employer_consent': True,
+            })
+        return Response({
+            'cohort_id': str(cohort.id),
+            'cohort_name': cohort.name,
+            'students': students,
+            'total_students': len(students),
+        })
+
+    @action(detail=False, methods=['get'], url_path='cohort-reports')
+    def cohort_reports(self, request):
+        """
+        GET /api/v1/sponsor/dashboard/cohort-reports/?cohort_id={uuid}
+        Get report data for a programs Cohort.
+        """
+        org = self.get_org(request)
+        if not org:
+            return Response(
+                {'detail': 'User is not associated with a sponsor organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        cohort_id = request.query_params.get('cohort_id')
+        if not cohort_id:
+            return Response({'detail': 'cohort_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            cohort = Cohort.objects.get(id=cohort_id)
+        except Cohort.DoesNotExist:
+            return Response({'detail': 'Cohort not found'}, status=status.HTTP_404_NOT_FOUND)
+        from sponsors.models import SponsorCohortAssignment
+        assignment = SponsorCohortAssignment.objects.filter(
+            cohort_id=cohort, sponsor_uuid_id=request.user
+        ).first()
+        if not assignment:
+            return Response({'detail': 'Not assigned to this cohort'}, status=status.HTTP_403_FORBIDDEN)
+        enrollments = Enrollment.objects.filter(
+            cohort=cohort, org=org, seat_type='sponsored'
+        )
+        total = enrollments.count()
+        completed = enrollments.filter(status='completed').count()
+        active = enrollments.filter(status='active').count()
+        completion_rate = (completed / total * 100) if total > 0 else 0
+        return Response({
+            'cohort_id': str(cohort.id),
+            'cohort_name': cohort.name,
+            'seat_utilization': {
+                'target_seats': assignment.seat_allocation,
+                'used_seats': active,
+                'utilization_percentage': round((active / assignment.seat_allocation * 100), 2) if assignment.seat_allocation else 0,
+            },
+            'completion_metrics': {
+                'total_enrolled': total,
+                'completed_students': completed,
+                'completion_rate': round(completion_rate, 2),
+                'average_completion_percentage': round(completion_rate, 2),
+            },
+            'financial_summary': {
+                'total_cost_kes': 0,
+                'total_revenue_kes': 0,
+                'net_cost_kes': 0,
+                'budget_allocated_kes': 0,
+                'budget_utilization_pct': 0,
+            },
+            'payment_status': {
+                'paid_invoices': 0,
+                'pending_invoices': 0,
+                'overdue_invoices': 0,
+                'total_invoices': 0,
+            },
+        })
+
+    @action(detail=False, methods=['get'], url_path='linked-students')
+    def linked_students(self, request):
+        """
+        GET /api/v1/sponsor/dashboard/linked-students/
+        Get students linked to the current sponsor admin via SponsorStudentLink.
+        Only these students can be enrolled in cohorts.
+        """
+        try:
+            links = SponsorStudentLink.objects.filter(
+                sponsor=request.user,
+                is_active=True
+            ).select_related('student')
+            students = []
+            for link in links:
+                s = link.student
+                students.append({
+                    'id': str(s.id),
+                    'uuid_id': str(s.uuid_id),
+                    'email': s.email,
+                    'first_name': s.first_name or '',
+                    'last_name': s.last_name or '',
+                })
+            return Response({'students': students})
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception('Error fetching linked students')
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['post'])
     def seats_assign(self, request):
         """
@@ -335,13 +537,27 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
                 # Redeem code
                 result = SponsorCodeService.redeem_code(code, cohort_id, user_ids)
             else:
-                # Direct assignment
+                # Direct assignment - only allow students linked to this sponsor admin
                 cohort = Cohort.objects.get(id=cohort_id)
                 assigned = []
-                for user_id in user_ids:
-                    enrollment, created = Enrollment.objects.get_or_create(
+                linked_student_uuids = {
+                    str(u) for u in
+                    SponsorStudentLink.objects.filter(
+                        sponsor=request.user,
+                        is_active=True
+                    ).values_list('student__uuid_id', flat=True)
+                }
+                for user_uuid in user_ids:
+                    uuid_str = str(user_uuid)
+                    if uuid_str not in linked_student_uuids:
+                        continue
+                    try:
+                        student = User.objects.get(uuid_id=user_uuid, is_active=True)
+                    except User.DoesNotExist:
+                        continue
+                    enrollment, created = Enrollment.objects.update_or_create(
                         cohort=cohort,
-                        user_id=user_id,
+                        user=student,
                         defaults={
                             'org': org,
                             'enrollment_type': 'sponsor',
@@ -440,12 +656,15 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
         # TODO: Integrate with billing service
         # For now, return empty list
         return Response([])
-    
-    @action(detail=False, methods=['post'])
-    def reports_export(self, request):
+
+    @action(detail=False, methods=['get', 'post'], url_path='report-requests')
+    def report_requests(self, request):
         """
-        POST /api/v1/sponsor/reports/export
-        Export reports (CSV/JSON).
+        GET /api/v1/sponsor/dashboard/report-requests/
+        List report requests for this sponsor org.
+        POST /api/v1/sponsor/dashboard/report-requests/
+        Create a new report request (sponsor requests detailed report from director).
+        Body: { request_type, cohort_id?: string, details?: string }
         """
         org = self.get_org(request)
         if not org:
@@ -453,16 +672,116 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
                 {'detail': 'User is not associated with a sponsor organization'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
+        if request.method == 'GET':
+            qs = SponsorReportRequest.objects.filter(org=org).select_related('cohort').order_by('-created_at')
+            data = [
+                {
+                    'id': str(r.id),
+                    'request_type': r.request_type,
+                    'cohort_id': str(r.cohort_id) if r.cohort_id else None,
+                    'cohort_name': r.cohort.name if r.cohort else None,
+                    'details': r.details or '',
+                    'status': r.status,
+                    'created_at': r.created_at.isoformat(),
+                    'delivered_at': r.delivered_at.isoformat() if r.delivered_at else None,
+                    'attachment_url': r.attachment_url or '',
+                }
+                for r in qs
+            ]
+            return Response(data)
+        # POST
+        body = request.data or {}
+        request_type = body.get('request_type', 'graduate_breakdown')
+        if request_type not in dict(SponsorReportRequest.REQUEST_TYPE_CHOICES):
+            request_type = 'graduate_breakdown'
+        cohort_id = body.get('cohort_id')
+        details = (body.get('details') or '').strip()
+        cohort = None
+        if cohort_id:
+            try:
+                cohort = Cohort.objects.get(id=cohort_id)
+            except (Cohort.DoesNotExist, ValueError, TypeError):
+                pass
+        report_request = SponsorReportRequest.objects.create(
+            org=org,
+            request_type=request_type,
+            cohort=cohort,
+            details=details,
+            status='pending',
+        )
+        return Response(
+            {
+                'id': str(report_request.id),
+                'request_type': report_request.request_type,
+                'cohort_id': str(report_request.cohort_id) if report_request.cohort_id else None,
+                'cohort_name': report_request.cohort.name if report_request.cohort else None,
+                'details': report_request.details or '',
+                'status': report_request.status,
+                'created_at': report_request.created_at.isoformat(),
+                'delivered_at': None,
+                'attachment_url': '',
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    @action(detail=False, methods=['post'])
+    def reports_export(self, request):
+        """
+        POST /api/v1/sponsor/reports/export
+        Export cohort report (CSV/JSON).
+        Body: { cohort_id: string, format?: 'json' | 'csv' }
+        """
+        org = self.get_org(request)
+        if not org:
+            return Response(
+                {'detail': 'User is not associated with a sponsor organization'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        cohort_id = request.data.get('cohort_id')
         format_type = request.data.get('format', 'json')
-        report_type = request.data.get('type', 'summary')
-        
-        # TODO: Implement export logic
-        return Response({
-            'detail': 'Export functionality coming soon',
-            'format': format_type,
-            'type': report_type,
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+        if not cohort_id:
+            return Response({'detail': 'cohort_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            cohort = Cohort.objects.get(id=cohort_id)
+        except Cohort.DoesNotExist:
+            return Response({'detail': 'Cohort not found'}, status=status.HTTP_404_NOT_FOUND)
+        from sponsors.models import SponsorCohortAssignment
+        if not SponsorCohortAssignment.objects.filter(
+            cohort_id=cohort, sponsor_uuid_id=request.user
+        ).exists():
+            return Response({'detail': 'Not assigned to this cohort'}, status=status.HTTP_403_FORBIDDEN)
+        enrollments = Enrollment.objects.filter(
+            cohort=cohort, org=org, seat_type='sponsored'
+        ).select_related('user').order_by('user__last_name', 'user__first_name')
+        report_data = {
+            'cohort_name': cohort.name,
+            'cohort_id': str(cohort.id),
+            'exported_at': timezone.now().isoformat(),
+            'total_students': enrollments.count(),
+            'students': [
+                {
+                    'name': f"{e.user.first_name or ''} {e.user.last_name or ''}".strip() or e.user.email,
+                    'email': e.user.email,
+                    'status': e.status,
+                    'joined_at': e.joined_at.isoformat(),
+                }
+                for e in enrollments
+            ],
+        }
+        if format_type == 'csv':
+            import csv
+            import io
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(['Name', 'Email', 'Status', 'Joined'])
+            for e in enrollments:
+                name = f"{e.user.first_name or ''} {e.user.last_name or ''}".strip() or e.user.email
+                writer.writerow([name, e.user.email, e.status, e.joined_at.strftime('%Y-%m-%d')])
+            from django.http import HttpResponse
+            resp = HttpResponse(buf.getvalue(), content_type='text/csv')
+            resp['Content-Disposition'] = f'attachment; filename="cohort-{cohort.name[:30].replace(chr(32), "_")}-report.csv"'
+            return resp
+        return Response(report_data)
     
     @action(detail=False, methods=['get'], url_path='students/(?P<student_id>[^/.]+)')
     def student_profile(self, request, student_id=None):

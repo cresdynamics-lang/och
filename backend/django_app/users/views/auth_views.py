@@ -861,13 +861,44 @@ class MeView(APIView):
         formatted_consents = []
         for scope in consent_scopes:
             formatted_consents.append(scope)
-        
-        return Response({
+
+        # Sponsor users: include sponsor_organizations (from org_id or OrganizationMember) so team/invite works
+        sponsor_organizations = []
+        try:
+            from organizations.models import Organization, OrganizationMember
+            sponsor_orgs = list(
+                Organization.objects.filter(
+                    org_type='sponsor',
+                    organizationmember__user=user
+                ).distinct()
+            )
+            if getattr(user, 'org_id', None) and hasattr(user.org_id, 'org_type') and user.org_id.org_type == 'sponsor':
+                if user.org_id not in sponsor_orgs:
+                    sponsor_orgs.append(user.org_id)
+            for org in sponsor_orgs:
+                try:
+                    member = OrganizationMember.objects.get(organization=org, user=user)
+                    role = member.role
+                except OrganizationMember.DoesNotExist:
+                    role = 'admin'
+                sponsor_organizations.append({
+                    'id': str(org.id),
+                    'name': org.name,
+                    'slug': org.slug,
+                    'role': role,
+                })
+        except Exception:
+            pass
+
+        payload = {
             'user': user_response,
             'roles': roles,
             'consent_scopes': formatted_consents,
             'entitlements': entitlements,
-        }, status=status.HTTP_200_OK)
+        }
+        if sponsor_organizations:
+            payload['sponsor_organizations'] = sponsor_organizations
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class ProfileView(APIView):

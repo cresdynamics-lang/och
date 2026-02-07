@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react'
 import { sponsorClient, SponsorCohort } from '@/services/sponsorClient'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Users, FileText, TrendingUp, Plus } from 'lucide-react'
+import { Users, FileText, TrendingUp, Plus, ChevronRight, Loader2 } from 'lucide-react'
+import { EnrollStudentsModal } from './EnrollStudentsModal'
 
 export function CohortsList() {
   const [cohorts, setCohorts] = useState<SponsorCohort[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [enrollModal, setEnrollModal] = useState<{ cohortId: string; cohortName: string } | null>(null)
 
   useEffect(() => {
     loadCohorts()
@@ -18,8 +20,8 @@ export function CohortsList() {
   const loadCohorts = async () => {
     try {
       setLoading(true)
-      const data = await sponsorClient.getCohorts({ limit: 20 })
-      setCohorts(data.results)
+      const data = await sponsorClient.getCohorts({ limit: 50 })
+      setCohorts(data.results || [])
       setError(null)
     } catch (err: any) {
       setError(err.message || 'Failed to load cohorts')
@@ -28,130 +30,161 @@ export function CohortsList() {
     }
   }
 
-  const handleEnrollStudents = (cohortId: string) => {
-    // TODO: Open enrollment modal or navigate to enrollment page
-    console.log('Enroll students for cohort:', cohortId)
-  }
-
-  const handleGenerateReport = (cohortId: string) => {
-    // TODO: Generate and download report
-    console.log('Generate report for cohort:', cohortId)
+  const handleEnrollSuccess = () => {
+    setEnrollModal(null)
+    loadCohorts()
   }
 
   if (loading) {
     return (
-      <div className="bg-och-slate-800 rounded-lg p-6 border border-och-slate-700">
-        <div className="text-och-steel">Loading cohorts...</div>
+      <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-12 flex flex-col items-center justify-center min-h-[320px]">
+        <Loader2 className="w-10 h-10 text-och-defender animate-spin mb-4" />
+        <p className="text-och-steel">Loading cohorts...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-och-slate-800 rounded-lg p-6 border border-och-slate-700">
-        <div className="text-red-400">Error: {error}</div>
+      <div className="bg-och-midnight border border-red-500/30 rounded-xl p-6">
+        <p className="text-red-400">Error: {error}</p>
+        <Button variant="outline" onClick={loadCohorts} className="mt-4">
+          Retry
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="bg-och-slate-800 rounded-lg p-6 border border-och-slate-700">
-      <h2 className="text-2xl font-bold text-och-mint mb-6">Sponsored Cohorts</h2>
-      
-      {cohorts.length === 0 ? (
-        <div className="text-och-steel">No cohorts found</div>
-      ) : (
-        <div className="space-y-4">
-          {cohorts.map((cohort) => (
-            <div
-              key={cohort.cohort_id}
-              className="bg-och-slate-900 rounded-lg p-4 border border-och-slate-700"
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <Link
-                    href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}`}
-                    className="hover:text-och-mint transition-colors"
+    <>
+      <div className="bg-och-midnight/60 border border-och-steel/20 rounded-2xl overflow-hidden shadow-lg shadow-black/10">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-och-steel/20 bg-och-midnight/40">
+                <th className="text-left py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Cohort
+                </th>
+                <th className="text-left py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Track
+                </th>
+                <th className="text-center py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Seats
+                </th>
+                <th className="text-center py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Progress
+                </th>
+                <th className="text-center py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Graduates
+                </th>
+                <th className="text-left py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="text-right py-4 px-5 text-xs font-semibold text-och-steel uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-och-steel/10">
+              {cohorts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-och-steel">
+                    <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p className="font-medium text-white/80">No cohorts assigned yet</p>
+                    <p className="text-sm mt-1">Contact your program director to get assigned to cohorts.</p>
+                  </td>
+                </tr>
+              ) : (
+                cohorts.map((cohort) => (
+                  <tr
+                    key={cohort.cohort_id}
+                    className="hover:bg-och-steel/5 transition-colors group"
                   >
-                    <h3 className="text-lg font-semibold text-och-mint mb-2">
-                      {cohort.cohort_name}
-                    </h3>
-                  </Link>
-                  <div className="text-sm text-och-steel mb-3">{cohort.track_name}</div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-                    <div>
-                      <div className="text-och-steel">Seats</div>
-                      <div className="text-och-mint font-semibold">
-                        {cohort.seats_used} / {cohort.seats_total}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-och-steel">Completion</div>
-                      <div className="text-och-mint font-semibold">
-                        {cohort.completion_pct?.toFixed(1) || 'N/A'}%
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-och-steel">Readiness</div>
-                      <div className="text-och-mint font-semibold">
-                        {cohort.avg_readiness?.toFixed(1) || 'N/A'}%
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-och-steel">Graduates</div>
-                      <div className="text-och-mint font-semibold">{cohort.graduates_count}</div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleEnrollStudents(cohort.cohort_id)}
-                      className="flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Enroll Students
-                    </Button>
-                    
-                    <Link href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}?tab=progress`}>
-                      <Button size="sm" variant="outline" className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4" />
-                        Track Progress
-                      </Button>
-                    </Link>
-                    
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleGenerateReport(cohort.cohort_id)}
-                      className="flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Generate Report
-                    </Button>
-                  </div>
-                </div>
-                
-                {cohort.flags && cohort.flags.length > 0 && (
-                  <div className="ml-4">
-                    {cohort.flags.map((flag) => (
-                      <span
-                        key={flag}
-                        className="inline-block bg-yellow-900/30 text-yellow-400 text-xs px-2 py-1 rounded mr-1"
+                    <td className="py-4 px-5">
+                      <Link
+                        href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}`}
+                        className="font-semibold text-white hover:text-och-mint transition-colors inline-flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-och-mint focus:ring-offset-2 focus:ring-offset-och-midnight rounded"
                       >
-                        {flag}
+                        {cohort.cohort_name || cohort.name}
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </Link>
+                    </td>
+                    <td className="py-4 px-5 text-och-steel text-sm">
+                      {(cohort as { track_name?: string }).track_name || cohort.track_slug || '—'}
+                    </td>
+                    <td className="py-4 px-5 text-center">
+                      <span className="text-white font-medium">
+                        {(cohort as { seats_used?: number }).seats_used ?? cohort.students_enrolled ?? 0}
                       </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+                      <span className="text-och-steel"> / </span>
+                      <span className="text-och-steel">
+                        {(cohort as { seats_total?: number }).seats_total ?? cohort.target_size ?? 0}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-center">
+                      <span className="text-och-mint font-semibold">
+                        {cohort.completion_rate != null ? `${Number(cohort.completion_rate).toFixed(1)}%` : (cohort as { completion_pct?: number }).completion_pct != null ? `${Number((cohort as { completion_pct: number }).completion_pct).toFixed(1)}%` : '—'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-center">
+                      <span className="text-white font-medium">
+                        {(cohort as { graduates_count?: number }).graduates_count ?? 0}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                        cohort.status === 'active'
+                          ? 'bg-och-mint/20 text-och-mint'
+                          : cohort.status === 'graduated'
+                            ? 'bg-och-defender/20 text-och-defender'
+                            : 'bg-och-steel/20 text-och-steel'
+                      }`}>
+                        {cohort.status || 'active'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          onClick={() => setEnrollModal({
+                            cohortId: cohort.cohort_id,
+                            cohortName: cohort.cohort_name || cohort.name
+                          })}
+                          className="flex items-center gap-1.5 bg-och-defender hover:bg-och-defender/90"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Enroll
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex items-center gap-1.5" asChild>
+                          <Link href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}?tab=progress`}>
+                            <TrendingUp className="w-4 h-4" />
+                            Progress
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex items-center gap-1.5" asChild>
+                          <Link href={`/dashboard/sponsor/cohorts/${cohort.cohort_id}?tab=reports`}>
+                            <FileText className="w-4 h-4" />
+                            Report
+                          </Link>
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+      </div>
+
+      {enrollModal && (
+        <EnrollStudentsModal
+          cohortId={enrollModal.cohortId}
+          cohortName={enrollModal.cohortName}
+          onClose={() => setEnrollModal(null)}
+          onSuccess={handleEnrollSuccess}
+        />
       )}
-    </div>
+    </>
   )
 }
-

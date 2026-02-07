@@ -3,6 +3,7 @@ Employer-facing job application management views.
 """
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import NotFound, ValidationError, PermissionDenied
 from rest_framework.response import Response
@@ -15,7 +16,32 @@ from .serializers import (
 )
 from .utils import get_employer_for_user
 
+User = get_user_model()
 logger = logging.getLogger(__name__)
+
+
+def _prefetch_applicants(applications):
+    """
+    Prefetch applicant User objects and attach to each application.
+    Avoids JOIN when marketplace_job_applications.applicant_id is varchar and users.id is bigint.
+    """
+    if not applications:
+        return
+    applicant_ids = []
+    for app in applications:
+        try:
+            applicant_ids.append(int(app.applicant_id))
+        except (ValueError, TypeError):
+            pass
+    if not applicant_ids:
+        return
+    user_map = {u.pk: u for u in User.objects.filter(pk__in=applicant_ids)}
+    for app in applications:
+        try:
+            pk = int(app.applicant_id)
+            app.applicant = user_map.get(pk)  # None if not found, so serializer does not lazy-load
+        except (ValueError, TypeError):
+            app.applicant = None
 
 
 class EmployerJobApplicationsView(generics.ListAPIView):
@@ -54,13 +80,17 @@ class EmployerJobApplicationsView(generics.ListAPIView):
             logger.warning(f'Job posting {job_id} not found')
             raise NotFound('Job posting not found or you do not have permission to view it')
         
-        # Return all applications for this job
-        applications = JobApplication.objects.filter(
+        # Return all applications for this job (no select_related('applicant') to avoid varchar vs bigint join)
+        return JobApplication.objects.filter(
             job_posting=job
-        ).select_related('applicant', 'job_posting').order_by('-applied_at')
-        
-        logger.info(f'Found {applications.count()} applications for job {job_id} (user: {user.id})')
-        return applications
+        ).select_related('job_posting').order_by('-applied_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        applications = list(queryset)
+        _prefetch_applicants(applications)
+        serializer = self.get_serializer(applications, many=True)
+        return Response(serializer.data)
 
 
 class EmployerAllApplicationsView(generics.ListAPIView):
@@ -80,34 +110,23 @@ class EmployerAllApplicationsView(generics.ListAPIView):
             logger.warning(f'User {user.id} ({user.email}) has no employer profile')
             return JobApplication.objects.none()
         
-        # Get all applications for jobs posted by this employer
-        # Match by employer.user to handle auto-created employer profiles
-        applications = JobApplication.objects.filter(
+        # Get all applications for jobs posted by this employer (no select_related('applicant') to avoid varchar vs bigint join)
+        return JobApplication.objects.filter(
             job_posting__employer__user=user
-        ).select_related('applicant', 'job_posting', 'job_posting__employer').order_by('-applied_at')
-        
-        logger.info(f'Found {applications.count()} total applications for user {user.id}')
-        return applications
+        ).select_related('job_posting', 'job_posting__employer').order_by('-applied_at')
     
     def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
-        
-        # Group applications by status for stats
-        queryset = self.get_queryset()
+        queryset = self.filter_queryset(self.get_queryset())
+        applications = list(queryset)
+        _prefetch_applicants(applications)
+        serializer = self.get_serializer(applications, many=True)
         status_counts = {}
         for status_choice in JobApplication.STATUS_CHOICES:
-            status_counts[status_choice[0]] = queryset.filter(status=status_choice[0]).count()
-        
-        # Add stats to response
-        if isinstance(response.data, list):
-            response.data = {
-                'results': response.data,
-                'stats': status_counts,
-            }
-        elif isinstance(response.data, dict) and 'results' in response.data:
-            response.data['stats'] = status_counts
-        
-        return response
+            status_counts[status_choice[0]] = sum(1 for a in applications if a.status == status_choice[0])
+        return Response({
+            'results': serializer.data,
+            'stats': status_counts,
+        })
 
 
 class EmployerApplicationDetailView(generics.RetrieveUpdateAPIView):
@@ -129,14 +148,21 @@ class EmployerApplicationDetailView(generics.RetrieveUpdateAPIView):
             logger.warning(f'User {user.id} ({user.email}) has no employer profile')
             return JobApplication.objects.none()
         
-        # Match by employer.user to handle auto-created employer profiles
+        # Match by employer.user (no select_related('applicant') to avoid varchar vs bigint join)
         return JobApplication.objects.filter(
             job_posting__employer__user=user
-        ).select_related('applicant', 'job_posting', 'job_posting__employer')
+        ).select_related('job_posting', 'job_posting__employer')
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        _prefetch_applicants([instance])
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+        _prefetch_applicants([instance])
         
         # Only allow updating status and notes
         allowed_fields = ['status', 'notes']
@@ -186,13 +212,14 @@ class EmployerApplicationStatusUpdateView(generics.UpdateAPIView):
             logger.warning(f'User {user.id} ({user.email}) has no employer profile')
             return JobApplication.objects.none()
         
-        # Match by employer.user to handle auto-created employer profiles
+        # Match by employer.user (no select_related('applicant') to avoid varchar vs bigint join)
         return JobApplication.objects.filter(
             job_posting__employer__user=user
-        ).select_related('applicant', 'job_posting')
+        ).select_related('job_posting')
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
+        _prefetch_applicants([instance])
         new_status = request.data.get('status')
         
         if not new_status:

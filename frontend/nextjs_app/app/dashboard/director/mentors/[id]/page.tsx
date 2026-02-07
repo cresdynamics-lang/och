@@ -168,10 +168,16 @@ export default function MentorDetailPage() {
   }, [mentorId])
 
   useEffect(() => {
-    if (mentorId && !cohortsLoading && cohorts.length > 0) {
-      loadMentorAssignments()
+    if (!mentorId || cohortsLoading) return
+    if (cohorts.length === 0) {
+      setAssignments([])
+      setIsLoadingAssignments(false)
+      return
     }
-  }, [mentorId, cohorts, cohortsLoading])
+    loadMentorAssignments()
+    // Only re-run when mentorId or cohorts list length/load state changes, not cohorts reference
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mentorId, cohortsLoading, cohorts.length])
 
   const loadMentorData = async () => {
     try {
@@ -202,7 +208,7 @@ export default function MentorDetailPage() {
   const loadMentorAnalytics = async () => {
     try {
       setIsLoadingAnalytics(true)
-      const data = await programsClient.getMentorAnalytics(mentorId)
+      const data = await programsClient.getDirectorMentorAnalytics(mentorId)
       setAnalytics(data)
     } catch (error) {
       console.error('Failed to load mentor analytics:', error)

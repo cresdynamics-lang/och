@@ -100,25 +100,25 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         try:
             invited_user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # Create user with pending status
             invited_user = User.objects.create_user(
                 username=email,
                 email=email,
-                account_status='pending_verification',
+                password=None,  # set_unusable_password by Django
             )
-        
+            invited_user.account_status = 'pending_verification'
+            invited_user.save(update_fields=['account_status'])
+
         # Add member to organization
         member, created = OrganizationMember.objects.get_or_create(
             organization=org,
             user=invited_user,
             defaults={'role': org_role}
         )
-        
         if not created:
             member.role = org_role
-            member.save()
-        
-        # Assign system role if specified
+            member.save(update_fields=['role'])
+
+        # Assign system role if specified (org-scoped; scope_ref is UUID so use None and set org_id)
         if system_role_name:
             try:
                 system_role = Role.objects.get(name=system_role_name)
@@ -126,14 +126,12 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
                     user=invited_user,
                     role=system_role,
                     scope='org',
-                    scope_ref=org.id,
-                    org_id=org,
-                    assigned_by=user,
-                    defaults={'is_active': True}
+                    scope_ref=None,
+                    defaults={'org_id': org, 'assigned_by': user, 'is_active': True}
                 )
             except Role.DoesNotExist:
                 pass
-        
+
         # Send invitation email
         if created:
             try:
@@ -146,10 +144,21 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
                     fail_silently=True,
                 )
             except Exception:
-                pass  # Don't fail if email fails
-        
-        serializer = OrganizationMemberSerializer(member)
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+                pass
+
+        # Return minimal payload to avoid nested serializer errors (UserSerializer can fail on new users)
+        return Response({
+            'id': member.id,
+            'organization': {'id': org.id, 'name': org.name, 'slug': org.slug},
+            'user': {
+                'id': getattr(invited_user, 'id', str(invited_user.pk)),
+                'email': invited_user.email,
+                'first_name': getattr(invited_user, 'first_name', '') or '',
+                'last_name': getattr(invited_user, 'last_name', '') or '',
+            },
+            'role': member.role,
+            'joined_at': member.joined_at.isoformat() if member.joined_at else None,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def assign_role(self, request, pk=None):

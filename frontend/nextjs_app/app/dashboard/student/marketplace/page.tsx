@@ -1026,52 +1026,44 @@ export default function MarketplaceProfilePage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {applications.map((app) => (
-                    <Card key={app.id} className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold text-white mb-1">
-                            {app.job_posting.title}
-                          </h3>
-                          <p className="text-sm text-och-steel">
-                            {app.job_posting.employer?.company_name || 'Company'}
-                          </p>
-                        </div>
-                        <Badge variant={getApplicationStatusColor(app.status) as any}>
-                          {app.status.replace('_', ' ').toUpperCase()}
-                        </Badge>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-                        <div>
-                          <span className="text-och-steel">Applied:</span>
-                          <p className="text-white">{new Date(app.applied_at).toLocaleDateString()}</p>
-                        </div>
-                        {app.match_score && (
-                          <div>
-                            <span className="text-och-steel">Match Score:</span>
-                            <p className="text-white">{app.match_score}%</p>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-och-steel">Location:</span>
-                          <p className="text-white">{app.job_posting.location || 'Remote'}</p>
-                        </div>
-                        <div>
-                          <span className="text-och-steel">Type:</span>
-                          <p className="text-white">{getJobTypeLabel(app.job_posting.job_type)}</p>
-                        </div>
-                      </div>
-
-                      {app.cover_letter && (
-                        <div className="mb-4">
-                          <span className="text-och-steel text-sm">Cover Letter:</span>
-                          <p className="text-white text-sm mt-1">{app.cover_letter}</p>
-                        </div>
-                      )}
-                    </Card>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-och-midnight/80 border-b border-och-steel/20 text-xs uppercase tracking-wide text-och-steel">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Job / Company</th>
+                        <th className="px-4 py-3 text-left">Status</th>
+                        <th className="px-4 py-3 text-left">Applied</th>
+                        <th className="px-4 py-3 text-left">Match Score</th>
+                        <th className="px-4 py-3 text-left">Location</th>
+                        <th className="px-4 py-3 text-left">Type</th>
+                        <th className="px-4 py-3 text-left">Cover Letter</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-och-steel/20">
+                      {applications.map((app) => (
+                        <tr key={app.id} className="hover:bg-och-midnight/40 transition-colors">
+                          <td className="py-3 px-4">
+                            <div>
+                              <p className="font-semibold text-white">{app.job_posting.title}</p>
+                              <p className="text-xs text-och-steel">{app.job_posting.employer?.company_name || 'Company'}</p>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={getApplicationStatusColor(app.status) as any} className="text-[11px]">
+                              {app.status.replace('_', ' ').toUpperCase()}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-och-steel">{new Date(app.applied_at).toLocaleDateString()}</td>
+                          <td className="py-3 px-4 text-white">{app.match_score != null ? `${Number(app.match_score)}%` : '—'}</td>
+                          <td className="py-3 px-4 text-och-steel">{app.job_posting.location || 'Remote'}</td>
+                          <td className="py-3 px-4 text-och-steel">{getJobTypeLabel(app.job_posting.job_type)}</td>
+                          <td className="py-3 px-4 text-och-steel max-w-[200px] truncate" title={app.cover_letter || ''}>
+                            {app.cover_letter || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </Card>

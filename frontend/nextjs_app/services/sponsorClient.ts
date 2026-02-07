@@ -140,6 +140,26 @@ export interface SeatEntitlement {
   status: string
 }
 
+export interface SponsorReportRequestItem {
+  id: string
+  request_type: 'graduate_breakdown' | 'roi_projection' | 'cohort_analytics' | 'custom'
+  cohort_id: string | null
+  cohort_name: string | null
+  details: string
+  status: 'pending' | 'in_progress' | 'delivered' | 'cancelled'
+  created_at: string
+  delivered_at: string | null
+  attachment_url: string
+}
+
+export interface OrganizationMemberItem {
+  id: number | string
+  organization?: { id: number | string; slug: string; name: string }
+  user: { id: number | string; email: string; first_name?: string; last_name?: string }
+  role: 'admin' | 'member' | 'viewer'
+  joined_at: string
+}
+
 // =============================================================================
 // 🔒 Privacy & Consent Types
 // =============================================================================
@@ -191,12 +211,27 @@ export interface SponsorDashboardSummary {
   cache_updated_at: string
 }
 
+/** Legacy aggregate-only shape (e.g. when filtering by consent). */
 export interface SponsorStudent {
   student_id: string
   name_anonymized: string
   readiness_score: number | null
   completion_pct: number | null
   portfolio_items: number
+  consent_employer_share: boolean
+}
+
+/** Sponsored student as returned by GET /sponsor/dashboard/students (from enrollments). */
+export interface SponsoredStudentListItem {
+  id: string
+  name: string
+  email: string
+  cohort_name: string
+  cohort_id: string
+  readiness_score?: number | null
+  completion_pct?: number | null
+  portfolio_items: number
+  enrollment_status: string
   consent_employer_share: boolean
 }
 
@@ -222,6 +257,30 @@ class SponsorClient {
    */
   async getProfile(): Promise<SponsorProfile> {
     return apiGateway.get('/auth/me/')
+  }
+
+  /**
+   * List organization members (team) for a sponsor org.
+   */
+  async getTeamMembers(orgSlug: string): Promise<OrganizationMemberItem[]> {
+    const res = await apiGateway.get<OrganizationMemberItem[] | { results: OrganizationMemberItem[] }>('/organization-members/', {
+      params: { org_slug: orgSlug },
+    })
+    if (Array.isArray(res)) return res
+    if (res && typeof res === 'object' && 'results' in res && Array.isArray(res.results)) return res.results
+    return []
+  }
+
+  /**
+   * Invite a team member to the sponsor organization (sends email via MAIL_* config).
+   */
+  async inviteTeamMember(data: {
+    org_slug: string
+    email: string
+    org_role: 'admin' | 'member' | 'viewer'
+    system_role?: string
+  }): Promise<OrganizationMemberItem> {
+    return apiGateway.post('/organization-members/invite/', data)
   }
 
   /**
@@ -283,7 +342,7 @@ class SponsorClient {
   }
 
   /**
-   * List sponsored students
+   * List sponsored students in a cohort (sponsor dashboard - programs Cohort)
    */
   async getSponsoredStudents(cohortId: string): Promise<{
     cohort_id: string
@@ -301,14 +360,36 @@ class SponsorClient {
     }>
     total_students: number
   }> {
-    return apiGateway.get(`/programs/cohorts/${cohortId}/enrollments/list/`)
+    return apiGateway.get('/sponsor/dashboard/cohort-enrollments', {
+      params: { cohort_id: cohortId },
+    })
   }
 
   /**
-   * Get cohort reports
+   * Get cohort reports (sponsor dashboard - programs Cohort)
    */
   async getCohortReports(cohortId: string): Promise<CohortReports> {
-    return apiGateway.get(`/programs/cohorts/${cohortId}/reports/`)
+    return apiGateway.get('/sponsor/dashboard/cohort-reports', {
+      params: { cohort_id: cohortId },
+    })
+  }
+
+  /**
+   * List report requests (sponsor requests for detailed report from director).
+   */
+  async getReportRequests(): Promise<SponsorReportRequestItem[]> {
+    return apiGateway.get('/sponsor/dashboard/report-requests/')
+  }
+
+  /**
+   * Request a detailed report from the program director.
+   */
+  async requestDirectorReport(data: {
+    request_type: 'graduate_breakdown' | 'roi_projection' | 'cohort_analytics' | 'custom'
+    cohort_id?: string
+    details?: string
+  }): Promise<SponsorReportRequestItem> {
+    return apiGateway.post('/sponsor/dashboard/report-requests/', data)
   }
 
   // =============================================================================
@@ -457,7 +538,7 @@ class SponsorClient {
     cohort_id?: string
     readiness_gte?: number
     limit?: number
-  }): Promise<SponsorStudent[]> {
+  }): Promise<SponsoredStudentListItem[]> {
     return apiGateway.get('/sponsor/dashboard/students', { params })
   }
 

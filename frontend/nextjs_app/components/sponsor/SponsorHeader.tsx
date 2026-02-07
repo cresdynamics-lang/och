@@ -21,7 +21,7 @@ export function SponsorHeader() {
                 <div className="text-sm font-medium text-white">
                   {(user as any)?.organization_name || user?.email?.split('@')[1]?.split('.')[0] || 'Corporate Sponsor'}
                 </div>
-                <div className="text-xs text-och-steel">Seats: 250 | Budget: BWP 75K</div>
+                <div className="text-xs text-och-steel">Seats: 250 | Budget: Ksh 75K</div>
               </div>
             </div>
             

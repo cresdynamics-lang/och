@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { marketplaceClient, type EmployerInterestLog, type MarketplaceProfile } from '@/services/marketplaceClient'
-import { Mail, ArrowLeft, Loader2, Building2, User, Calendar } from 'lucide-react'
+import { Mail, ArrowLeft, Loader2, User, Calendar } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { TalentProfileModal } from '@/components/marketplace/TalentProfileModal'
@@ -64,7 +64,7 @@ export default function ContactedStudentsPage() {
   return (
     <div className="min-h-screen bg-och-midnight p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-6">
           <Button
             variant="outline"
             onClick={() => router.push('/dashboard/sponsor/marketplace')}
@@ -73,99 +73,44 @@ export default function ContactedStudentsPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Marketplace
           </Button>
-          <h1 className="text-4xl font-bold mb-2 text-och-gold">Contacted Students</h1>
-          <p className="text-och-steel mb-4">
-            View all students you have contacted through the marketplace.
+          <h1 className="text-3xl sm:text-4xl font-bold mb-1 text-och-gold">Contacted</h1>
+          <p className="text-och-steel text-sm mb-1">
+            Students you have already reached out to.
           </p>
         </div>
 
         {loading ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-              Loading contacted students...
-            </div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+            Loading contacted students…
           </Card>
         ) : error ? (
-          <Card className="p-8">
-            <div className="text-center text-red-400">{error}</div>
-          </Card>
+          <Card className="p-6 text-center text-red-400 text-sm">{error}</Card>
         ) : contacts.length === 0 ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">
-              <Mail className="w-16 h-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg mb-2">No contacted students yet</p>
-              <p className="text-sm mb-4">
-                Start browsing talent and send contact requests to connect with students.
-              </p>
-              <Button variant="gold" onClick={() => router.push('/dashboard/sponsor/marketplace/talent')}>
-                Browse Talent
-              </Button>
-            </div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            <Mail className="w-10 h-10 mx-auto mb-3 opacity-60" />
+            No contacted students yet.
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {contacts.map((contact) => (
-              <Card
-                key={contact.id}
-                className="p-6 hover:border-och-gold/50 transition-colors"
-              >
-                <div className="space-y-4">
-                  {/* Header */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white mb-1">
-                        {contact.profile?.mentee_name || contact.profile?.mentee_email || 'Unknown Student'}
-                      </h3>
-                      <p className="text-sm text-och-steel">
-                        {contact.profile?.primary_role || 'Cybersecurity Professional'}
-                      </p>
-                    </div>
-                    <Badge variant={contact.profile?.tier === 'professional' ? 'mint' : 'steel'}>
-                      {contact.profile?.tier === 'professional' ? 'Professional' : contact.profile?.tier === 'starter' ? 'Starter' : 'Free'}
-                    </Badge>
-                  </div>
-
-                  {/* Readiness Score */}
-                  {contact.profile?.readiness_score !== null && contact.profile?.readiness_score !== undefined && (
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-och-steel">Readiness Score</span>
-                        <Badge variant={getReadinessColor(contact.profile.readiness_score)}>
-                          {contact.profile.readiness_score}% - {getReadinessLabel(contact.profile.readiness_score)}
-                        </Badge>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status */}
-                  {contact.profile?.profile_status && (
-                    <div>
-                      <Badge variant={getStatusBadge(contact.profile.profile_status)}>
-                        {contact.profile.profile_status.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                    </div>
-                  )}
-
-                  {/* Message Preview */}
-                  {contact.message && (
-                    <div className="bg-och-midnight/30 rounded-lg p-3">
-                      <p className="text-xs text-och-steel mb-1">Your Message:</p>
-                      <p className="text-sm text-white line-clamp-2">{contact.message}</p>
-                    </div>
-                  )}
-
-                  {/* Contact Date */}
-                  <div className="flex items-center gap-2 text-xs text-och-steel">
-                    <Calendar className="w-4 h-4" />
-                    <span>Contacted on {new Date(contact.created_at).toLocaleDateString()}</span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="pt-4 border-t border-och-defender/20">
-                    <Button
-                      variant="outline"
-                      className="w-full text-xs"
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-och-midnight/80 border-b border-och-steel/20 text-xs uppercase tracking-wide text-och-steel">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Talent</th>
+                    <th className="px-4 py-3 text-left">Readiness</th>
+                    <th className="px-4 py-3 text-left">Role</th>
+                    <th className="px-4 py-3 text-left">Tier</th>
+                    <th className="px-4 py-3 text-left">Contacted</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Profile</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-och-steel/20">
+                  {contacts.map((contact) => (
+                    <tr
+                      key={contact.id}
+                      className="hover:bg-och-steel/10 transition-colors cursor-pointer"
                       onClick={() => {
                         if (contact.profile) {
                           setSelectedProfile(contact.profile as MarketplaceProfile)
@@ -173,14 +118,68 @@ export default function ContactedStudentsPage() {
                         }
                       }}
                     >
-                      <User className="w-3 h-3 mr-1" />
-                      View Full Profile
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-white">
+                            {contact.profile?.mentee_name || contact.profile?.mentee_email || 'Student'}
+                          </span>
+                          <span className="text-xs text-och-steel">
+                            {contact.profile?.mentee_email || 'Contact via marketplace'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {contact.profile?.readiness_score != null ? (
+                          <span className="text-och-mint font-semibold">
+                            {Number(contact.profile.readiness_score).toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-och-steel">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {contact.profile?.primary_role || '—'}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {contact.profile && (
+                          <Badge
+                            variant={contact.profile.tier === 'professional' ? 'mint' : 'steel'}
+                            className="text-[11px]"
+                          >
+                            {contact.profile.tier}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs text-och-steel">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(contact.created_at).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {contact.profile?.profile_status && (
+                          <Badge
+                            variant={getStatusBadge(contact.profile.profile_status)}
+                            className="text-[11px]"
+                          >
+                            {contact.profile.profile_status.replace('_', ' ')}
+                          </Badge>
+                        )}
+                      </td>
+                      <td
+                        className="px-4 py-3 align-top text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <User className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )}
 
         {/* Profile Detail Modal */}

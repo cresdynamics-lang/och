@@ -450,10 +450,10 @@ export function OCHSettingsOverview() {
 
   const loadUniversity = async () => {
     try {
-      // Try to get university membership
-      const memberships = await apiGateway.get<any>('/community/university-memberships/');
-      if (memberships && (memberships as any[]).length > 0) {
-        const membership = (memberships as any[])[0];
+      const raw = await apiGateway.get<any>('/community/memberships/');
+      const list = Array.isArray(raw) ? raw : (raw?.results ?? []);
+      if (list.length > 0) {
+        const membership = list[0];
         setUniversity({
           id: membership.university?.id,
           name: membership.university?.name,

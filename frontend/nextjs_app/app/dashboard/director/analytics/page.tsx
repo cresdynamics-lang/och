@@ -24,6 +24,7 @@ export default function AnalyticsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(25)
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const [showAdvancedAnalytics, setShowAdvancedAnalytics] = useState(false)
 
   useEffect(() => {
     loadDirectorActions()

@@ -21,6 +21,7 @@ from .views import (
     mentor_influence_index,
     submit_session_feedback,
     get_session_feedback,
+    mentor_reviews_list,
     mentor_feedback_summary,
     get_student_mentor,
     get_mentorship_assignment,
@@ -60,6 +61,7 @@ urlpatterns = [
     path('mentors/sessions/<uuid:session_id>', update_group_session, name='update-group-session'),
     path('sessions/<uuid:session_id>/feedback', get_session_feedback, name='get-session-feedback'),  # GET
     path('sessions/<uuid:session_id>/feedback', submit_session_feedback, name='submit-session-feedback'),  # POST (same URL, different method)
+    path('mentorship/mentor-reviews', mentor_reviews_list, name='mentor-reviews-list'),
     path('mentors/<int:mentor_id>/feedback-summary', mentor_feedback_summary, name='mentor-feedback-summary'),
     path('mentor/missions/<uuid:submission_id>/review', review_mission, name='review-mission'),
     # Keep old endpoint for backward compatibility

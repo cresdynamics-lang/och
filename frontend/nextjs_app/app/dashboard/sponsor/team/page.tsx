@@ -1,91 +1,103 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { sponsorClient } from '@/services/sponsorClient'
-
-interface TeamMember {
-  id: string
-  email: string
-  name?: string
-  role: 'admin' | 'viewer' | 'finance'
-  status: 'active' | 'invited' | 'inactive'
-  invited_at?: string
-  last_active?: string
-}
+import { sponsorClient, type OrganizationMemberItem } from '@/services/sponsorClient'
 
 export default function TeamManagementPage() {
-  const [members, setMembers] = useState<TeamMember[]>([])
+  const [orgSlug, setOrgSlug] = useState<string | null>(null)
+  const [members, setMembers] = useState<OrganizationMemberItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'viewer' as const })
 
   useEffect(() => {
-    loadTeam()
+    loadProfileAndTeam()
   }, [])
 
-  const loadTeam = async () => {
+  const loadProfileAndTeam = async () => {
     try {
       setLoading(true)
-      // TODO: Implement API endpoint
-      // const data = await sponsorClient.getTeamMembers()
-      // setMembers(data)
+      setError(null)
+      const profile = await sponsorClient.getProfile()
+      const orgs = profile?.sponsor_organizations ?? []
+      const slug = orgs[0]?.slug ?? null
+      setOrgSlug(slug)
+      if (slug) {
+        const list = await sponsorClient.getTeamMembers(slug)
+        setMembers(Array.isArray(list) ? list : [])
+      } else {
+        setMembers([])
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to load team'
+      setError(msg)
       setMembers([])
-    } catch (error) {
-      console.error('Failed to load team:', error)
     } finally {
       setLoading(false)
     }
   }
 
+  const loadTeam = () => {
+    if (orgSlug) {
+      sponsorClient.getTeamMembers(orgSlug).then((list) => {
+        setMembers(Array.isArray(list) ? list : [])
+      }).catch(() => setMembers([]))
+    }
+  }
+
   const handleInvite = async () => {
+    if (!orgSlug || !inviteForm.email.trim()) return
     try {
-      // TODO: Implement invite API
-      console.log('Invite team member:', inviteForm)
-      alert('Team invite feature coming soon')
+      setSubmitting(true)
+      setError(null)
+      const org_role = inviteForm.role === 'admin' ? 'admin' : inviteForm.role === 'finance' ? 'member' : 'viewer'
+      await sponsorClient.inviteTeamMember({
+        org_slug: orgSlug,
+        email: inviteForm.email.trim(),
+        org_role,
+        system_role: inviteForm.role === 'admin' ? 'sponsor_admin' : undefined,
+      })
       setShowInviteModal(false)
       setInviteForm({ email: '', role: 'viewer' })
-    } catch (error) {
-      console.error('Failed to invite member:', error)
+      loadTeam()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to send invite'
+      setError(msg)
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleRemove = async (memberId: string) => {
-    if (!confirm('Are you sure you want to remove this team member?')) return
-    
-    try {
-      // TODO: Implement remove API
-      console.log('Remove member:', memberId)
-      alert('Remove member feature coming soon')
-    } catch (error) {
-      console.error('Failed to remove member:', error)
-    }
-  }
-
-  const roleColors = {
+  const roleColors: Record<string, string> = {
     admin: 'bg-och-gold/20 text-och-gold',
     viewer: 'bg-och-defender/20 text-och-defender',
+    member: 'bg-och-mint/20 text-och-mint',
     finance: 'bg-och-mint/20 text-och-mint',
   }
 
-  const statusColors = {
-    active: 'bg-och-mint/20 text-och-mint',
-    invited: 'bg-och-gold/20 text-och-gold',
-    inactive: 'bg-och-steel/20 text-och-steel',
-  }
+  const displayRole = (role: string) => (role === 'member' ? 'Member' : role.charAt(0).toUpperCase() + role.slice(1))
 
   return (
     <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:pl-0 lg:pr-6 xl:pr-8">
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2 text-och-mint">👥 Team Management</h1>
         <p className="text-och-steel">
-          Manage team member access and permissions
+          Manage team member access and permissions. Invites are sent via email (OCH mail config).
         </p>
+        {error && (
+          <p className="mt-2 text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
       </div>
       
       <div className="mb-6 flex justify-end">
         <button
           onClick={() => setShowInviteModal(true)}
-          className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors font-semibold"
+          disabled={!orgSlug}
+          className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Invite Member
         </button>
@@ -126,10 +138,10 @@ export default function TeamManagementPage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleInvite}
-                  disabled={!inviteForm.email}
+                  disabled={!inviteForm.email.trim() || submitting || !orgSlug}
                   className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send Invite
+                  {submitting ? 'Sending...' : 'Send Invite'}
                 </button>
                 <button
                   onClick={() => {
@@ -159,63 +171,45 @@ export default function TeamManagementPage() {
                   Role
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-semibold text-och-steel uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-och-steel uppercase tracking-wider">
-                  Last Active
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-och-steel uppercase tracking-wider">
-                  Actions
+                  Joined
                 </th>
               </tr>
             </thead>
             <tbody className="bg-och-midnight divide-y divide-och-steel/20">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-och-steel">
+                  <td colSpan={3} className="px-6 py-8 text-center text-och-steel">
                     Loading team members...
                   </td>
                 </tr>
               ) : members.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-och-steel">
+                  <td colSpan={3} className="px-6 py-8 text-center text-och-steel">
                     No team members found. Invite your first team member to get started.
                   </td>
                 </tr>
               ) : (
-                members.map((member) => (
-                  <tr key={member.id} className="hover:bg-och-midnight/80">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="font-semibold text-white">
-                          {member.name || 'N/A'}
+                members.map((member) => {
+                  const name = [member.user?.first_name, member.user?.last_name].filter(Boolean).join(' ') || member.user?.email || 'N/A'
+                  return (
+                    <tr key={String(member.id)} className="hover:bg-och-midnight/80">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>
+                          <div className="font-semibold text-white">{name}</div>
+                          <div className="text-sm text-och-steel">{member.user?.email ?? ''}</div>
                         </div>
-                        <div className="text-sm text-och-steel">{member.email}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${roleColors[member.role]}`}>
-                        {member.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[member.status]}`}>
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-och-steel">
-                      {member.last_active ? new Date(member.last_active).toLocaleDateString() : 'Never'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => handleRemove(member.id)}
-                        className="text-och-orange hover:text-och-orange/80 font-semibold"
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${roleColors[member.role] ?? 'bg-och-steel/20 text-och-steel'}`}>
+                          {displayRole(member.role)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-och-steel">
+                        {member.joined_at ? new Date(member.joined_at).toLocaleDateString() : '—'}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

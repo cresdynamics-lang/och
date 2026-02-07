@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import { marketplaceClient, type MarketplaceProfile } from '@/services/marketplaceClient'
-import { Search, Filter, Heart, Bookmark, Mail, User, Check, Loader2 } from 'lucide-react'
-import Link from 'next/link'
+import { Search, Heart, Bookmark, Mail, Check, Loader2 } from 'lucide-react'
 import { TalentProfileModal } from '@/components/marketplace/TalentProfileModal'
 import { ContactModal } from '@/components/marketplace/ContactModal'
 
@@ -15,100 +14,6 @@ export default function TalentBrowsePage() {
   const [talent, setTalent] = useState<MarketplaceProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Mock data for talent profiles when API is not available
-  const MOCK_TALENT_PROFILES: MarketplaceProfile[] = [
-    {
-      id: 'profile-1',
-      mentee_id: 'student-1',
-      mentee_name: 'Alice Johnson',
-      mentee_email: 'alice.johnson@email.com',
-      tier: 'professional',
-      readiness_score: 92,
-      job_fit_score: 88,
-      hiring_timeline_days: 30,
-      profile_status: 'job_ready',
-      primary_role: 'Security Analyst',
-      primary_track_key: 'defender',
-      skills: ['Python', 'SIEM', 'Incident Response', 'Network Security', 'Cloud Security'],
-      portfolio_depth: 'deep',
-      is_visible: true,
-      employer_share_consent: true,
-      updated_at: '2025-01-20T10:30:00Z'
-    },
-    {
-      id: 'profile-2',
-      mentee_id: 'student-2',
-      mentee_name: 'Bob Chen',
-      mentee_email: 'bob.chen@email.com',
-      tier: 'starter',
-      readiness_score: 78,
-      job_fit_score: 82,
-      hiring_timeline_days: 60,
-      profile_status: 'emerging_talent',
-      primary_role: 'DevSecOps Engineer',
-      primary_track_key: 'offensive',
-      skills: ['Kubernetes', 'Docker', 'CI/CD', 'Penetration Testing', 'AWS'],
-      portfolio_depth: 'moderate',
-      is_visible: true,
-      employer_share_consent: true,
-      updated_at: '2025-01-18T14:20:00Z'
-    },
-    {
-      id: 'profile-3',
-      mentee_id: 'student-3',
-      mentee_name: 'Carol Martinez',
-      mentee_email: 'carol.martinez@email.com',
-      tier: 'free',
-      readiness_score: 65,
-      job_fit_score: 71,
-      hiring_timeline_days: 90,
-      profile_status: 'foundation_mode',
-      primary_role: 'Cybersecurity Specialist',
-      primary_track_key: 'blue_team',
-      skills: ['Linux', 'Networking', 'Firewalls', 'Intrusion Detection', 'Compliance'],
-      portfolio_depth: 'basic',
-      is_visible: true,
-      employer_share_consent: false,
-      updated_at: '2025-01-15T09:45:00Z'
-    },
-    {
-      id: 'profile-4',
-      mentee_id: 'student-4',
-      mentee_name: 'David Kim',
-      mentee_email: 'david.kim@email.com',
-      tier: 'professional',
-      readiness_score: 89,
-      job_fit_score: 91,
-      hiring_timeline_days: 21,
-      profile_status: 'job_ready',
-      primary_role: 'Red Team Lead',
-      primary_track_key: 'red_team',
-      skills: ['Penetration Testing', 'Social Engineering', 'Web Security', 'Reverse Engineering', 'Exploit Development'],
-      portfolio_depth: 'deep',
-      is_visible: true,
-      employer_share_consent: true,
-      updated_at: '2025-01-22T16:15:00Z'
-    },
-    {
-      id: 'profile-5',
-      mentee_id: 'student-5',
-      mentee_name: 'Emma Wilson',
-      mentee_email: 'emma.wilson@email.com',
-      tier: 'starter',
-      readiness_score: 74,
-      job_fit_score: 79,
-      hiring_timeline_days: 45,
-      profile_status: 'emerging_talent',
-      primary_role: 'Cloud Security Engineer',
-      primary_track_key: 'defender',
-      skills: ['AWS', 'Azure', 'CloudFormation', 'Terraform', 'Identity Management'],
-      portfolio_depth: 'moderate',
-      is_visible: true,
-      employer_share_consent: true,
-      updated_at: '2025-01-19T11:30:00Z'
-    }
-  ]
   const [filters, setFilters] = useState({
     contactable_only: false,
     status: '' as '' | 'foundation_mode' | 'emerging_talent' | 'job_ready',
@@ -153,21 +58,6 @@ export default function TalentBrowsePage() {
       setShortlistedProfiles(new Set(shortlistsArray.map((log: any) => log.profile?.id || log.profile_id)))
     } catch (err: any) {
       console.error('Failed to load favorites/shortlists:', err)
-
-      // Check if it's an authentication error (401)
-      const isAuthError = err?.status === 401 ||
-                         err?.response?.status === 401 ||
-                         err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials') ||
-                         err?.message?.includes('Unauthorized')
-
-      if (isAuthError) {
-        // Load mock favorites and shortlists for demonstration
-        console.log('Loading mock favorites and shortlists...')
-        setFavoritedProfiles(new Set(['profile-1', 'profile-4'])) // Alice Johnson and David Kim favorited
-        setShortlistedProfiles(new Set(['profile-2', 'profile-5'])) // Bob Chen and Emma Wilson shortlisted
-      }
     }
   }
 
@@ -186,46 +76,7 @@ export default function TalentBrowsePage() {
       setTalent(response.results || [])
     } catch (err: any) {
       console.error('Failed to load talent:', err)
-
-      // Check if it's an authentication error (401)
-      const isAuthError = err?.status === 401 ||
-                         err?.response?.status === 401 ||
-                         err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials') ||
-                         err?.message?.includes('Unauthorized')
-
-      if (isAuthError) {
-        // Load mock data for demonstration purposes
-        console.log('Loading mock talent profiles...')
-        let filteredTalent = [...MOCK_TALENT_PROFILES]
-
-        // Apply filters to mock data
-        if (filters.status) {
-          filteredTalent = filteredTalent.filter(profile => profile.profile_status === filters.status)
-        }
-        if (filters.min_readiness) {
-          filteredTalent = filteredTalent.filter(profile => (profile.readiness_score || 0) >= parseInt(filters.min_readiness))
-        }
-        if (selectedSkills.length > 0) {
-          filteredTalent = filteredTalent.filter(profile =>
-            selectedSkills.some(skill => profile.skills.includes(skill))
-          )
-        }
-        if (searchQuery.trim()) {
-          const query = searchQuery.toLowerCase()
-          filteredTalent = filteredTalent.filter(profile =>
-            profile.mentee_name.toLowerCase().includes(query) ||
-            profile.primary_role?.toLowerCase().includes(query) ||
-            profile.skills.some(skill => skill.toLowerCase().includes(query))
-          )
-        }
-
-        setTalent(filteredTalent)
-        setError(null) // Clear error when showing mock data
-      } else {
-        setError(err.message || 'Failed to load talent profiles')
-      }
+      setError(err.message || 'Failed to load talent profiles')
     } finally {
       setLoading(false)
     }
@@ -339,39 +190,39 @@ export default function TalentBrowsePage() {
   return (
     <div className="min-h-screen bg-och-midnight p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-och-gold">Browse Talent</h1>
-          <p className="text-och-steel">Discover and connect with job-ready cybersecurity professionals.</p>
+        <div className="mb-6">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-1 text-och-gold">Talent</h1>
+          <p className="text-och-steel text-sm">Filter students by readiness, skills, and status.</p>
         </div>
 
         {/* Filters */}
-        <Card className="mb-6 p-6">
+        <Card className="mb-4 p-4 sm:p-6">
           <div className="space-y-4">
-            <div className="flex gap-4 items-end">
+            <div className="flex gap-4 items-end flex-col sm:flex-row">
               <div className="flex-1">
-                <label className="text-sm text-och-steel mb-2 block">Search</label>
+                <label className="text-xs text-och-steel mb-1 block">Search</label>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Search by name, role, or track..."
+                    placeholder="Search by name, role, or skill"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     className="bg-och-midnight/50 border-och-defender/20"
                   />
-                  <Button onClick={handleSearch} variant="gold">
+                  <Button onClick={handleSearch} variant="gold" size="icon">
                     <Search className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="text-sm text-och-steel mb-2 block">Profile Status</label>
+                <label className="text-xs text-och-steel mb-1 block">Status</label>
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as any }))}
-                  className="w-full bg-och-midnight/50 border border-och-defender/20 rounded-lg px-4 py-2 text-white"
+                  className="w-full bg-och-midnight/50 border border-och-defender/20 rounded-lg px-3 py-2 text-sm text-white"
                 >
                   <option value="">All Statuses</option>
                   <option value="job_ready">Job Ready</option>
@@ -381,12 +232,12 @@ export default function TalentBrowsePage() {
               </div>
 
               <div>
-                <label className="text-sm text-och-steel mb-2 block">Min Readiness Score</label>
+                <label className="text-xs text-och-steel mb-1 block">Min readiness</label>
                 <Input
                   type="number"
                   min="0"
                   max="100"
-                  placeholder="e.g., 70"
+                  placeholder="70"
                   value={filters.min_readiness}
                   onChange={(e) => setFilters(prev => ({ ...prev, min_readiness: e.target.value }))}
                   className="bg-och-midnight/50 border-och-defender/20"
@@ -394,20 +245,20 @@ export default function TalentBrowsePage() {
               </div>
 
               <div className="flex items-end">
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-och-steel">
                   <input
                     type="checkbox"
                     checked={filters.contactable_only}
                     onChange={(e) => setFilters(prev => ({ ...prev, contactable_only: e.target.checked }))}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm text-och-steel">Professional tier only (contactable)</span>
+                  <span>Professional tier only</span>
                 </label>
               </div>
             </div>
 
             <div>
-              <label className="text-sm text-och-steel mb-2 block">Skills</label>
+              <label className="text-xs text-och-steel mb-1 block">Skills</label>
               <div className="flex flex-wrap gap-2">
                 {commonSkills.map((skill) => (
                   <div
@@ -428,170 +279,156 @@ export default function TalentBrowsePage() {
         </Card>
 
         {/* Results */}
-        {loading ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">Loading talent profiles...</div>
-          </Card>
-        ) : error ? (
-          <Card className="p-8">
-            <div className="text-center text-red-400">{error}</div>
-          </Card>
-        ) : talent.length === 0 ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">No talent profiles found matching your criteria.</div>
-          </Card>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {talent.map((profile) => (
-                <Card 
-                  key={profile.id} 
-                  className="p-6 hover:border-och-gold/50 hover:shadow-lg hover:shadow-och-gold/20 transition-all cursor-pointer group"
-                  onClick={(e) => {
-                    // Only open modal if clicking on the card content, not on buttons
-                    if ((e.target as HTMLElement).closest('button')) {
-                      return
-                    }
-                    console.log('Card clicked, opening modal for profile:', profile.id, profile.mentee_name)
-                    setSelectedProfile(profile)
-                    setModalOpen(true)
-                    // Log view action
-                    marketplaceClient.logInterest(profile.id, 'view').catch(console.error)
-                  }}
-                >
-                <div className="space-y-4">
-                  {/* Header */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white mb-1 group-hover:text-och-gold transition-colors">{profile.mentee_name}</h3>
-                      <p className="text-sm text-och-steel">{profile.primary_role || 'Cybersecurity Professional'}</p>
-                      <p className="text-xs text-och-steel/70 mt-1">Click to view full profile</p>
-                    </div>
-                    <Badge variant={profile.tier === 'professional' ? 'mint' : 'steel'}>
-                      {profile.tier === 'professional' ? 'Professional' : profile.tier === 'starter' ? 'Starter' : 'Free'}
-                    </Badge>
-                  </div>
-
-                  {/* Readiness Score */}
-                  {profile.readiness_score !== null && (
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-och-steel">Readiness Score</span>
-                        <Badge variant={getReadinessColor(profile.readiness_score)}>
-                          {profile.readiness_score}% - {getReadinessLabel(profile.readiness_score)}
-                        </Badge>
-                      </div>
-                      <div className="w-full bg-och-midnight/50 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            profile.readiness_score >= 80
-                              ? 'bg-och-mint'
-                              : profile.readiness_score >= 60
-                              ? 'bg-och-gold'
-                              : 'bg-och-steel'
-                          }`}
-                          style={{ width: `${profile.readiness_score}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Status */}
-                  <div>
-                    <Badge variant={getStatusBadge(profile.profile_status)}>
-                      {profile.profile_status.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  </div>
-
-                  {/* Skills */}
-                  {profile.skills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-och-steel mb-2">Skills</p>
-                      <div className="flex flex-wrap gap-1">
-                        {profile.skills.slice(0, 5).map((skill) => (
-                          <Badge key={skill} variant="defender" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {profile.skills.length > 5 && (
-                          <Badge variant="steel" className="text-xs">
-                            +{profile.skills.length - 5}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Portfolio Depth */}
-                  <div className="flex items-center gap-2 text-sm text-och-steel">
-                    <span>Portfolio:</span>
-                    <Badge variant="gold" className="text-xs">
-                      {profile.portfolio_depth}
-                    </Badge>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-4 border-t border-och-defender/20" onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant={actionSuccess[profile.id]?.has('favorite') ? 'gold' : 'outline'}
-                      className="flex-1 text-xs"
-                      onClick={() => handleInterest(profile.id, 'favorite')}
-                      disabled={!!actionLoading[`${profile.id}-favorite`]}
-                    >
-                      {actionLoading[`${profile.id}-favorite`] ? (
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      ) : actionSuccess[profile.id]?.has('favorite') ? (
-                        <Check className="w-3 h-3 mr-1" />
-                      ) : (
-                        <Heart className="w-3 h-3 mr-1" />
-                      )}
-                      Favorite
-                    </Button>
-                    <Button
-                      variant={actionSuccess[profile.id]?.has('shortlist') ? 'gold' : 'outline'}
-                      className="flex-1 text-xs"
-                      onClick={() => handleInterest(profile.id, 'shortlist')}
-                      disabled={!!actionLoading[`${profile.id}-shortlist`]}
-                    >
-                      {actionLoading[`${profile.id}-shortlist`] ? (
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                      ) : actionSuccess[profile.id]?.has('shortlist') ? (
-                        <Check className="w-3 h-3 mr-1" />
-                      ) : (
-                        <Bookmark className="w-3 h-3 mr-1" />
-                      )}
-                      Shortlist
-                    </Button>
-                    {profile.tier === 'professional' && (
-                      <Button
-                        variant={actionSuccess[profile.id]?.has('contact_request') ? 'mint' : 'gold'}
-                        className="flex-1 text-xs"
-                        onClick={() => {
-                          setProfileForContact(profile)
-                          setContactModalOpen(true)
-                        }}
-                        disabled={!!actionLoading[`${profile.id}-contact_request`] || actionSuccess[profile.id]?.has('contact_request')}
-                      >
-                        {actionSuccess[profile.id]?.has('contact_request') ? (
-                          <>
-                            <Check className="w-3 h-3 mr-1" />
-                            Contacted
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="w-3 h-3 mr-1" />
-                            Contact
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
+        <Card className="p-0 overflow-hidden">
+          {loading ? (
+            <div className="p-8 text-center text-och-steel text-sm">Loading talent…</div>
+          ) : error ? (
+            <div className="p-8 text-center text-red-400 text-sm">{error}</div>
+          ) : talent.length === 0 ? (
+            <div className="p-8 text-center text-och-steel text-sm">
+              No talent profiles match your filters.
             </div>
-          </>
-        )}
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-och-midnight/80 border-b border-och-steel/20 text-xs uppercase tracking-wide text-och-steel">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Talent</th>
+                    <th className="px-4 py-3 text-left">Readiness</th>
+                    <th className="px-4 py-3 text-left">Role</th>
+                    <th className="px-4 py-3 text-left">Skills</th>
+                    <th className="px-4 py-3 text-left">Tier</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-och-steel/20">
+                  {talent.map((profile) => (
+                    <tr
+                      key={profile.id}
+                      className="hover:bg-och-steel/10 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedProfile(profile)
+                        setModalOpen(true)
+                        marketplaceClient.logInterest(profile.id, 'view').catch(console.error)
+                      }}
+                    >
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-white">
+                            {profile.mentee_name}
+                          </span>
+                          <span className="text-xs text-och-steel">
+                            {profile.mentee_email || 'Contact via marketplace'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {profile.readiness_score != null ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-och-mint font-semibold">
+                              {Number(profile.readiness_score).toFixed(1)}
+                            </span>
+                            <span className="text-[11px] text-och-steel">
+                              {getReadinessLabel(Number(profile.readiness_score))}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-och-steel">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {profile.primary_role || '—'}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-wrap gap-1">
+                          {profile.skills.slice(0, 3).map((skill) => (
+                            <Badge key={skill} variant="defender" className="text-[11px]">
+                              {skill}
+                            </Badge>
+                          ))}
+                          {profile.skills.length > 3 && (
+                            <Badge variant="steel" className="text-[11px]">
+                              +{profile.skills.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <Badge variant={profile.tier === 'professional' ? 'mint' : 'steel'} className="text-[11px]">
+                          {profile.tier}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <Badge variant={getStatusBadge(profile.profile_status)} className="text-[11px]">
+                          {profile.profile_status.replace('_', ' ')}
+                        </Badge>
+                      </td>
+                      <td
+                        className="px-4 py-3 align-top text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant={actionSuccess[profile.id]?.has('favorite') ? 'gold' : 'outline'}
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleInterest(profile.id, 'favorite')}
+                            disabled={!!actionLoading[`${profile.id}-favorite`]}
+                          >
+                            {actionLoading[`${profile.id}-favorite`] ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : actionSuccess[profile.id]?.has('favorite') ? (
+                              <Check className="w-3 h-3" />
+                            ) : (
+                              <Heart className="w-3 h-3" />
+                            )}
+                          </Button>
+                          <Button
+                            variant={actionSuccess[profile.id]?.has('shortlist') ? 'gold' : 'outline'}
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleInterest(profile.id, 'shortlist')}
+                            disabled={!!actionLoading[`${profile.id}-shortlist`]}
+                          >
+                            {actionLoading[`${profile.id}-shortlist`] ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : actionSuccess[profile.id]?.has('shortlist') ? (
+                              <Check className="w-3 h-3" />
+                            ) : (
+                              <Bookmark className="w-3 h-3" />
+                            )}
+                          </Button>
+                          {profile.tier === 'professional' && (
+                            <Button
+                              variant={actionSuccess[profile.id]?.has('contact_request') ? 'mint' : 'gold'}
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                setProfileForContact(profile)
+                                setContactModalOpen(true)
+                              }}
+                              disabled={
+                                !!actionLoading[`${profile.id}-contact_request`] ||
+                                actionSuccess[profile.id]?.has('contact_request')
+                              }
+                            >
+                              {actionSuccess[profile.id]?.has('contact_request') ? (
+                                <Check className="w-3 h-3" />
+                              ) : (
+                                <Mail className="w-3 h-3" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
 
         {/* Profile Detail Modal - Always render, controlled by open prop */}
         <TalentProfileModal

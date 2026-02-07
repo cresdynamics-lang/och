@@ -30,11 +30,9 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['get'])
     def enrollment_funnel(self, request):
-        """Get enrollment funnel analysis."""
+        """Get enrollment funnel analysis from real enrollment data."""
         programs = self.get_director_programs(request.user)
         
-        # Calculate funnel stages
-        total_inquiries = 1000  # Mock data - would come from marketing system
         total_applications = Enrollment.objects.filter(
             cohort__track__program__in=programs
         ).count()
@@ -54,20 +52,20 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
             status='completed'
         ).count()
         
+        # Funnel from applications (100%) — no mock inquiry data
+        base = total_applications if total_applications > 0 else 1
         funnel_data = [
-            {'stage': 'Inquiries', 'count': total_inquiries, 'percentage': 100},
-            {'stage': 'Applications', 'count': total_applications, 'percentage': (total_applications/total_inquiries*100) if total_inquiries > 0 else 0},
-            {'stage': 'Pending Approval', 'count': pending_approvals, 'percentage': (pending_approvals/total_inquiries*100) if total_inquiries > 0 else 0},
-            {'stage': 'Active', 'count': active_enrollments, 'percentage': (active_enrollments/total_inquiries*100) if total_inquiries > 0 else 0},
-            {'stage': 'Completed', 'count': completed_enrollments, 'percentage': (completed_enrollments/total_inquiries*100) if total_inquiries > 0 else 0}
+            {'stage': 'Applications', 'count': total_applications, 'percentage': 100.0},
+            {'stage': 'Pending Approval', 'count': pending_approvals, 'percentage': round(pending_approvals / base * 100, 1)},
+            {'stage': 'Active', 'count': active_enrollments, 'percentage': round(active_enrollments / base * 100, 1)},
+            {'stage': 'Completed', 'count': completed_enrollments, 'percentage': round(completed_enrollments / base * 100, 1)}
         ]
         
         return Response({
             'funnel': funnel_data,
             'conversion_rates': {
-                'inquiry_to_application': (total_applications/total_inquiries*100) if total_inquiries > 0 else 0,
-                'application_to_active': (active_enrollments/total_applications*100) if total_applications > 0 else 0,
-                'active_to_completion': (completed_enrollments/active_enrollments*100) if active_enrollments > 0 else 0
+                'application_to_active': round((active_enrollments / total_applications * 100), 1) if total_applications > 0 else 0,
+                'active_to_completion': round((completed_enrollments / active_enrollments * 100), 1) if active_enrollments > 0 else 0
             }
         })
     
@@ -84,13 +82,9 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
             active_count = enrollments.filter(status='active').count()
             completed_count = enrollments.filter(status='completed').count()
             
-            # Calculate metrics
+            # Calculate metrics from real data only
             completion_rate = (completed_count / total_count * 100) if total_count > 0 else 0
             seat_utilization = (active_count / cohort.seat_cap * 100) if cohort.seat_cap > 0 else 0
-            
-            # Mock additional metrics
-            avg_attendance = 85.5  # Would come from attendance system
-            avg_satisfaction = 4.2  # Would come from feedback system
             
             comparison_data.append({
                 'cohort_id': str(cohort.id),
@@ -101,18 +95,20 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
                 'total_enrollments': total_count,
                 'completion_rate': round(completion_rate, 1),
                 'seat_utilization': round(seat_utilization, 1),
-                'avg_attendance': avg_attendance,
-                'avg_satisfaction': avg_satisfaction,
+                'avg_attendance': None,  # Requires attendance system
+                'avg_satisfaction': None,  # Requires feedback system
                 'start_date': cohort.start_date.isoformat() if cohort.start_date else None
             })
         
+        completion_rates = [c['completion_rate'] for c in comparison_data]
+        seat_utilizations = [c['seat_utilization'] for c in comparison_data]
         return Response({
             'cohorts': comparison_data,
             'benchmarks': {
-                'avg_completion_rate': sum(c['completion_rate'] for c in comparison_data) / len(comparison_data) if comparison_data else 0,
-                'avg_seat_utilization': sum(c['seat_utilization'] for c in comparison_data) / len(comparison_data) if comparison_data else 0,
-                'avg_attendance': sum(c['avg_attendance'] for c in comparison_data) / len(comparison_data) if comparison_data else 0,
-                'avg_satisfaction': sum(c['avg_satisfaction'] for c in comparison_data) / len(comparison_data) if comparison_data else 0
+                'avg_completion_rate': sum(completion_rates) / len(completion_rates) if comparison_data else 0,
+                'avg_seat_utilization': sum(seat_utilizations) / len(seat_utilizations) if comparison_data else 0,
+                'avg_attendance': None,
+                'avg_satisfaction': None
             }
         })
     
@@ -139,8 +135,8 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
                     'capacity_weekly': assignment.mentor.mentor_capacity_weekly,
                     'assignments': [],
                     'total_mentees': 0,
-                    'avg_satisfaction': 4.1,  # Mock data
-                    'sessions_completed': 0   # Mock data
+                    'avg_satisfaction': None,  # Requires feedback system
+                    'sessions_completed': 0   # Requires session tracking when available
                 }
             
             # Count active mentees in this cohort
@@ -152,10 +148,9 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
             })
             mentor_data[mentor_id]['total_mentees'] += mentees_count
         
-        # Calculate utilization
+        # Calculate utilization from real data
         for mentor in mentor_data.values():
             mentor['utilization'] = (mentor['total_mentees'] / mentor['capacity_weekly'] * 100) if mentor['capacity_weekly'] > 0 else 0
-            mentor['sessions_completed'] = mentor['total_mentees'] * 8  # Mock: 8 sessions per mentee
         
         return Response({
             'mentors': list(mentor_data.values()),
@@ -182,9 +177,8 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
                 status__in=['active', 'completed'],
                 payment_status='paid'
             )
-            
-            # Mock pricing - would come from actual pricing system
-            program_price = float(program.default_price) if program.default_price else 1000.0
+            # Use program default_price only when set; otherwise revenue is 0 (no dummy pricing)
+            program_price = float(program.default_price) if program.default_price else 0.0
             program_total = enrollments.count() * program_price
             total_revenue += program_total
             
@@ -194,31 +188,34 @@ class DirectorAdvancedAnalyticsViewSet(viewsets.ViewSet):
                 'enrollments': enrollments.count(),
                 'price_per_seat': program_price,
                 'total_revenue': program_total,
-                'currency': program.currency
+                'currency': program.currency or ''
             })
         
-        # Monthly revenue trends
+        # Monthly revenue from real enrollments and program prices only
         monthly_revenue = []
         for i in range(6):
             month_start = timezone.now().replace(day=1) - timedelta(days=30*i)
             month_end = month_start + timedelta(days=30)
             
-            month_enrollments = Enrollment.objects.filter(
+            month_enrollments_qs = Enrollment.objects.filter(
                 cohort__track__program__in=programs,
                 status__in=['active', 'completed'],
                 payment_status='paid',
                 joined_at__gte=month_start,
                 joined_at__lt=month_end
-            ).count()
-            
-            # Mock average price
-            avg_price = 1000.0
-            month_revenue = month_enrollments * avg_price
-            
+            ).select_related('cohort__track__program')
+            # Sum actual revenue from program.default_price per enrollment when set
+            month_revenue_sum = 0
+            month_count = 0
+            for enr in month_enrollments_qs:
+                prog = enr.cohort.track.program
+                price = float(prog.default_price) if prog.default_price else 0.0
+                month_revenue_sum += price
+                month_count += 1
             monthly_revenue.append({
                 'month': month_start.strftime('%Y-%m'),
-                'enrollments': month_enrollments,
-                'revenue': month_revenue
+                'enrollments': month_count,
+                'revenue': month_revenue_sum
             })
         
         return Response({

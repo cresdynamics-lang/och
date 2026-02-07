@@ -1,21 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { sponsorClient } from '@/services/sponsorClient'
-
-interface ReportRequest {
-  id: string
-  request_type: 'graduate_breakdown' | 'roi_projection' | 'cohort_analytics' | 'custom'
-  cohort_id?: string
-  details?: any
-  status: 'pending' | 'delivered' | 'cancelled'
-  created_at: string
-  delivered_at?: string
-}
+import { sponsorClient, type SponsorReportRequestItem, type SponsorCohort } from '@/services/sponsorClient'
 
 export default function ReportsPage() {
-  const [reports, setReports] = useState<ReportRequest[]>([])
+  const [reports, setReports] = useState<SponsorReportRequestItem[]>([])
+  const [cohorts, setCohorts] = useState<SponsorCohort[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [requestForm, setRequestForm] = useState({
     request_type: 'graduate_breakdown' as const,
@@ -27,15 +20,24 @@ export default function ReportsPage() {
     loadReports()
   }, [])
 
+  useEffect(() => {
+    if (showRequestModal && cohorts.length === 0) {
+      sponsorClient.getCohorts({ limit: 100 }).then((res) => {
+        setCohorts(res.results ?? [])
+      }).catch(() => setCohorts([]))
+    }
+  }, [showRequestModal, cohorts.length])
+
   const loadReports = async () => {
     try {
       setLoading(true)
-      // TODO: Implement API endpoint
-      // const data = await sponsorClient.getReportRequests()
-      // setReports(data)
+      setError(null)
+      const data = await sponsorClient.getReportRequests()
+      setReports(Array.isArray(data) ? data : [])
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load report requests'
+      setError(message)
       setReports([])
-    } catch (error) {
-      console.error('Failed to load reports:', error)
     } finally {
       setLoading(false)
     }
@@ -43,20 +45,27 @@ export default function ReportsPage() {
 
   const handleRequestReport = async () => {
     try {
-      // TODO: Implement report request API
-      // await sponsorClient.requestDirectorReport(requestForm)
-      console.log('Request report:', requestForm)
-      alert('Report request feature coming soon')
+      setSubmitting(true)
+      setError(null)
+      await sponsorClient.requestDirectorReport({
+        request_type: requestForm.request_type,
+        cohort_id: requestForm.cohort_id.trim() || undefined,
+        details: requestForm.details.trim() || undefined,
+      })
       setShowRequestModal(false)
       setRequestForm({ request_type: 'graduate_breakdown', cohort_id: '', details: '' })
-      loadReports()
-    } catch (error) {
-      console.error('Failed to request report:', error)
+      await loadReports()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit report request'
+      setError(message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     pending: 'bg-och-gold/20 text-och-gold',
+    in_progress: 'bg-och-defender/20 text-och-defender',
     delivered: 'bg-och-mint/20 text-och-mint',
     cancelled: 'bg-och-steel/20 text-och-steel',
   }
@@ -75,6 +84,11 @@ export default function ReportsPage() {
         <p className="text-och-steel">
           Request detailed analytics from Program Director
         </p>
+        {error && (
+          <p className="mt-2 text-sm text-red-400" role="alert">
+            {error}
+          </p>
+        )}
       </div>
       
       <div className="mb-6 flex justify-end">
@@ -111,13 +125,19 @@ export default function ReportsPage() {
                 <label className="block text-sm font-semibold text-och-steel mb-2">
                   Cohort (Optional)
                 </label>
-                <input
-                  type="text"
+                <select
                   value={requestForm.cohort_id}
                   onChange={(e) => setRequestForm({ ...requestForm, cohort_id: e.target.value })}
                   className="w-full px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:ring-2 focus:ring-och-defender focus:border-och-defender"
-                  placeholder="Cohort ID or name"
-                />
+                  aria-label="Select cohort"
+                >
+                  <option value="">No specific cohort</option>
+                  {cohorts.map((c) => (
+                    <option key={c.cohort_id} value={c.cohort_id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-och-steel mb-2">
@@ -134,9 +154,10 @@ export default function ReportsPage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleRequestReport}
-                  className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors font-semibold"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Submit Request
+                  {submitting ? 'Submitting...' : 'Submit Request'}
                 </button>
                 <button
                   onClick={() => {
@@ -196,25 +217,32 @@ export default function ReportsPage() {
                       {reportTypeLabels[report.request_type]}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-och-steel">
-                      {report.cohort_id || 'All Cohorts'}
+                      {report.cohort_name || report.cohort_id || 'All Cohorts'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[report.status]}`}>
-                        {report.status}
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[report.status] ?? 'bg-och-steel/20 text-och-steel'}`}>
+                        {report.status.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-och-steel">
                       {new Date(report.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {report.status === 'delivered' ? (
-                        <button className="text-och-mint hover:text-och-mint/80 font-semibold">
+                      {report.status === 'delivered' && report.attachment_url ? (
+                        <a
+                          href={report.attachment_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-och-mint hover:text-och-mint/80 font-semibold"
+                        >
                           Download
-                        </button>
+                        </a>
+                      ) : report.status === 'delivered' ? (
+                        <span className="text-och-mint">Delivered</span>
                       ) : (
-                        <button className="text-och-steel cursor-not-allowed">
-                          Pending
-                        </button>
+                        <span className="text-och-steel">
+                          {report.status === 'in_progress' ? 'In progress' : 'Pending'}
+                        </span>
                       )}
                     </td>
                   </tr>
