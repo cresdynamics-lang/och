@@ -130,7 +130,7 @@ export default function MissionExecutePage() {
     setSaving(true)
     try {
       const response = await apiGateway.post<SubtaskCompletionResponse>(
-        `/student/missions/${missionId}/subtasks/${currentSubtaskIndex}/complete`,
+        `/student/missions/${missionId}/subtasks/${currentSubtaskIndex}/complete/`,
         { notes }
       )
 
@@ -456,7 +456,14 @@ export default function MissionExecutePage() {
                     {progress.mission.objectives.map((obj, idx) => (
                       <li key={idx} className="flex items-start gap-3">
                         <CheckCircle2 className="w-5 h-5 text-och-mint mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-och-steel">{obj}</span>
+                        <div className="flex-1">
+                          <span className="text-sm text-white font-medium">
+                            {typeof obj === 'string' ? obj : obj.title || `Objective ${idx + 1}`}
+                          </span>
+                          {typeof obj === 'object' && obj.description && (
+                            <p className="text-sm text-och-steel mt-1">{obj.description}</p>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Loader2, Wand2, AlertCircle, CheckCircle } from 'lucide-react';
+import { recipesClient } from '@/services/recipesClient';
 
 interface Mission {
   id: string;
@@ -15,9 +16,10 @@ interface Mission {
 
 interface RecipeGeneratorProps {
   missions: Mission[];
+  onRecipeGenerated?: () => void;
 }
 
-export function RecipeGenerator({ missions }: RecipeGeneratorProps) {
+export function RecipeGenerator({ missions, onRecipeGenerated }: RecipeGeneratorProps) {
   const [selectedMission, setSelectedMission] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedRecipes, setGeneratedRecipes] = useState<any[]>([]);
@@ -32,30 +34,30 @@ export function RecipeGenerator({ missions }: RecipeGeneratorProps) {
 
     try {
       const mission = missions.find(m => m.id === selectedMission);
-      if (!mission) return;
-
-      const response = await fetch('/api/v1/recipes/generate/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          track_code: mission.track_code,
-          level: 'beginner', // Default level
-          skill_code: mission.track_code.toLowerCase() + '_skills',
-          goal_description: mission.instructions || `Generate a recipe for ${mission.title}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Generation failed: ${response.status}`);
+      if (!mission) {
+        setError('Mission not found');
+        return;
       }
 
-      const recipe = await response.json();
+      // Get track_code from mission, fallback to track_key or default
+      const trackCode = mission.track_code || mission.track_key || 'GENERAL';
+
+      const recipe = await recipesClient.generateRecipe({
+        track_code: trackCode,
+        level: 'beginner', // Default level
+        skill_code: (trackCode || 'general').toLowerCase() + '_skills',
+        goal_description: mission.instructions || mission.description || `Generate a recipe for ${mission.title}`,
+      });
+
       setGeneratedRecipes([recipe]);
-    } catch (err) {
+
+      // Notify parent that a recipe was generated
+      if (onRecipeGenerated) {
+        onRecipeGenerated();
+      }
+    } catch (err: any) {
       console.error('Recipe generation failed:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      setError(err.message || 'Failed to generate recipe');
     } finally {
       setIsGenerating(false);
     }
@@ -85,7 +87,7 @@ export function RecipeGenerator({ missions }: RecipeGeneratorProps) {
                 <option value="">Choose a mission to generate recipes for...</option>
                 {missions.map(mission => (
                   <option key={mission.id} value={mission.id}>
-                    {mission.title} ({mission.track_code})
+                    {mission.title} {mission.track_code ? `(${mission.track_code})` : mission.track_key ? `(${mission.track_key})` : ''}
                   </option>
                 ))}
               </select>

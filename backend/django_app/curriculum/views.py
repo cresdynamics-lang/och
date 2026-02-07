@@ -82,11 +82,34 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
 
+        # Filter by user's enrolled track for authenticated users
+        if self.action == 'list' and self.request.user.is_authenticated:
+            user_track_key = self.request.user.track_key
+
+            if user_track_key:
+                # Get the program track for this user
+                from programs.models import Track
+                program_track = Track.objects.filter(
+                    key=user_track_key,
+                    track_type='primary'
+                ).first()
+
+                if program_track:
+                    # Show only curriculum tracks linked to user's program track
+                    # OR cross-track programs (tier 6) which are available to all
+                    queryset = queryset.filter(
+                        Q(program_track_id=program_track.id) | Q(tier=6)
+                    )
+                else:
+                    # No matching program track found, show tier 2 beginner tracks + tier 6 cross-tracks
+                    queryset = queryset.filter(Q(tier=2) | Q(tier=6))
+            # If no track_key set, show all tracks (user hasn't been assigned a track yet)
+
         # Order by order_number and code for consistent API responses
         # This ensures all tracks appear in the API list in the correct order
         if self.action == 'list':
             queryset = queryset.order_by('order_number', 'code')
-        
+
         if self.action == 'retrieve':
             # Prefetch modules with lessons and missions
             queryset = queryset.prefetch_related(
@@ -97,7 +120,7 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
                     .order_by('order_index')
                 )
             )
-        
+
         return queryset
     
     @action(detail=True, methods=['post'])

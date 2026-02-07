@@ -234,12 +234,6 @@ export default function MarketplaceProfilePage() {
         setError('Please log in to view your marketplace profile')
       } else {
         setError(err.message || 'Failed to load marketplace profile')
-        setProfile({
-          is_visible: false,
-          employer_share_consent: false,
-          updated_at: new Date().toISOString()
-        })
-        setError('Viewing sample profile. Sign in to access your personalized marketplace profile.')
       }
     } finally {
       setLoading(false)

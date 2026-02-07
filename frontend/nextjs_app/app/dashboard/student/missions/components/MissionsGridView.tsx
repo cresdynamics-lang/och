@@ -25,6 +25,7 @@ interface Mission {
   competency_tags?: string[]
   track_key?: string
   status?: string
+  ai_score?: number
   is_locked?: boolean
   lock_reason?: string
   lock_message?: string
@@ -143,6 +144,13 @@ export function MissionsGridView({ missions, loading, onMissionClick }: Props) {
                   <Badge className={`${diffConfig.badge} text-[11px] py-0.5 font-semibold`}>
                     {diffConfig.label}
                   </Badge>
+                  {/* Review Status Badge */}
+                  {mission.status && (mission.status === 'submitted' || mission.status === 'ai_reviewed' || mission.status === 'approved') && (
+                    <Badge className="bg-och-mint/20 text-och-mint border border-och-mint/40 text-[11px] py-0.5 font-semibold">
+                      <CheckCircle2 className="h-3 w-3 mr-1 inline" />
+                      {mission.status === 'approved' ? 'APPROVED' : 'REVIEWED'}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Competency Tags - Compact */}

@@ -124,6 +124,8 @@ class UserSubscription(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='subscription',
+        to_field='uuid_id',
+        db_column='user_id',
         db_index=True
     )
     plan = models.ForeignKey(
