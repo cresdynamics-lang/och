@@ -74,10 +74,10 @@ const mockMessages = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { threadId: string } }
+  { params }: { params: Promise<{ threadId: string }> }
 ) {
   try {
-    const threadId = params.threadId;
+    const { threadId } = await params;
     const messages = mockMessages[threadId as keyof typeof mockMessages] || [];
 
     // Handle pagination
@@ -113,10 +113,10 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { threadId: string } }
+  { params }: { params: Promise<{ threadId: string }> }
 ) {
   try {
-    const threadId = params.threadId;
+    const { threadId } = await params;
     const body = await request.json();
     const { body: messageBody, reply_to_message_id } = body;
 

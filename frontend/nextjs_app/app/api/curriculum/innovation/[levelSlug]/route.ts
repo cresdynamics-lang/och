@@ -215,10 +215,10 @@ const mockInnovationLevels = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { levelSlug: string } }
+  { params }: { params: Promise<{ levelSlug: string }> }
 ) {
   try {
-    const levelSlug = params.levelSlug;
+    const { levelSlug } = await params;
     const level = mockInnovationLevels[levelSlug as keyof typeof mockInnovationLevels];
 
     if (!level) {

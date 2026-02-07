@@ -47,12 +47,12 @@ const mockToolUsage: ToolUsage[] = [
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     // In production, fetch from Prisma with userId filter
     // const toolUsage = await prisma.toolUsage.findMany({
-    //   where: { userId: params.userId },
+    //   where: { userId: userId },
     //   orderBy: { lastUsed: 'desc' },
     //   take: 10
     // });
@@ -97,7 +97,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     const body = await request.json();
@@ -106,7 +106,7 @@ export async function POST(
     // In production, save to Prisma
     // await prisma.toolUsage.create({
     //   data: {
-    //     userId: params.userId,
+    //     userId: userId,
     //     toolId,
     //     action,
     //     metadata,

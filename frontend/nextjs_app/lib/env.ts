@@ -24,3 +24,12 @@ export function validateEnv() {
 
   return missing.length === 0
 }
+
+export function validateAIEnvironment() {
+  return {
+    hasGrok: !!process.env.GROK_API_KEY,
+    hasGroq: !!process.env.GROQ_API_KEY,
+    hasLlama: !!process.env.LLAMA_ENDPOINT,
+    hasSupabase: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+  }
+}

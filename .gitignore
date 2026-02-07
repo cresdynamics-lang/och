@@ -163,3 +163,5 @@ temp/
 
 # Personal Documentation
 docs1/
+# Large archive files
+*.tar.gz

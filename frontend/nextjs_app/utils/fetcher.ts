@@ -103,8 +103,8 @@ export async function fetcher<T>(
         // If parsing fails, errorData remains null
       }
       
-      // Log error for debugging
-      if (typeof window !== 'undefined') {
+      // Log error for debugging (but not for connection errors)
+      if (typeof window !== 'undefined' && response.status !== 0) {
         console.error('API Error:', {
           url: urlObj.toString(),
           status: response.status,
@@ -138,11 +138,26 @@ export async function fetcher<T>(
       throw error;
     }
     // Network or other errors
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const isConnectionError = 
+      errorMessage.includes('fetch failed') ||
+      errorMessage.includes('Failed to fetch') ||
+      errorMessage.includes('NetworkError') ||
+      errorMessage.includes('ECONNREFUSED') ||
+      (error as any)?.code === 'ECONNREFUSED';
+    
+    // Don't log connection errors to console if backend is down (expected behavior)
+    if (!isConnectionError && typeof window !== 'undefined') {
+      console.error('[fetcher] Network error:', error);
+    }
+    
     throw new ApiError(
       0,
       'Network Error',
       null,
-      error instanceof Error ? error.message : 'Unknown error occurred'
+      isConnectionError 
+        ? 'Cannot connect to backend server'
+        : errorMessage
     );
   }
 }

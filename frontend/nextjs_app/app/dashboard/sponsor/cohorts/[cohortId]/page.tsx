@@ -5,9 +5,9 @@ import { useParams } from 'next/navigation'
 import { sponsorClient } from '@/services/sponsorClient'
 import Link from 'next/link'
 import { ArrowLeft, Users, BookOpen, TrendingUp, FileText } from 'lucide-react'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 
 export default function SponsorCohortDetailPage() {
   const params = useParams()

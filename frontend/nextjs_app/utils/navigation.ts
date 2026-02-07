@@ -39,6 +39,32 @@ export function getDashboardBasePath(user: User | null): string {
  * Get the settings/profile path for a user based on their role
  */
 export function getSettingsPath(user: User | null): string {
+  if (!user) {
+    return '/dashboard/student/settings'
+  }
+
+  // Check for analyst role - uses different path structure
+  if (user.roles && Array.isArray(user.roles)) {
+    const hasAnalystRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'analyst'
+    })
+    
+    if (hasAnalystRole && user.uuid_id) {
+      return `/analyst/${user.uuid_id}/settings`
+    }
+
+    // Check for finance role - uses different path structure
+    const hasFinanceRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'finance'
+    })
+    
+    if (hasFinanceRole && user.uuid_id) {
+      return `/finance/${user.uuid_id}/settings`
+    }
+  }
+
   const basePath = getDashboardBasePath(user)
   return `${basePath}/settings`
 }
@@ -47,6 +73,32 @@ export function getSettingsPath(user: User | null): string {
  * Get the profile path for a user based on their role
  */
 export function getProfilePath(user: User | null): string {
+  if (!user) {
+    return '/dashboard/student/settings/profile'
+  }
+
+  // Check for analyst role - uses different path structure
+  if (user.roles && Array.isArray(user.roles)) {
+    const hasAnalystRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'analyst'
+    })
+    
+    if (hasAnalystRole && user.uuid_id) {
+      return `/analyst/${user.uuid_id}/settings?tab=profile`
+    }
+
+    // Check for finance role - uses different path structure
+    const hasFinanceRole = user.roles.some((ur: any) => {
+      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || '')
+      return roleName?.toLowerCase().trim() === 'finance'
+    })
+    
+    if (hasFinanceRole && user.uuid_id) {
+      return `/finance/${user.uuid_id}/settings`
+    }
+  }
+
   const basePath = getDashboardBasePath(user)
   // Some dashboards use /profile, others use /settings/profile
   if (basePath.includes('/mentor') || basePath.includes('/director') || basePath.includes('/admin')) {

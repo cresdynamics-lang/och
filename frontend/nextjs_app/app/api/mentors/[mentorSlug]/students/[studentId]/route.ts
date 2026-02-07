@@ -7,10 +7,10 @@ import { apiGateway } from '@/services/apiGateway'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { mentorSlug: string; studentId: string } }
+  { params }: { params: Promise<{ mentorSlug: string; studentId: string }> }
 ) {
   try {
-    const { mentorSlug, studentId } = params
+    const { mentorSlug, studentId } = await params
 
     if (!mentorSlug || !studentId) {
       return NextResponse.json(

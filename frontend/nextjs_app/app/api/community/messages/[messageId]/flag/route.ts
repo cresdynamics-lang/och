@@ -6,10 +6,10 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
-    const messageId = params.messageId;
+    const { messageId } = await params;
     const body = await request.json();
     const { reason } = body;
 

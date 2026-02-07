@@ -8,12 +8,11 @@ interface MobileBottomNavProps {
 }
 
 const tabs = [
-  { id: 'lab', icon: '🔍', label: 'LAB' },
+  { id: 'lab', icon: '🚨', label: 'LAB' },
   { id: 'learning', icon: '📚', label: 'LEARN' },
-  { id: 'metrics', icon: '📈', label: 'METRICS' },
   { id: 'career', icon: '🎯', label: 'CAREER' },
-  { id: 'reports', icon: '📋', label: 'REPORTS' },
-  { id: 'tools', icon: '⚙️', label: 'TOOLS' }
+  { id: 'tools', icon: '⚙️', label: 'TOOLS' },
+  { id: 'metrics', icon: '📊', label: 'METRICS' }
 ];
 
 export const MobileBottomNav = ({ onTabSelect, activeTab }: MobileBottomNavProps) => {
@@ -54,7 +53,7 @@ export const MobileBottomNav = ({ onTabSelect, activeTab }: MobileBottomNavProps
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-och-midnight-black border-t border-och-steel-grey/50 p-2 grid grid-cols-6 gap-1 z-50"
+      className="fixed bottom-0 left-0 right-0 bg-och-midnight-black border-t border-och-steel-grey/50 p-2 grid grid-cols-5 gap-1 z-50"
       role="tablist"
       aria-label="Mobile analyst dashboard navigation"
     >

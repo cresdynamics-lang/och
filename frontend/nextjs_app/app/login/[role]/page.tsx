@@ -231,7 +231,8 @@ function LoginForm() {
       }
 
       // Validate the final route
-      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/'))) {
+      // Allow /dashboard/*, /mentor/dashboard, and /students/* routes
+      if (!route || (!route.startsWith('/dashboard') && !route.startsWith('/students/') && route !== '/mentor/dashboard')) {
         console.warn('login: Invalid route generated, using fallback:', route);
         route = '/dashboard/student';
       }
@@ -260,17 +261,25 @@ function LoginForm() {
         message = 'Multi-factor authentication is required. Please contact support to set up MFA.';
       } else if (err?.data?.detail) {
         message = err.data.detail;
+        // Check for connection errors in detail
+        if (message.includes('Cannot connect') || message.includes('backend server')) {
+          message = 'Cannot connect to backend server. Please ensure the Django API is running on port 8000.';
+        } else if (message === 'Invalid credentials') {
+          // Provide more helpful message for invalid credentials
+          message = 'Invalid email or password. Please check your credentials and try again.';
+        }
       } else if (err?.data?.error) {
         message = err.data.error;
       } else if (err?.detail) {
         message = err.detail;
       } else if (err?.message) {
         message = err.message;
-        if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('ECONNREFUSED')) {
+        if (err.message.includes('fetch') || err.message.includes('network') || err.message.includes('ECONNREFUSED') || err.message.includes('Cannot connect')) {
           message = 'Cannot connect to backend server. Please ensure the Django API is running on port 8000.';
         }
       }
 
+      console.error('Login error:', err);
       setError(message);
     }
   };

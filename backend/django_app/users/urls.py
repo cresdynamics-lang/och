@@ -38,6 +38,7 @@ from .views.google_oauth_views import (
     google_oauth_callback,
 )
 from .views.settings_views import user_settings
+from .views.create_och_users_view import create_och_users
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
@@ -107,6 +108,10 @@ urlpatterns = [
 
     # User management endpoints
     path('', include(router.urls)),
+    
+    # OCH users creation endpoint (for initial setup)
+    path('users/create-och-users', create_och_users, name='create-och-users'),
+    path('users/create-och-users/', create_och_users, name='create-och-users-slash'),
 ]
 
     # User management endpoints

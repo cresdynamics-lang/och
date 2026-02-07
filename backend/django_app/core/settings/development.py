@@ -6,9 +6,12 @@ from .base import *
 DEBUG = True
 
 # Allow override via environment; fall back to dev defaults
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else [
-    'localhost', '127.0.0.1', '0.0.0.0', 'testserver', 'nginx', 'django'
-]
+if os.environ.get('ALLOWED_HOSTS'):
+    ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = [
+        'localhost', '127.0.0.1', '0.0.0.0', 'testserver', 'nginx', 'django'
+    ]
 
 # Frontend URL for development
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
@@ -25,11 +28,15 @@ CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if 
 ]
 
 # CORS settings for development
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',  # In case Next.js runs on different port
-]
+# Allow override via environment variable
+if os.environ.get('CORS_ALLOWED_ORIGINS'):
+    CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',')
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3001',  # In case Next.js runs on different port
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -60,9 +67,11 @@ INSTALLED_APPS = INSTALLED_APPS + [
 ]
 
 # Use PostgreSQL for development (consistent with production)
+# TEMPORARILY USING SQLITE FOR LOCAL DEVELOPMENT
 # Override with environment variables if needed
-if os.environ.get('USE_SQLITE', 'false').lower() == 'true':
-    # Fallback to SQLite only if explicitly requested
+USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'true').lower() == 'true'  # Default to SQLite for local dev
+if USE_SQLITE_FORCE:
+    # Use SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',

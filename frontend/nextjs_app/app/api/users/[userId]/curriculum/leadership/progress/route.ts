@@ -66,10 +66,10 @@ const mockLeadershipProgress = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const userId = params.userId;
+    const { userId } = await params;
 
     // In production, this would query the database for user progress
     // const progress = await getUserLeadershipProgress(userId);
