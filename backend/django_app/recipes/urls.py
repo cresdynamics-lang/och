@@ -25,7 +25,8 @@ router.register(r'context-links', RecipeContextLinkViewSet, basename='recipe-con
 router.register(r'recipe-sources', RecipeSourceViewSet, basename='recipe-source')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    # Specific paths must come BEFORE router.urls to avoid conflicts
+    path('recipes/generate/', RecipeGenerateView.as_view(), name='recipe-generate'),
     path('bookmarks/', BookmarkedRecipesView.as_view(), name='recipe-bookmarks'),
     path('stats/', RecipeStatsView.as_view(), name='recipe-stats'),
     path('env-status/', RecipeEnvStatusView.as_view(), name='recipe-env-status'),
@@ -33,7 +34,9 @@ urlpatterns = [
     path('users/<uuid:user_id>/recipes/<uuid:recipe_id>/progress/', UserRecipeProgressView.as_view(), name='user-recipe-progress'),
     path('recipe-sources/<uuid:source_id>/ingest/', RecipeSourceIngestView.as_view(), name='recipe-source-ingest'),
     path('llm/normalize-recipes/run-once/', LLMNormalizeRecipesView.as_view(), name='llm-normalize-recipes'),
-    path('generate/', RecipeGenerateView.as_view(), name='recipe-generate'),
+
+    # Router URLs last
+    path('', include(router.urls)),
 ]
 
 

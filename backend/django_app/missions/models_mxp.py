@@ -38,6 +38,8 @@ class MissionProgress(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='mxp_mission_progress',
+        db_column='user_id',
+        to_field='uuid_id',
         db_index=True
     )
     mission = models.ForeignKey(

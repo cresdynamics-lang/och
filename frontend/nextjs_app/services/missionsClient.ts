@@ -57,7 +57,62 @@ export interface MissionTemplate {
 
 export const missionsClient = {
   /**
-   * Get all missions (for directors/admin)
+   * Get all missions for admin (no subscription restrictions)
+   */
+  async getAllMissionsAdmin(params?: {
+    program_id?: string
+    track_id?: string
+    track_key?: string
+    difficulty?: string
+    type?: string
+    search?: string
+    status?: string
+    page?: number
+    page_size?: number
+  }): Promise<{ results: MissionTemplate[]; count: number; next?: string | null; previous?: string | null }> {
+    try {
+      console.log('📡 Fetching missions from /api/v1/missions/ (admin)', params)
+      const data = await apiGateway.get<any>('/missions/', { params })
+
+      // Handle paginated response
+      if (data?.results !== undefined) {
+        const missions = Array.isArray(data.results) ? data.results : []
+        const totalCount = data.count !== undefined ? data.count : missions.length
+
+        console.log(`✅ Found ${missions.length} missions (admin) (total: ${totalCount})`)
+        return {
+          results: missions,
+          count: totalCount,
+          next: data.next || null,
+          previous: data.previous || null,
+        }
+      }
+
+      // Handle direct array response
+      if (Array.isArray(data)) {
+        console.log(`✅ Found ${data.length} missions in direct array response (admin)`)
+        return {
+          results: data,
+          count: data.length,
+          next: null,
+          previous: null,
+        }
+      }
+
+      return {
+        results: [],
+        count: 0,
+        next: null,
+        previous: null,
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch missions (admin):', error)
+      throw error
+    }
+  },
+
+  /**
+   * Get all missions (for students - requires subscription)
    */
   async getAllMissions(params?: {
     program_id?: string

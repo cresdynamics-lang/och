@@ -3,7 +3,11 @@
     "allow": [
       "Bash(.venvScriptspython.exe -m django --version)",
       "Bash(git restore:*)",
-      "Bash(python setup_mentor_data.py:*)"
+      "Bash(python setup_mentor_data.py:*)",
+      "Bash(python manage.py check:*)",
+      "Bash(python manage.py shell:*)",
+      "Bash(timeout 5 python manage.py runserver:*)",
+      "Bash(python:*)"
     ]
   }
 }

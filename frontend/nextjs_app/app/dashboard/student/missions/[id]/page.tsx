@@ -22,6 +22,21 @@ interface MissionDetail {
   status?: string
   objectives?: string[]
   subtasks?: any[]
+  ai_feedback?: {
+    score: number
+    strengths: string[]
+    gaps: string[]
+    suggestions: string[]
+    improvements: string[]
+    feedback_text?: string
+    feedback_date?: string
+  }
+  mentor_review?: {
+    status: string
+    decision?: string
+    comments?: string
+    reviewed_at?: string
+  }
 }
 
 export default function MissionDetailPage() {
@@ -281,35 +296,135 @@ export default function MissionDetailPage() {
                 </Card>
               </motion.div>
             )}
+
+            {/* AI Feedback */}
+            {mission.ai_feedback && (mission.status === 'submitted' || mission.status === 'ai_reviewed') && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <Card className="p-6 bg-gradient-to-br from-och-mint/10 to-och-defender/10 border border-och-mint/40">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Award className="w-6 h-6 text-och-mint" />
+                    <h2 className="text-xl font-bold text-white">AI Feedback</h2>
+                  </div>
+
+                  {/* Score */}
+                  <div className="mb-6 p-4 rounded-lg bg-och-midnight/60 border border-och-steel/20">
+                    <div className="text-center">
+                      <div className="text-4xl font-bold text-och-mint mb-1">
+                        {mission.ai_feedback.score}/100
+                      </div>
+                      <div className="text-och-steel text-sm">Overall Score</div>
+                    </div>
+                  </div>
+
+                  {/* Strengths */}
+                  {mission.ai_feedback.strengths && mission.ai_feedback.strengths.length > 0 && (
+                    <div className="mb-4">
+                      <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                        <span className="text-och-mint">✓</span> Strengths
+                      </h3>
+                      <ul className="space-y-2">
+                        {mission.ai_feedback.strengths.map((strength, idx) => (
+                          <li key={idx} className="text-och-steel text-sm pl-4">
+                            • {strength}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Gaps */}
+                  {mission.ai_feedback.gaps && mission.ai_feedback.gaps.length > 0 && (
+                    <div className="mb-4">
+                      <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                        <span className="text-och-orange">!</span> Gaps Identified
+                      </h3>
+                      <ul className="space-y-2">
+                        {mission.ai_feedback.gaps.map((gap, idx) => (
+                          <li key={idx} className="text-och-steel text-sm pl-4">
+                            • {gap}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Suggestions */}
+                  {mission.ai_feedback.suggestions && mission.ai_feedback.suggestions.length > 0 && (
+                    <div>
+                      <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                        <span className="text-och-mint">→</span> Suggestions
+                      </h3>
+                      <ul className="space-y-2">
+                        {mission.ai_feedback.suggestions.map((suggestion, idx) => (
+                          <li key={idx} className="text-och-steel text-sm pl-4">
+                            • {suggestion}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </Card>
+              </motion.div>
+            )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Quick Start */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card className="p-6 bg-gradient-to-br from-och-defender/20 to-och-orange/20 border border-och-defender/40">
-                <h3 className="text-lg font-bold text-white mb-4">Ready to Begin?</h3>
-                <Button
-                  variant="defender"
-                  className="w-full text-lg py-3"
-                  onClick={handleStartMission}
-                  disabled={starting}
-                >
-                  {starting ? (
-                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Starting...</>
-                  ) : (
-                    'Start Mission'
+            {/* Quick Start - Only show if not submitted */}
+            {(!mission.status || mission.status === 'draft' || mission.status === 'assigned') && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <Card className="p-6 bg-gradient-to-br from-och-defender/20 to-och-orange/20 border border-och-defender/40">
+                  <h3 className="text-lg font-bold text-white mb-4">Ready to Begin?</h3>
+                  <Button
+                    variant="defender"
+                    className="w-full text-lg py-3"
+                    onClick={handleStartMission}
+                    disabled={starting}
+                  >
+                    {starting ? (
+                      <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Starting...</>
+                    ) : (
+                      'Start Mission'
+                    )}
+                  </Button>
+                  <p className="text-och-steel text-xs text-center mt-4">
+                    You can pause and resume this mission anytime
+                  </p>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Submission Status */}
+            {mission.status && mission.status !== 'draft' && mission.status !== 'assigned' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <Card className="p-6 bg-och-midnight/60 border border-och-steel/20">
+                  <h3 className="text-lg font-bold text-white mb-4">Submission Status</h3>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-och-mint/20 border border-och-mint/40">
+                    <Award className="w-5 h-5 text-och-mint" />
+                    <span className="text-white text-sm font-semibold capitalize">
+                      {mission.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  {mission.ai_feedback && (
+                    <p className="text-och-steel text-xs mt-4">
+                      Your submission has been reviewed by AI. Check the feedback above!
+                    </p>
                   )}
-                </Button>
-                <p className="text-och-steel text-xs text-center mt-4">
-                  You can pause and resume this mission anytime
-                </p>
-              </Card>
-            </motion.div>
+                </Card>
+              </motion.div>
+            )}
 
             {/* Competencies */}
             {mission.competency_tags && mission.competency_tags.length > 0 && (

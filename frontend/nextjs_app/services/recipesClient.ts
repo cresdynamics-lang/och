@@ -217,6 +217,19 @@ export const recipesClient = {
   async getStats(): Promise<RecipeStats> {
     return apiGateway.get<RecipeStats>('/stats/');
   },
+
+  /**
+   * Generate a recipe using AI
+   */
+  async generateRecipe(params: {
+    track_code: string;
+    level: string;
+    skill_code: string;
+    goal_description: string;
+  }): Promise<Recipe> {
+    // Use full path to ensure it goes to Django backend, not Next.js
+    return apiGateway.post<Recipe>('/api/v1/recipes/generate/', params);
+  },
 };
 
 export default recipesClient;
