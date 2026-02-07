@@ -287,14 +287,13 @@ export function usePortfolio(userId?: string) {
     // Error
     error: itemsError ? (itemsError instanceof Error ? itemsError.message : 'Failed to load portfolio') : null,
 
-    // Actions
-    createItem: createMutation.mutate,
+    // Actions (async versions)
+    createItem: createMutation.mutateAsync,
     updateItem: (itemId: string, input: UpdatePortfolioItemInput) =>
-      updateMutation.mutate({ itemId, input }),
-    deleteItem: deleteMutation.mutate,
-    refetch: () => {
-      refetchItems();
-      refetchMetrics();
+      updateMutation.mutateAsync({ itemId, input }),
+    deleteItem: deleteMutation.mutateAsync,
+    refetch: async () => {
+      await Promise.all([refetchItems(), refetchMetrics()]);
     },
   };
 }
