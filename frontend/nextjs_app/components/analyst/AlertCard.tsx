@@ -31,23 +31,23 @@ export const AlertCard = ({ alert, onAction }: AlertCardProps) => {
           <SeverityBadge severity={alert.severity} />
           <span className="font-mono text-sm text-och-cyber-mint">{alert.ioc}</span>
         </div>
-        <span className="text-xs text-och-steel-grey px-2 py-1 bg-och-steel-grey/50 rounded font-medium">
+        <span className="text-xs text-white/80 px-2 py-1 bg-och-steel-grey/50 rounded font-medium">
           {alert.age}
         </span>
       </div>
 
       <div className="space-y-1 text-sm mb-3">
         <div className="font-medium text-white leading-tight">{alert.title}</div>
-        <div className="text-och-steel-grey text-xs">{alert.source}</div>
+        <div className="text-white/70 text-xs font-medium">{alert.source}</div>
 
         {alert.sigmaRule && (
-          <div className="text-och-sahara-gold text-xs font-mono">
+          <div className="text-och-sahara-gold text-xs font-mono font-semibold">
             Σ {alert.sigmaRule}
           </div>
         )}
 
         {alert.mitre && (
-          <div className="text-och-cyber-mint text-xs">
+          <div className="text-och-cyber-mint text-xs font-semibold">
             🎯 {alert.mitre}
           </div>
         )}

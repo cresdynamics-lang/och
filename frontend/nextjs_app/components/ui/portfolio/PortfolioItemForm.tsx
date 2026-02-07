@@ -92,34 +92,41 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
       const uploadedFiles: EvidenceFile[] = [];
 
       for (const file of Array.from(files)) {
-        // Atomic Upload via API Gateway (Mocked for now)
+        // Upload file to backend
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('userId', userId);
-        
-        // Mock successful upload
-        const fileName = `${Date.now()}_${file.name}`;
-        const mockUrl = `/uploads/portfolio/${userId}/${fileName}`;
 
-        // Determine file type
-        let fileType: 'pdf' | 'image' | 'video' | 'link' = 'link';
-        if (file.type.startsWith('image/')) fileType = 'image';
-        else if (file.type.startsWith('video/')) fileType = 'video';
-        else if (file.type === 'application/pdf') fileType = 'pdf';
-        else if (file.name.endsWith('.pcap') || file.name.endsWith('.log')) fileType = 'pdf'; // PCAP/Logs as docs
+        try {
+          const response = await fetch(`http://localhost:8000/api/v1/student/dashboard/portfolio/${userId}/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+            },
+            body: formData,
+          });
 
-        uploadedFiles.push({
-          url: mockUrl,
-          type: fileType,
-          size: file.size,
-          name: file.name,
-          thumbnail: fileType === 'image' ? mockUrl : undefined,
-        });
+          if (!response.ok) {
+            throw new Error('Upload failed');
+          }
+
+          const result = await response.json();
+
+          uploadedFiles.push({
+            url: `http://localhost:8000${result.url}`,
+            type: result.type as 'pdf' | 'image' | 'video' | 'link',
+            size: result.size,
+            name: result.name,
+            thumbnail: result.type === 'image' ? `http://localhost:8000${result.url}` : undefined,
+          });
+        } catch (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          alert(`Failed to upload ${file.name}. Please try again.`);
+        }
       }
 
       setEvidenceFiles([...evidenceFiles, ...uploadedFiles]);
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error uploading files:', error);
       alert('Failed to upload artifacts. Please ensure file size is under 50MB.');
     } finally {
       setUploading(false);
@@ -127,15 +134,27 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
   };
 
   const handleAddLink = () => {
-    const url = prompt('Enter URL:');
+    const url = prompt('Enter URL (GitHub, Google Drive, Dropbox, etc.):');
     if (url && url.trim()) {
+      // Try to extract a readable name from the URL
+      let name = url.trim();
+      try {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        if (pathParts.length > 0) {
+          name = pathParts[pathParts.length - 1] || urlObj.hostname;
+        }
+      } catch {
+        // If URL parsing fails, use the whole URL as name
+      }
+
       setEvidenceFiles([
         ...evidenceFiles,
         {
           url: url.trim(),
           type: 'link',
           size: 0,
-          name: url.trim(),
+          name: name,
         },
       ]);
     }
@@ -167,7 +186,7 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
     try {
       if (itemId) {
         // Update existing item
-        updateItem(itemId, {
+        await updateItem(itemId, {
           title: title.trim(),
           summary: summary.trim(),
           visibility,
@@ -177,7 +196,7 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
         });
       } else {
         // Create new item
-        createItem({
+        await createItem({
           title: title.trim(),
           summary: summary.trim(),
           type,
@@ -189,19 +208,26 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
       }
 
       if (isSubmission) {
-        setSubmissionFeedback(isProfessional 
-          ? 'SUCCESS: TELEMETRY SYNCED. MENTOR REVIEW SEQUENCE ENGAGED.' 
+        setSubmissionFeedback(isProfessional
+          ? 'SUCCESS: TELEMETRY SYNCED. MENTOR REVIEW SEQUENCE ENGAGED.'
           : 'SUCCESS: TELEMETRY SYNCED. AI ANALYSIS IN PROGRESS.');
       }
 
       setShowSuccess(true);
-      // Trigger refetch after creation
-      setTimeout(() => {
-        if (refetch) {
-          refetch();
-        }
-        onClose();
-      }, isSubmission ? 2000 : 1000);
+
+      // Show success message
+      await new Promise(resolve => setTimeout(resolve, isSubmission ? 1500 : 1000));
+
+      // Trigger manual refetch before closing
+      if (refetch) {
+        await refetch();
+      }
+
+      // Small delay to ensure UI updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Close the form
+      onClose();
     } catch (error) {
       console.error('Error saving portfolio item:', error);
       setSubmissionFeedback('ERROR: SUBMISSION FAILED. TELEMETRY ROLLBACK INITIATED.');
@@ -554,8 +580,8 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
                     />
                     <div className={clsx(
                       "px-6 py-5 border rounded-2xl transition-all flex items-center justify-center gap-3 relative overflow-hidden",
-                      uploading 
-                        ? "bg-och-gold/10 border-och-gold/40 cursor-wait" 
+                      uploading
+                        ? "bg-och-gold/10 border-och-gold/40 cursor-wait"
                         : "bg-och-midnight/80 border-och-steel/20 hover:bg-och-midnight/90 hover:border-och-gold/30"
                     )}>
                       {uploading && (
@@ -566,11 +592,11 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
                         uploading ? "animate-bounce text-och-gold" : "text-och-steel group-hover:scale-110 group-hover:text-och-gold"
                       )} />
                       <span className="text-[11px] font-black uppercase tracking-widest relative z-10 text-white">
-                        {uploading ? 'INGESTING...' : 'UPLOAD FILES'}
+                        {uploading ? 'UPLOADING...' : 'UPLOAD FILES'}
                       </span>
                     </div>
                   </label>
-                  
+
                   <Button
                     type="button"
                     variant="outline"
@@ -643,7 +669,7 @@ export function PortfolioItemForm({ itemId, onClose, initialData }: PortfolioIte
               </div>
               
               <p className="text-[9px] text-och-steel/70 mt-3 font-medium tracking-wide leading-relaxed">
-                💡 Upload screenshots, reports, PCAP files, or add links to GitHub repos, TryHackMe rooms, etc. Max 50MB per file.
+                💡 Upload screenshots, reports, PCAP files (max 50MB each), or add links to GitHub repos, TryHackMe rooms, Google Drive, etc.
               </p>
             </div>
 

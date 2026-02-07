@@ -70,8 +70,8 @@ export default function CertificatesClient() {
       if (statusFilter !== 'all') params.append('status', statusFilter)
       if (programFilter !== 'all') params.append('program_id', programFilter)
       
-      const response = await apiClient.get(`/api/v1/programs/director/certificates/list_certificates/?${params}`)
-      setCertificates(response.data.certificates || [])
+      const response = await apiClient.get(`/api/v1/programs/director/certificates/list_certificates/?${params}`) as any
+      setCertificates(response.data?.certificates || [])
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load certificates')
     } finally {
@@ -81,7 +81,7 @@ export default function CertificatesClient() {
 
   const loadStatistics = async () => {
     try {
-      const response = await apiClient.get('/api/v1/programs/director/certificates/statistics/')
+      const response = await apiClient.get('/api/v1/programs/director/certificates/statistics/') as any
       setStats(response.data)
     } catch (err) {
       console.error('Failed to load certificate statistics:', err)
@@ -91,8 +91,9 @@ export default function CertificatesClient() {
   const downloadCertificate = async (certificateId: string) => {
     try {
       const response = await apiClient.get(`/api/v1/programs/director/certificates/${certificateId}/download/`, {
+        // @ts-ignore - responseType not in type but needed for blob
         responseType: 'blob'
-      })
+      }) as any
       
       const blob = new Blob([response.data], { type: 'application/pdf' })
       const url = window.URL.createObjectURL(blob)

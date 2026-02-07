@@ -211,12 +211,32 @@ export function StudentDashboardHub() {
 
       try {
         // Make all API calls in parallel for better performance
+        // Wrap each call to suppress expected errors (404s, empty responses)
         const [dashboardResponse, actionsResponse, missionsResponse] = await Promise.allSettled([
-          apiGateway.get<any>('/student/dashboard/overview').catch(() => null),
-          apiGateway.get<any[]>('/student/dashboard/next-actions').catch(() => []),
+          apiGateway.get<any>('/student/dashboard/overview').catch((err: any) => {
+            // Suppress 404s and connection errors - these are expected for new users
+            if (err?.status === 404 || err?.status === 0) {
+              return null;
+            }
+            // Re-throw unexpected errors
+            throw err;
+          }),
+          apiGateway.get<any[]>('/student/dashboard/next-actions').catch((err: any) => {
+            // Suppress 404s and connection errors
+            if (err?.status === 404 || err?.status === 0) {
+              return [];
+            }
+            throw err;
+          }),
           apiGateway.get<any>('/student/missions', {
             params: { status: 'in_progress', page_size: 3 }
-          }).catch(() => ({ results: [] }))
+          }).catch((err: any) => {
+            // Suppress 404s and connection errors
+            if (err?.status === 404 || err?.status === 0) {
+              return { results: [] };
+            }
+            throw err;
+          })
         ]);
 
         // Handle dashboard overview data
@@ -245,7 +265,12 @@ export function StudentDashboardHub() {
           const actions = actionsResponse.value;
           setNextActions(Array.isArray(actions) ? actions : []);
         } else {
-          console.error('Failed to fetch next actions:', actionsResponse.reason);
+          // Only log if it's not a 404 or connection error (expected for new users)
+          const error = actionsResponse.reason;
+          if (error?.status !== 404 && error?.status !== 0) {
+            console.error('Failed to fetch next actions:', error);
+          }
+          setNextActions([]);
         }
 
         // Handle active missions
@@ -253,7 +278,12 @@ export function StudentDashboardHub() {
           const missionsData = missionsResponse.value;
           setActiveMissions(Array.isArray(missionsData?.results) ? missionsData.results : []);
         } else {
-          console.error('Failed to fetch missions:', missionsResponse.reason);
+          // Only log if it's not a 404 or connection error (expected for new users)
+          const error = missionsResponse.reason;
+          if (error?.status !== 404 && error?.status !== 0) {
+            console.error('Failed to fetch missions:', error);
+          }
+          setActiveMissions([]);
         }
 
       } catch (error) {
@@ -361,20 +391,12 @@ export function StudentDashboardHub() {
       }
 
       try {
-        // Map frontend track names to backend track codes
-        const trackMapping: Record<string, string> = {
-          'defender': 'CYBERDEF',
-          'offensive': 'OFFENSIVE_2',
-          'grc': 'GRC_2',
-          'innovation': 'INNOVATION_2',
-          'leadership': 'LEADERSHIP_2',
-        };
-
-        const trackKey = profiledTrack.toLowerCase();
-        const trackCode = trackMapping[trackKey] || `${profiledTrack.toUpperCase()}_2`;
-
+        // First, try to get track info from curriculum tracks API
+        // This will fail gracefully if no tracks exist in database
         try {
-          const progressResponse = await curriculumClient.getTrackProgress(trackCode);
+          // Try to fetch track by slug first (e.g., /api/v1/curriculum/tracks/defender/)
+          const trackSlug = profiledTrack.toLowerCase();
+          const progressResponse = await curriculumClient.getTrackProgress(trackSlug);
 
           // Check if response indicates user is not enrolled
           if (progressResponse && (progressResponse as any).enrolled === false) {
@@ -388,8 +410,14 @@ export function StudentDashboardHub() {
             // Direct progress object
             setCurriculumProgress(progressResponse);
           }
-        } catch (apiError) {
-          console.error('Track progress API error:', apiError);
+        } catch (apiError: any) {
+          // Track doesn't exist or user not enrolled - this is okay
+          // Just log for debugging but don't treat as error
+          if (apiError?.status === 404) {
+            console.log(`Track "${profiledTrack}" not found in curriculum - may need to be created`);
+          } else {
+            console.log('Track progress not available:', apiError?.message || 'Unknown error');
+          }
           setCurriculumProgress(null);
         }
       } catch (error) {

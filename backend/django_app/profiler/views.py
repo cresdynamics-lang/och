@@ -905,31 +905,48 @@ def sync_fastapi_profiling(request):
             except Exception as e:
                 logger.warning(f"Failed to set profiling_session_id: {e}")
 
+        # Set user's track_key from profiler recommendation
+        if primary_track:
+            # Map profiler track names to track keys
+            track_key_map = {
+                'defender': 'defensive-security',
+                'offensive': 'offensive-security',
+                'grc': 'grc',
+                'innovation': 'innovation',
+                'leadership': 'leadership',
+            }
+            user.track_key = track_key_map.get(primary_track.lower(), primary_track.lower())
+            logger.info(f"Set user {user.id} track_key to '{user.track_key}' from profiler recommendation '{primary_track}'")
+
         user.save()
 
         # Enroll user in their profiled curriculum track
         enrolled_track_code = None
         if primary_track:
             from curriculum.models import CurriculumTrack, UserTrackProgress
-            # Map profiler track keys to curriculum track codes
-            track_code_map = {
-                'defender': 'CYBERDEF',
-                'offensive': 'OFFENSIVE_2',
-                'grc': 'GRC_2',
-                'innovation': 'INNOVATION_2',
-                'leadership': 'LEADERSHIP_2',
-            }
-            track_code = track_code_map.get(primary_track.lower(), primary_track.upper())
-            try:
-                curriculum_track = CurriculumTrack.objects.get(code=track_code)
-            except CurriculumTrack.DoesNotExist:
-                # Specific track not seeded yet — fall back to any active beginner track
-                logger.warning(f"Curriculum track '{track_code}' does not exist, trying fallback")
+            from programs.models import Track
+
+            # Try to find curriculum track by linking through programs.Track
+            # First get the track_key we just set on the user
+            track_key = user.track_key
+
+            # Find the programs.Track with this key
+            program_track = Track.objects.filter(key=track_key, track_type='primary').first()
+
+            if program_track:
+                # Find curriculum track linked to this program track
                 curriculum_track = CurriculumTrack.objects.filter(
-                    is_active=True, tier=2
-                ).first() or CurriculumTrack.objects.filter(is_active=True).first()
+                    program_track_id=program_track.id,
+                    is_active=True
+                ).first()
                 if curriculum_track:
-                    logger.info(f"Falling back to track '{curriculum_track.code}' for enrollment")
+                    logger.info(f"Found curriculum track '{curriculum_track.code}' linked to program track '{program_track.key}'")
+                else:
+                    logger.warning(f"No curriculum track found linked to program track '{program_track.key}', trying tier 2 tracks")
+                    curriculum_track = CurriculumTrack.objects.filter(is_active=True, tier=2).first()
+            else:
+                logger.warning(f"No program track found with key '{track_key}', trying any tier 2 track")
+                curriculum_track = CurriculumTrack.objects.filter(is_active=True, tier=2).first()
 
             try:
                 if curriculum_track:

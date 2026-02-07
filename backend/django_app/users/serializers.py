@@ -41,6 +41,7 @@ class UserSerializer(serializers.ModelSerializer):
             'org_id',
             'account_status',
             'email_verified',
+            'email_verified_at',  # Added for admin override
             'mfa_enabled',
             'risk_level',
             'is_active',
@@ -53,6 +54,9 @@ class UserSerializer(serializers.ModelSerializer):
             'preferred_learning_style',
             'career_goals',
             'cyber_exposure_level',
+            # Onboarding and profile completion tracking
+            'onboarding_complete',
+            'profile_complete',
             # Profiling completion tracking (Tier 0)
             'profiling_complete',
             'profiling_completed_at',
@@ -67,7 +71,9 @@ class UserSerializer(serializers.ModelSerializer):
             'mentor_availability',
             'mentor_specialties',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'account_status', 'email_verified']
+        # Removed account_status and email_verified from read_only to allow admin override
+        # Note: ViewSet permissions still control who can modify these fields
+        read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_roles(self, obj):
         """Get user roles with scope information and user_role ID for revocation."""

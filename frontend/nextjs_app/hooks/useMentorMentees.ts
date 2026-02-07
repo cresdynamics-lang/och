@@ -29,15 +29,24 @@ export function useMentorMentees(mentorId: string | undefined) {
   }
 
   const load = useCallback(async () => {
-    if (!mentorId) return
+    if (!mentorId) {
+      setMentees([])
+      setIsLoading(false)
+      return
+    }
     setIsLoading(true)
     setError(null)
     try {
       const data = await mentorClient.getAssignedMentees(mentorId)
       // Support both array and paginated responses
-      setMentees(extractResults(data))
+      const extractedMentees = extractResults(data)
+      // CRITICAL: Ensure we always set an array, never undefined
+      setMentees(Array.isArray(extractedMentees) ? extractedMentees : [])
     } catch (err: unknown) {
+      console.error('[useMentorMentees] Failed to load mentees:', err)
       setError(getErrorMessage(err))
+      // CRITICAL: Set empty array on error to prevent undefined map calls
+      setMentees([])
     } finally {
       setIsLoading(false)
     }

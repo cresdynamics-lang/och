@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { SidePanelTabs } from '@/components/analyst/SidePanelTabs';
 import { PriorityTasksCompact } from '@/components/analyst/PriorityTasksCompact';
 import { LiveLabFeedCompact } from '@/components/analyst/LiveLabFeedCompact';
@@ -8,9 +8,14 @@ import { ProgressShelfMicro } from '@/components/analyst/ProgressShelfMicro';
 import { MobileBottomNav } from '@/components/analyst/MobileBottomNav';
 import { DashboardErrorBoundary } from '@/components/analyst/ErrorBoundary';
 import { SkipNavigation } from '@/components/analyst/SkipNavigation';
+import { UserProfileDropdown } from '@/components/navigation/UserProfileDropdown';
+import { useAnalystRealtime } from '@/hooks/useAnalystRealtime';
 
 export default function AnalystDashboard({ params }: { params: { userId: string } }) {
   const [mobileOverlay, setMobileOverlay] = useState<string | null>(null);
+  
+  // Initialize realtime SSE updates
+  useAnalystRealtime(params.userId);
 
   return (
     <>
@@ -18,13 +23,26 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
 
       {/* DESKTOP LAYOUT */}
       <div
-        className="hidden md:block analyst-workstation min-h-screen bg-och-midnight-black text-white grid grid-cols-[280px_1fr] grid-rows-[1fr_auto] gap-0 h-screen overflow-hidden"
+        className="hidden md:block analyst-workstation min-h-screen bg-och-midnight-black text-white grid grid-cols-[280px_1fr] grid-rows-[auto_1fr_auto] gap-0 h-screen overflow-hidden"
         role="main"
         aria-label="Analyst Dashboard"
       >
+        {/* HEADER */}
+        <header
+          className="col-span-2 bg-och-steel-grey/50 border-b border-och-defender-blue/30 px-4 py-3 flex items-center justify-between"
+          role="banner"
+        >
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-och-defender-blue">Analyst Dashboard</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <UserProfileDropdown />
+          </div>
+        </header>
+
         {/* SIDE PANEL - 300px - 6 Tabs */}
         <aside
-          className="sidebar bg-och-steel-grey col-span-1 row-span-2 overflow-hidden"
+          className="sidebar bg-och-steel-grey col-span-1 row-span-1 overflow-hidden"
           role="complementary"
           aria-label="Navigation Panel"
           id="sidebar"
@@ -73,6 +91,15 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
 
       {/* MOBILE LAYOUT */}
       <div className="md:hidden min-h-screen bg-och-midnight-black text-white" role="application" aria-label="Mobile Analyst Dashboard">
+        {/* Mobile Header */}
+        <header
+          className="bg-och-steel-grey/50 border-b border-och-defender-blue/30 px-4 py-3 flex items-center justify-between sticky top-0 z-10"
+          role="banner"
+        >
+          <h1 className="text-base font-bold text-och-defender-blue">Analyst</h1>
+          <UserProfileDropdown />
+        </header>
+
         {/* Mobile Main Content */}
         <main className="pb-20 p-4 overflow-y-auto" role="main">
           {!mobileOverlay && (

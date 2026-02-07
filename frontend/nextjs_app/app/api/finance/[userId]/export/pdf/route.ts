@@ -143,7 +143,7 @@ function generateROIPDFContent(revenueData: any) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
     // Mock revenue data - replace with real database queries

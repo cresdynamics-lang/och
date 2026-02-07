@@ -308,7 +308,13 @@ export default function MenteesPage() {
         try {
           console.log('[Mentees] Trying fallback direct API...')
           const directMentees = await mentorClient.getAssignedMentees(mentorId)
-          setMentees(directMentees)
+          // CRITICAL: Ensure directMentees is an array before setting
+          if (Array.isArray(directMentees)) {
+            setMentees(directMentees)
+          } else {
+            console.warn('[Mentees] Fallback API returned non-array:', directMentees)
+            setMentees([])
+          }
         } catch (fallbackErr) {
           setError(err?.message || 'Failed to load mentees. Check console for details.')
           setMentees([])
@@ -412,8 +418,14 @@ export default function MenteesPage() {
 
   // Filter mentees by search query
   const filteredMentees = useMemo(() => {
+    // CRITICAL: Ensure mentees is an array before any operations
+    if (!mentees || !Array.isArray(mentees)) {
+      return []
+    }
+    
     if (!searchQuery) return mentees
     const query = searchQuery.toLowerCase()
+    
     return mentees.filter((mentee) => 
       mentee.name.toLowerCase().includes(query) ||
       mentee.email.toLowerCase().includes(query) ||
@@ -511,7 +523,7 @@ export default function MenteesPage() {
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="px-3 py-2 rounded-lg bg-och-midnight border border-och-steel/20 text-sm text-white placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-defender"
                     />
-                    <Badge variant="defender">{mentees.length} total</Badge>
+                    <Badge variant="defender">{(mentees && Array.isArray(mentees) ? mentees.length : 0)} total</Badge>
                   </div>
                 </div>
 
@@ -798,11 +810,11 @@ export default function MenteesPage() {
                               className="w-full px-3 py-2 rounded-lg bg-och-midnight border border-och-steel/20 text-sm text-white focus:outline-none focus:ring-2 focus:ring-och-defender"
                             >
                               <option value="">-- Select a mentee --</option>
-                              {mentees.map((mentee) => (
+                              {(mentees && Array.isArray(mentees) ? mentees.map((mentee) => (
                                 <option key={mentee.id} value={mentee.id}>
                                   {mentee.name} ({mentee.email})
                                 </option>
-                              ))}
+                              )) : null)}
                             </select>
                           </div>
 
@@ -978,7 +990,7 @@ export default function MenteesPage() {
                 <p className="text-sm text-och-steel mb-6">
                   Track overall performance metrics for all your assigned cohorts. View readiness scores, risk distributions, mission completion rates, and more.
                 </p>
-                {mentorId && mentees.length > 0 ? (
+                {mentorId && mentees && Array.isArray(mentees) && mentees.length > 0 ? (
                   <CohortMetrics mentees={mentees} mentorId={mentorId} />
                 ) : (
                   <div className="text-center py-8 text-och-steel">

@@ -37,9 +37,13 @@ export function MentorshipMessaging() {
   // Load assignment
   useEffect(() => {
     const loadAssignment = async () => {
-      if (!user?.id) return
+      if (!user?.id) {
+        setIsLoading(false)
+        return
+      }
 
       try {
+        setIsLoading(true)
         const response = await apiGateway.get<any>('/mentorship/assignment')
         console.log('Loaded assignment for student:', response)
         if (response?.id) {
@@ -48,9 +52,18 @@ export function MentorshipMessaging() {
             mentor_id: response.mentor_id,
             mentor_name: response.mentor_name,
           })
+        } else {
+          // No assignment found - student may not have a mentor assigned yet
+          console.log('No assignment found for student')
+          setIsLoading(false)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load assignment:', err)
+        // If it's a 404, student doesn't have an assignment yet
+        if (err?.status === 404) {
+          console.log('No mentorship assignment found (404)')
+        }
+        setIsLoading(false)
       }
     }
 
@@ -201,10 +214,23 @@ export function MentorshipMessaging() {
     return message.sender.id === user?.id?.toString()
   }
 
-  if (isLoading || !assignment) {
+  if (isLoading) {
     return (
       <Card className="p-6">
         <div className="text-center text-och-steel">Loading messages...</div>
+      </Card>
+    )
+  }
+
+  if (!assignment) {
+    return (
+      <Card className="p-6">
+        <div className="text-center space-y-3">
+          <div className="text-white font-semibold">No Mentor Assigned</div>
+          <div className="text-och-steel text-sm">
+            You don't have a mentor assigned yet. Please contact your program director to get matched with a mentor.
+          </div>
+        </div>
       </Card>
     )
   }

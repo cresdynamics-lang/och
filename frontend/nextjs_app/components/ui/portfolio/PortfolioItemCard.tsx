@@ -6,8 +6,10 @@
 
 'use client';
 
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Eye,
   Star,
@@ -31,6 +33,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EvidenceGallery } from './EvidenceGallery';
+import { PortfolioItemModal } from './PortfolioItemModal';
 import type { PortfolioItem } from '@/hooks/usePortfolio';
 import clsx from 'clsx';
 
@@ -68,6 +71,8 @@ export function PortfolioItemCard({
   onDelete,
   canRequestReview = false,
 }: PortfolioItemCardProps) {
+  const [showModal, setShowModal] = useState(false);
+
   const typeIcons = {
     mission: Target,
     reflection: BookOpen,
@@ -105,7 +110,7 @@ export function PortfolioItemCard({
     >
       <Card
         className={clsx(
-          "h-full relative overflow-hidden group transition-all duration-500 rounded-[2rem] border backdrop-blur-md",
+          "relative overflow-hidden group transition-all duration-500 rounded-[2rem] border backdrop-blur-md flex flex-col h-full",
           "bg-och-midnight/60",
           theme.border,
           theme.glow,
@@ -113,14 +118,14 @@ export function PortfolioItemCard({
         )}
       >
         {/* STATUS BAR (Top) */}
-        <div 
+        <div
           className={clsx(
             "absolute top-0 left-0 w-full h-1 transition-all duration-500",
             isApproved ? "bg-och-mint" : isPending ? "bg-och-gold" : "bg-och-steel/30"
-          )} 
+          )}
         />
-        
-        <div className="p-6 flex flex-col h-full relative z-10">
+
+        <div className="p-6 flex flex-col flex-1 relative z-10 min-h-0">
           {/* HEADER: Status + Type + Views */}
           <div className="flex items-start justify-between mb-6">
             <div className="flex flex-wrap gap-2">
@@ -171,7 +176,7 @@ export function PortfolioItemCard({
 
           {/* EVIDENCE PREVIEW */}
           {(item.evidenceFiles?.length || 0) > 0 && (
-            <div className="mb-6 flex-1">
+            <div className="mb-6">
                <p className="text-[9px] font-black text-och-steel uppercase tracking-widest mb-2 flex items-center gap-2">
                  <FileCode className="w-3 h-3" /> Artifact Verification
                </p>
@@ -205,23 +210,22 @@ export function PortfolioItemCard({
 
           {/* ACTIONS */}
           <div className="mt-auto space-y-3">
-            <Link href={`/dashboard/student/portfolio/${item.id}`} className="block">
+            <Button
+              variant="outline"
+              onClick={() => setShowModal(true)}
+              className="w-full h-11 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border-och-steel/20 text-och-steel hover:border-white hover:text-white transition-all group/btn"
+            >
+              Inspect Outcome
+              <ArrowUpRight className="w-3 h-3 ml-2 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
+            </Button>
+
+            {canRequestReview && (isDraft || item.status === 'submitted') && (
               <Button
                 variant="outline"
-                className="w-full h-11 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border-och-steel/20 text-och-steel hover:border-white hover:text-white transition-all group/btn"
-              >
-                Inspect Outcome
-                <ArrowUpRight className="w-3 h-3 ml-2 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-              </Button>
-            </Link>
-            
-            {canRequestReview && (isDraft || item.status === 'submitted') && (
-              <Button 
-                variant="outline" 
                 className="w-full h-11 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border-och-gold/30 text-och-gold hover:bg-och-gold hover:text-black transition-all"
                 onClick={(e) => {
                   e.preventDefault();
-                  console.log('Request mentor review for:', item.id);
+                  alert('Mentor review request submitted! Your mentor will be notified.');
                 }}
               >
                 <Zap className="w-3 h-3 mr-2 fill-current" />
@@ -236,6 +240,31 @@ export function PortfolioItemCard({
            <TypeIcon className="w-48 h-48" />
         </div>
       </Card>
+
+      {/* DETAIL MODAL - Rendered via Portal */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showModal && (
+            <PortfolioItemModal
+              item={item}
+              onClose={() => setShowModal(false)}
+              onEdit={onEdit ? () => {
+                setShowModal(false);
+                onEdit(item);
+              } : undefined}
+              onDelete={onDelete ? () => {
+                setShowModal(false);
+                onDelete(item.id);
+              } : undefined}
+              onRequestReview={() => {
+                alert('Mentor review request submitted! Your mentor will be notified.');
+              }}
+              canRequestReview={canRequestReview}
+            />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   );
 }

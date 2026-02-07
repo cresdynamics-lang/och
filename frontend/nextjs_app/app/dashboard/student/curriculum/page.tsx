@@ -199,7 +199,7 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
 }
 
 export default function CurriculumHubPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [tracks, setTracks] = useState<CurriculumTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,18 +261,27 @@ export default function CurriculumHubPage() {
   const enrolledTracks = tracks.filter(track => track.user_enrollment.enrolled);
   const availableTracks = tracks.filter(track => !track.user_enrollment.enrolled);
 
-  if (loading) {
+  // Wait for auth to load before checking authentication
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-spin" />
-          <p className="text-slate-400">Loading Curriculum Hub...</p>
+          <p className="text-slate-400">{authLoading ? 'Loading...' : 'Loading Curriculum Hub...'}</p>
         </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
+  // Check for token even if isAuthenticated is false (might be loading)
+  const hasToken = typeof window !== 'undefined' && (
+    localStorage.getItem('access_token') ||
+    document.cookie.includes('access_token=')
+  );
+
+  // Only show login prompt if auth has finished loading AND there's no token
+  // If auth is still loading or token exists, allow access
+  if (!authLoading && !isAuthenticated && !hasToken) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <Card className="p-8 max-w-md text-center">

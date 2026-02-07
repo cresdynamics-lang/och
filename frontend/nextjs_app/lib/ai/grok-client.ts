@@ -21,3 +21,6 @@ export class GrokClient {
 }
 
 export const grokClient = new GrokClient()
+
+// Backward compatibility export
+export const grok = grokClient

@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string; type: string } }
+  { params }: { params: Promise<{ userId: string; type: string }> }
 ) {
   try {
-    const { userId, type } = params;
+    const { userId, type } = await params;
     const { recipient } = await request.json();
 
     // RBAC Check

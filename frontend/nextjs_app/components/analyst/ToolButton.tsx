@@ -60,7 +60,7 @@ export const ToolButton: React.FC<ToolButtonProps> = ({ tool }) => {
           <div className="font-medium text-sm leading-tight truncate text-white">
             {tool.title}
           </div>
-          <div className="text-xs text-och-steel-grey leading-tight truncate">
+          <div className="text-xs text-white/70 leading-tight truncate font-medium">
             {tool.subtitle}
           </div>
         </div>
@@ -81,7 +81,7 @@ export const ToolButton: React.FC<ToolButtonProps> = ({ tool }) => {
                 {tool.action}
               </span>
             )}
-            <span className="text-xs text-och-steel-grey font-mono">
+            <span className="text-xs text-white/60 font-mono">
               {tool.shortcut}
             </span>
           </div>

@@ -49,8 +49,14 @@ function MissionsPageInner() {
     try {
       const data = await mentorClient.getCapstoneProjects(mentorId, { status: 'pending_scoring' })
       setCapstones(data)
-    } catch (err) {
-      console.error('Failed to load capstones:', err)
+    } catch (err: any) {
+      // 404 is expected if mentor has no capstones - handle gracefully
+      if (err?.status === 404 || err?.response?.status === 404) {
+        console.log('[loadCapstones] No capstones found for mentor (404) - this is normal');
+        setCapstones([]);
+      } else {
+        console.error('Failed to load capstones:', err);
+      }
     } finally {
       setLoadingCapstones(false)
     }

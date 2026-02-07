@@ -104,72 +104,6 @@ export default function ProfilingResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [checkingStatus, setCheckingStatus] = useState(true)
-
-  // Mock profiling data for demonstration when API is not available
-  const MOCK_PROFILING_RESULTS = {
-    recommendations: [
-      {
-        track_name: 'Defender',
-        score: 92,
-        reasoning: ['Strong analytical skills', 'Interest in security operations', 'Good problem-solving abilities']
-      }
-    ],
-    primary_track: {
-      key: 'defender',
-      track_key: 'defender',
-      name: 'Defender',
-      track_name: 'Defender',
-      description: 'Master defensive cybersecurity techniques and security operations',
-      focus_areas: ['Network Security', 'Incident Response', 'SIEM', 'Threat Hunting'],
-      career_paths: ['SOC Analyst', 'Security Operations Center Lead', 'Cybersecurity Analyst']
-    },
-    assessment_summary: 'You have excellent analytical skills and a strong interest in defensive cybersecurity. Your problem-solving abilities make you well-suited for security operations roles.',
-    completed_at: new Date().toISOString(),
-    overall_score: 92,
-    aptitude_score: 88,
-    behavioral_score: 85,
-    strengths: [
-      'Strong analytical and problem-solving skills',
-      'Good attention to detail and systematic thinking',
-      'Interest in security operations and incident response',
-      'Ability to work under pressure and make quick decisions'
-    ],
-    areas_for_growth: [
-      'Offensive security techniques',
-      'Advanced penetration testing',
-      'Red team methodologies'
-    ]
-  }
-
-  const MOCK_BLUEPRINT = {
-    personalized_insights: {
-      career_alignment: {
-        career_readiness_score: 87
-      }
-    },
-    learning_strategy: {
-      strengths_to_leverage: [
-        'Systematic thinking and attention to detail',
-        'Strong foundation in technical concepts',
-        'Good communication and teamwork skills'
-      ],
-      growth_opportunities: [
-        'Advanced technical certifications',
-        'Leadership and management skills',
-        'Specialized domain expertise'
-      ]
-    },
-    difficulty_level: {
-      selected: 'intermediate'
-    },
-    value_statement: 'A dedicated cybersecurity professional with strong analytical skills and a passion for protecting digital assets. Committed to continuous learning and staying ahead of emerging threats.',
-    next_steps: [
-      'Complete Foundations tier to build core knowledge',
-      'Enroll in Defender track curriculum',
-      'Obtain CompTIA Security+ certification',
-      'Participate in cybersecurity capture the flag challenges'
-    ]
-  }
   const [allTracks, setAllTracks] = useState<Record<string, any>>({})
   
   // Journey progress data
@@ -179,41 +113,50 @@ export default function ProfilingResultsPage() {
   const [loadingJourney, setLoadingJourney] = useState(true)
 
   useEffect(() => {
-    // Authentication check bypassed - profiling is now an open route
-    // if (!authLoading && !isAuthenticated) {
-    //   router.push('/login/student')
-    //   return
-    // }
+    // Authentication is checked via Django's /auth/me in checkAndRedirect
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login/student')
+      return
+    }
 
-    // if (authLoading || !isAuthenticated) return
+    if (authLoading || !isAuthenticated) return
 
     const checkAndRedirect = async () => {
       try {
         setCheckingStatus(true)
 
-        // For demonstration purposes, always load mock data
-        console.log('Loading mock profiling data for demonstration...')
-        setResults(MOCK_PROFILING_RESULTS)
-        setBlueprint(MOCK_BLUEPRINT)
-        setAllTracks({
-          defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-          offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-          grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-          innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-          leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
-        })
-        setLoading(false)
-        setCheckingStatus(false)
-        return
+        // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
+        // This prevents redirect loops and ensures accurate status
+        let djangoProfilingComplete = false
+        try {
+          const { djangoClient } = await import('@/services/djangoClient')
+          const freshUser = await djangoClient.auth.getCurrentUser()
+          djangoProfilingComplete = freshUser?.profiling_complete ?? false
+          console.log('[ProfilingResults] Django profiling_complete:', djangoProfilingComplete)
+        } catch (djangoError) {
+          console.error('[ProfilingResults] Failed to check Django status:', djangoError)
+          // Continue to check FastAPI as fallback
+        }
 
-        const fastapiStatus = await fastapiClient.profiling.checkStatus()
-
-        if (!fastapiStatus.completed) {
-          router.push('/onboarding/ai-profiler')
+        // If Django says not complete, show error (don't redirect to avoid loop)
+        if (!djangoProfilingComplete) {
+          setError('Profiling not completed. Please complete the AI profiler first.')
+          setLoading(false)
+          setCheckingStatus(false)
           return
         }
 
-        if (fastapiStatus.session_id) {
+        // Django says complete, now get the actual results
+        let fastapiStatus: any = null
+        try {
+          fastapiStatus = await fastapiClient.profiling.checkStatus()
+          console.log('[ProfilingResults] FastAPI status:', fastapiStatus)
+        } catch (fastapiError) {
+          console.error('[ProfilingResults] FastAPI status check failed:', fastapiError)
+          // Will fall back to Django or mock data below
+        }
+
+        if (fastapiStatus?.session_id) {
           try {
             const fastapiResults = await fastapiClient.profiling.getResults(fastapiStatus.session_id)
             let bp: any | null = null
@@ -260,75 +203,91 @@ export default function ProfilingResultsPage() {
           }
         }
 
+        // Django says profiling is complete, try to get results from Django
         try {
           const { djangoClient } = await import('@/services/djangoClient')
           const djangoData = await djangoClient.profiler.getResults()
+          console.log('[ProfilingResults] Django results:', djangoData)
+          
           if (djangoData.completed && djangoData.result) {
             setResults(djangoData.result)
-          } else {
-            // Load mock profiling data for demonstration purposes
-            console.log('Loading mock profiling data due to incomplete Django data...')
-            setResults(MOCK_PROFILING_RESULTS)
-            setBlueprint(MOCK_BLUEPRINT)
-            setAllTracks({
-              defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-              offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-              grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-              innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-              leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
-            })
             setLoading(false)
             setCheckingStatus(false)
             return
           }
         } catch (djangoError: any) {
-          // Check if it's an authentication error (401)
-          const isAuthError = djangoError?.status === 401 ||
-                             djangoError?.response?.status === 401 ||
-                             djangoError?.message?.includes('401') ||
-                             djangoError?.message?.includes('Authentication') ||
-                             djangoError?.message?.includes('credentials') ||
-                             djangoError?.message?.includes('Unauthorized')
+          console.warn('[ProfilingResults] Django results error:', djangoError)
+        }
 
-          if (isAuthError) {
-            // Load mock profiling data for demonstration purposes
-            console.log('Loading mock profiling data...')
-            setResults(MOCK_PROFILING_RESULTS)
-            setBlueprint(MOCK_BLUEPRINT)
-            setAllTracks({
-              defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-              offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-              grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-              innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-              leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
+        // If we still don't have results, try Django /profiler/status for partial data
+        try {
+          const { djangoClient } = await import('@/services/djangoClient')
+          const profilerStatus = await djangoClient.profiler.getStatus()
+          console.log('[ProfilingResults] Django profiler status:', profilerStatus)
+          
+          if (profilerStatus.completed) {
+            // Django confirms complete but results aren't stored - build from available data
+            // Fetch tracks from FastAPI if available
+            let tracks: Record<string, any> = {}
+            try {
+              const tracksResp = await fastapiClient.profiling.getTracks()
+              tracks = tracksResp.tracks || {}
+              setAllTracks(tracks)
+            } catch (tracksError) {
+              console.warn('[ProfilingResults] Failed to load tracks:', tracksError)
+            }
+            
+            // Build results from what we know
+            const trackKey = profilerStatus.track_recommendation || 'defender'
+            const trackName = tracks[trackKey]?.name || trackKey.charAt(0).toUpperCase() + trackKey.slice(1)
+            
+            setResults({
+              recommendations: Object.entries(tracks).map(([key, track]: [string, any]) => ({
+                track_key: key,
+                track_name: track.name || key,
+                score: key === trackKey ? (profilerStatus.overall_score || 85) : 0,
+                reasoning: track.description ? [track.description] : [],
+              })),
+              primary_track: {
+                key: trackKey,
+                track_key: trackKey,
+                name: trackName,
+                track_name: trackName,
+                description: tracks[trackKey]?.description || `Your recommended ${trackName} career track`,
+                focus_areas: tracks[trackKey]?.focus_areas || [],
+                career_paths: tracks[trackKey]?.career_paths || [],
+              },
+              assessment_summary: `You have been profiled and assigned to the ${trackName} track.`,
+              completed_at: profilerStatus.completed_at || new Date().toISOString(),
+              overall_score: profilerStatus.overall_score || 0,
+              aptitude_score: profilerStatus.overall_score || 0,
+              behavioral_score: profilerStatus.overall_score || 0,
+              strengths: [],
+              areas_for_growth: [],
             })
             setLoading(false)
             setCheckingStatus(false)
             return
-          } else {
-            setError('Unable to load profiling results. Please try completing the assessment again.')
           }
+        } catch (statusError) {
+          console.warn('[ProfilingResults] Django profiler status error:', statusError)
         }
 
+        // Nothing worked - show error
+        setError('Unable to load profiling results. FastAPI may have been restarted. Please redo your profiling to see full results.')
         setLoading(false)
         setCheckingStatus(false)
       } catch (err: any) {
-        console.error('Error checking profiling status:', err)
-
-        // Load mock profiling data for demonstration purposes
-        console.log('Loading mock profiling data due to API error...')
-        setResults(MOCK_PROFILING_RESULTS)
-        setBlueprint(MOCK_BLUEPRINT)
-        setAllTracks({
-          defender: { name: 'Defender', description: 'Defensive cybersecurity' },
-          offensive: { name: 'Offensive', description: 'Penetration testing and red teaming' },
-          grc: { name: 'GRC', description: 'Governance, risk, and compliance' },
-          innovation: { name: 'Innovation', description: 'Emerging technologies and research' },
-          leadership: { name: 'Leadership', description: 'Cybersecurity management and strategy' }
-        })
+        console.error('[ProfilingResults] Error loading profiling results:', err)
+        
+        // Show appropriate error based on Django status
+        if (djangoProfilingComplete) {
+          setError('Unable to load profiling results. Please try again later.')
+        } else {
+          setError('Profiling not completed. Please complete the AI profiler first.')
+        }
         setLoading(false)
         setCheckingStatus(false)
-        return
       }
     }
 
@@ -357,30 +316,31 @@ export default function ProfilingResultsPage() {
         try {
           const primaryTrack = results.primary_track || results.recommendations?.[0]
           if (primaryTrack?.key || primaryTrack?.track_key) {
-            const trackKey = (primaryTrack.key || primaryTrack.track_key).toUpperCase()
-            const trackCode = `${trackKey}_2` // Tier 2 (Beginner)
+            // Use the track slug directly instead of hardcoded mapping
+            const trackSlug = (primaryTrack.key || primaryTrack.track_key).toLowerCase()
             try {
-              const progress = await curriculumClient.getTrackProgress(trackCode)
+              const progress = await curriculumClient.getTrackProgress(trackSlug)
               setCurriculumProgress(progress)
-            } catch (err) {
-              // Track might not be enrolled yet
-              console.log('Track not enrolled yet:', err)
+            } catch (err: any) {
+              // Track might not be enrolled yet or doesn't exist in database
+              if (err?.status === 404) {
+                console.log(`Track "${trackSlug}" not found in curriculum database`)
+              } else {
+                console.log('Track progress not available:', err?.message)
+              }
             }
           }
         } catch (err) {
           console.error('Failed to fetch curriculum:', err)
         }
 
-        // Fetch missions stats
+        // Fetch missions stats from /student/missions (which returns funnel data)
         try {
-          const missionsResponse = await apiGateway.get<any>('/student/missions', {
-            params: { page_size: 1 }
-          })
-          const missionsData = await apiGateway.get<any>('/student/missions/funnel')
+          const missionsData = await apiGateway.get<any>('/student/missions')
           setMissionsStats({
-            total: missionsResponse?.total ?? missionsResponse?.count ?? 0,
-            completed: missionsData?.funnel?.approved || 0,
-            in_progress: missionsData?.funnel?.pending || 0,
+            total: missionsData?.total ?? missionsData?.count ?? 0,
+            completed: missionsData?.funnel?.approved ?? missionsData?.completed ?? 0,
+            in_progress: missionsData?.funnel?.pending ?? missionsData?.in_progress ?? 0,
           })
         } catch (err) {
           console.error('Failed to fetch missions:', err)

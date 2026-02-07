@@ -4,6 +4,7 @@ URL configuration for users app - Authentication endpoints.
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password
+from .views.auth_views import resend_verification_email, resend_verification_email
 from .views.auth_views import (
     SignupView,
     LoginView,
@@ -37,6 +38,7 @@ from .views.google_oauth_views import (
     google_oauth_callback,
 )
 from .views.settings_views import user_settings
+from .views.create_och_users_view import create_och_users
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
@@ -84,6 +86,8 @@ urlpatterns = [
     path('auth/register', register_user, name='register-no-slash'),
     path('auth/verify-email/', verify_email, name='verify_email'),
     path('auth/verify-email', verify_email, name='verify_email-no-slash'),
+    path('auth/resend-verification/', resend_verification_email, name='resend_verification'),
+    path('auth/resend-verification', resend_verification_email, name='resend_verification-no-slash'),
     path('auth/request-password-reset/', request_password_reset, name='request_password_reset'),
     path('auth/request-password-reset', request_password_reset, name='request_password_reset-no-slash'),
     path('auth/reset-password/', reset_password, name='reset_password'),
@@ -104,6 +108,10 @@ urlpatterns = [
 
     # User management endpoints
     path('', include(router.urls)),
+    
+    # OCH users creation endpoint (for initial setup)
+    path('users/create-och-users', create_och_users, name='create-och-users'),
+    path('users/create-och-users/', create_och_users, name='create-och-users-slash'),
 ]
 
     # User management endpoints

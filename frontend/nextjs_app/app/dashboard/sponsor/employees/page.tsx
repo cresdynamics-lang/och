@@ -16,11 +16,32 @@ export default function SponsoredStudentsPage() {
   const loadStudents = async () => {
     try {
       setLoading(true)
+      setError(null)
       const data = await sponsorClient.getStudents()
       setStudents(data)
-      setError(null)
     } catch (err: any) {
-      setError(err.message || 'Failed to load sponsored students')
+      // Extract error details
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const errorMessage = err?.message || err?.data?.detail || err?.data?.error || 'Failed to load sponsored students';
+      
+      // Check if it's a connection/network error or API endpoint doesn't exist
+      const isConnectionError = errorMessage.includes('fetch failed') ||
+                               errorMessage.includes('Failed to fetch') ||
+                               errorMessage.includes('NetworkError') ||
+                               errorMessage.includes('ECONNREFUSED') ||
+                               errorMessage.includes('Cannot connect to backend server');
+      
+      const isNotFoundError = errorStatus === 404 ||
+                             errorMessage.includes('404') ||
+                             errorMessage.includes('Not Found');
+      
+      // For 404s or connection errors, show empty state instead of error
+      if (isNotFoundError || isConnectionError) {
+        setStudents([]); // Show empty state
+        setError(null); // Don't show error message
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false)
     }

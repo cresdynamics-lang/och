@@ -29,12 +29,24 @@ class CurriculumTrack(models.Model):
         (9, 'Tier 9 - Enterprise & National Intelligence'),
     ]
 
+    LEVEL_CHOICES = [
+        ('foundations', 'Foundations'),
+        ('beginner', 'Beginner'),
+        ('intermediate', 'Intermediate'),
+        ('advanced', 'Advanced'),
+        ('mastery', 'Mastery'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code = models.CharField(max_length=50, unique=True, db_index=True, help_text='e.g., "SOCDEFENSE", "CLOUDSEC"')
     slug = models.SlugField(unique=True, max_length=50, help_text="'defender', 'offensive', 'grc', 'innovation', 'leadership'")
     name = models.CharField(max_length=255)
     title = models.CharField(max_length=255, help_text='Display title')
     description = models.TextField(blank=True)
+    level = models.CharField(
+        max_length=20, choices=LEVEL_CHOICES, default='beginner',
+        help_text='Track level: foundations, beginner, intermediate, advanced, mastery'
+    )
     thumbnail_url = models.URLField(blank=True, help_text='Track thumbnail image')
     order_number = models.IntegerField(default=1, help_text='Display order')
 
@@ -46,8 +58,8 @@ class CurriculumTrack(models.Model):
         help_text='Academic tier (0-9). Tier 2 = Beginner Tracks'
     )
 
-    # Linking to programs.Track if needed
-    program_track_id = models.UUIDField(null=True, blank=True, help_text='FK to programs.Track')
+    # Linking to programs.Track — auto-populated by sync signal
+    program_track_id = models.UUIDField(null=True, blank=True, help_text='FK to programs.Track (auto-synced)')
 
     # Track metadata
     icon = models.CharField(max_length=50, blank=True, help_text='Icon identifier e.g., "shield", "cloud"')

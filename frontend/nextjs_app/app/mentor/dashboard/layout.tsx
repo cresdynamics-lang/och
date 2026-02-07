@@ -1,23 +1,32 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import { MentorNavigation } from '@/components/navigation/MentorNavigation'
-import { DashboardHeader } from '@/components/navigation/DashboardHeader'
+import { useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 
-export default function MentorLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-screen bg-och-midnight flex">
-      <MentorNavigation />
-      <div className="flex-1 flex flex-col lg:ml-64">
-        <DashboardHeader />
-        <main className="flex-1 overflow-y-auto">
-          <div className="w-full">
-            {children}
-          </div>
-        </main>
+export default function MentorDashboardRedirectLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => {
+    // Redirect from old /mentor/dashboard/* to new /dashboard/mentor/*
+    if (pathname.startsWith('/mentor/dashboard')) {
+      const newPath = pathname.replace('/mentor/dashboard', '/dashboard/mentor')
+      router.replace(newPath)
+    }
+  }, [pathname, router])
+
+  // Show loading state while redirecting
+  if (pathname.startsWith('/mentor/dashboard')) {
+    return (
+      <div className="min-h-screen bg-och-midnight flex items-center justify-center">
+        <div className="text-och-steel">Redirecting to mentor dashboard...</div>
       </div>
-    </div>
-  )
+    )
+  }
+
+  return <>{children}</>
 }
-
-

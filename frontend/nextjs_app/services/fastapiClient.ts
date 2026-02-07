@@ -95,7 +95,7 @@ export const fastapiClient = {
       progress?: any;
       completed_at?: string;
     }> {
-      return apiGateway.get('/profiler/status');
+      return apiGateway.get('/profiling/status');
     },
 
     /**

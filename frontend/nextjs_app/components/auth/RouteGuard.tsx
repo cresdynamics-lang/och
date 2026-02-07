@@ -25,7 +25,7 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
   const getLoginRouteForPath = (path: string) => {
     if (path.startsWith('/dashboard/director')) return '/login/director'
     if (path.startsWith('/dashboard/admin')) return '/login/admin'
-    if (path.startsWith('/mentor/dashboard')) return '/login/mentor'
+    if (path.startsWith('/dashboard/mentor')) return '/login/mentor'
     if (path.startsWith('/dashboard/sponsor')) return '/login/sponsor'
     if (path.startsWith('/dashboard/analyst') || path.startsWith('/dashboard/analytics')) return '/login/analyst'
     if (path.startsWith('/dashboard/employer') || path.startsWith('/dashboard/marketplace')) return '/login/employer'
@@ -86,15 +86,48 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
     // If requiredRoles is provided, enforce it (in addition to route permissions)
     if (_requiredRoles && _requiredRoles.length > 0) {
       const roles = getUserRoles(user)
+      const isMentor = roles.includes('mentor')
       const ok = _requiredRoles.some(r => roles.includes(r as any))
       if (!ok) {
-        router.push(getRedirectRoute(user))
+        // CRITICAL: For mentors, NEVER redirect to student - always go to mentor dashboard
+        if (isMentor) {
+          console.log('RouteGuard: Mentor missing required roles, redirecting to /dashboard/mentor (NEVER student)')
+          router.push('/dashboard/mentor')
+        } else {
+          router.push(getRedirectRoute(user))
+        }
         return
       }
     }
 
-    if (!hasRouteAccess(user, currentPath)) {
-      router.push(getRedirectRoute(user))
+    // CRITICAL: Check for mentor role BEFORE hasRouteAccess check
+    // This prevents mentors from being redirected to student dashboard
+    const userRoles = getUserRoles(user)
+    const isMentor = userRoles.includes('mentor')
+    const isMentorRoute = currentPath.startsWith('/dashboard/mentor')
+    
+    if (isMentor && isMentorRoute) {
+      // Mentor accessing mentor route - always allow
+      console.log('RouteGuard: Mentor accessing mentor route - allowing access')
+      // Don't redirect, allow access
+    } else if (!hasRouteAccess(user, currentPath)) {
+      // CRITICAL: For mentors, NEVER call getRedirectRoute - always go to mentor dashboard
+      if (isMentor) {
+        console.log('RouteGuard: Mentor access denied, redirecting to /dashboard/mentor (NEVER student)')
+        router.push('/dashboard/mentor')
+        return
+      }
+      
+      // For non-mentors, use normal access check
+      const redirectRoute = getRedirectRoute(user)
+      console.log('RouteGuard: Access denied, redirecting to:', redirectRoute, {
+        currentPath,
+        userRoles,
+        isMentor,
+        isMentorRoute
+      })
+      
+      router.push(redirectRoute)
       return
     }
   }, [user, isLoading, isAuthenticated, router])
@@ -129,13 +162,42 @@ export function RouteGuard({ children, requiredRoles: _requiredRoles }: RouteGua
 
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
 
+  // CRITICAL: Check for mentor role BEFORE hasRouteAccess check
+  // This prevents mentors from being denied access to mentor routes
+  const userRoles = getUserRoles(user)
+  const isMentor = userRoles.includes('mentor')
+  const isMentorRoute = currentPath.startsWith('/dashboard/mentor')
+  
+  if (isMentor && isMentorRoute) {
+    // Mentor accessing mentor route - always allow
+    console.log('RouteGuard: ✅ Mentor accessing mentor route - allowing access (render check)', {
+      currentPath,
+      userRoles,
+      isMentor
+    })
+    // Continue to render children - don't check hasRouteAccess
+    return <>{children}</>
+  }
+  
+  // For non-mentor routes or non-mentors, use normal access check
   if (_requiredRoles && _requiredRoles.length > 0) {
     const roles = getUserRoles(user)
     const ok = _requiredRoles.some(r => roles.includes(r as any))
-    if (!ok) return null
+    if (!ok) {
+      console.log('RouteGuard: Required roles not met, denying access')
+      return null
+    }
   }
 
-  if (!hasRouteAccess(user, currentPath)) return null
+  if (!hasRouteAccess(user, currentPath)) {
+    console.log('RouteGuard: hasRouteAccess returned false, denying access', {
+      currentPath,
+      userRoles,
+      isMentor,
+      isMentorRoute
+    })
+    return null
+  }
 
   return <>{children}</>
 }

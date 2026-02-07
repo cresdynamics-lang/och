@@ -254,27 +254,62 @@ export default function AIProfilerPage() {
 
   const checkProfilingStatus = async () => {
     let modProgress: any = null
+    let status: any = null
 
     try {
       setLoading(true)
       console.log('[AIProfiler] Checking profiling status...')
 
+      // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
+      // This prevents redirect loops when admin resets profiling
       try {
-        // Check if profiling is already completed
-        const status = await fastapiClient.profiling.checkStatus()
-        console.log('[AIProfiler] Profiling status:', status)
-
-        if (typeof status === 'object' && status && (status as any).completed) {
-          // Already completed, redirect to dashboard
-          console.log('✅ Profiling already completed')
+        const { djangoClient } = await import('@/services/djangoClient')
+        const freshUser = await djangoClient.auth.getCurrentUser()
+        console.log('[AIProfiler] Django profiling_complete:', freshUser?.profiling_complete)
+        
+        // If Django says profiling is complete, redirect to dashboard
+        if (freshUser?.profiling_complete === true) {
+          console.log('✅ Django says profiling complete - redirecting to dashboard')
           window.location.href = '/dashboard/student'
           return
         }
+        
+        // Django says not complete - user should be here, proceed with profiling
+        console.log('[AIProfiler] Django says profiling not complete - proceeding')
+      } catch (djangoError) {
+        console.error('[AIProfiler] Failed to check Django status:', djangoError)
+        // Continue with FastAPI check as fallback
+      }
+
+      try {
+        // Check FastAPI for session status (not for redirect decision)
+        status = await fastapiClient.profiling.checkStatus()
+        console.log('[AIProfiler] FastAPI status:', status)
+        
+        // NOTE: Don't redirect based on FastAPI status alone
+        // FastAPI may have stale session data after admin reset
       } catch (apiError: any) {
-        // FastAPI is not available, proceed with mock profiling
-        console.log('[AIProfiler] FastAPI unavailable, proceeding with mock profiling session...')
-        initializeMockProfiling()
-        return
+        // Handle FastAPI being unavailable gracefully
+        // If it's a 404 or connection error, FastAPI is likely not running
+        // This is OK - we'll start a new session
+        if (apiError?.status === 404 || apiError?.status === 0 || 
+            apiError?.message?.includes('fetch') || 
+            apiError?.message?.includes('ECONNREFUSED')) {
+          console.log('[AIProfiler] FastAPI unavailable (expected if not running) - will start new session')
+          status = {
+            completed: false,
+            session_id: null,
+            has_active_session: false
+          }
+        } else {
+          // For other errors, log but don't throw - allow user to proceed
+          console.warn('[AIProfiler] FastAPI check failed (non-critical):', apiError)
+          status = {
+            completed: false,
+            session_id: null,
+            has_active_session: false
+          }
+        }
       }
 
       // Check if there's an active session
@@ -337,188 +372,107 @@ export default function AIProfilerPage() {
                             err?.message?.includes('Connection refused') ||
                             (err?.status === undefined && !isAuthError)
 
-      if (isAuthError || isNetworkError) {
-        // Allow profiling to proceed with mock data for demonstration purposes
-        const errorType = isNetworkError ? 'API unavailable' : 'Authentication failed'
-        console.log(`[AIProfiler] ${errorType}, proceeding with mock profiling session...`)
-
-        // Set up mock questions and session
-        setQuestions(MOCK_PROFILING_QUESTIONS)
-
-        // Initialize mock module progress
-        const mockModuleProgress: ModuleProgress = {
-          modules: {
-            identity_value: { answered: 0, total: 1, completed: false },
-            cyber_aptitude: { answered: 0, total: 1, completed: false },
-            technical_exposure: { answered: 0, total: 1, completed: false },
-            scenario_preference: { answered: 0, total: 1, completed: false },
-            work_style: { answered: 0, total: 1, completed: false },
-            difficulty_selection: { answered: 0, total: 1, completed: false }
-          },
-          current_module: null,
-          completed_modules: [],
-          remaining_modules: ['identity_value', 'cyber_aptitude', 'technical_exposure', 'scenario_preference', 'work_style', 'difficulty_selection']
-        }
-        setModuleProgress(mockModuleProgress)
-
-        // Set mock session
-        setSession({
-          session_id: 'mock-session-' + Date.now(),
-          status: 'in_progress',
-          progress: {
-            session_id: 'mock-session-' + Date.now(),
-            current_question: 0,
-            total_questions: MOCK_PROFILING_QUESTIONS.length,
-            progress_percentage: 0,
-            estimated_time_remaining: MOCK_PROFILING_QUESTIONS.length * 2
-          }
-        })
-
-        setCurrentSection('welcome')
-        setError(null)
-        setLoading(false)
-        return
-      }
-
-      setError(err.message || 'Failed to check profiling status')
+      // Show the real error instead of falling back to mock
+      const errorMessage = isAuthError 
+        ? 'Authentication failed. Please log in again.' 
+        : isNetworkError
+        ? 'Cannot connect to profiling service. Please check if FastAPI is running.'
+        : err.message || 'Failed to check profiling status'
+      
+      console.error(`[AIProfiler] ${errorMessage}`, err)
+      setError(errorMessage)
       setLoading(false)
     }
   }
 
-  const initializeMockProfiling = () => {
-    console.log('[AIProfiler] Setting up mock profiling session...')
-
-    // Set up mock questions and session
-    setQuestions(MOCK_PROFILING_QUESTIONS)
-
-    // Initialize mock module progress
-    const mockModuleProgress: ModuleProgress = {
-      modules: {
-        identity_value: { answered: 0, total: 1, completed: false },
-        cyber_aptitude: { answered: 0, total: 1, completed: false },
-        technical_exposure: { answered: 0, total: 1, completed: false },
-        scenario_preference: { answered: 0, total: 1, completed: false },
-        work_style: { answered: 0, total: 1, completed: false },
-        difficulty_selection: { answered: 0, total: 1, completed: false }
-      },
-      current_module: null,
-      completed_modules: [],
-      remaining_modules: ['identity_value', 'cyber_aptitude', 'technical_exposure', 'scenario_preference', 'work_style', 'difficulty_selection']
-    }
-
-    setModuleProgress(mockModuleProgress)
-
-    // Initialize mock session
-    setSession({
-      session_id: 'mock-session-' + Date.now(),
-      progress: {
-        session_id: 'mock-session-' + Date.now(),
-        current_question: 0,
-        total_questions: MOCK_PROFILING_QUESTIONS.length,
-        progress_percentage: 0,
-        estimated_time_remaining: MOCK_PROFILING_QUESTIONS.length * 2
-      }
-    })
-
-    setCurrentSection('welcome')
-    setError(null)
-    setLoading(false)
-
-    console.log('[AIProfiler] Mock profiling setup complete')
-  }
 
   const initializeProfiling = async () => {
     try {
       setLoading(true)
+      setError(null)
 
       // Start new profiling session
-      const sessionResponse = await fastapiClient.profiling.startSession()
-      setSession({
-        session_id: sessionResponse.session_id,
-        status: sessionResponse.status,
-        progress: sessionResponse.progress
-      })
+      let sessionResponse: any
+      try {
+        sessionResponse = await fastapiClient.profiling.startSession()
+        setSession({
+          session_id: sessionResponse.session_id,
+          status: sessionResponse.status,
+          progress: sessionResponse.progress
+        })
+      } catch (sessionError: any) {
+        // Handle FastAPI being unavailable
+        if (sessionError?.status === 404 || sessionError?.status === 0 || 
+            sessionError?.message?.includes('fetch') || 
+            sessionError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for session start')
+          setError('Profiling service is currently unavailable. Please ensure FastAPI is running on port 8001 and try again.')
+          setLoading(false)
+          return
+        }
+        throw sessionError
+      }
 
       // Get enhanced questions grouped by module, then flatten
-      const enhanced = await fastapiClient.profiling.getEnhancedQuestions()
-      const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
-        .flat()
-        .map((q: any) => ({
-          id: q.id,
-          question: q.question,
-          category: q.category,
-          module: q.module,
-          options: q.options,
-        }))
-      setQuestions(allQuestions)
+      let enhanced: any
+      try {
+        enhanced = await fastapiClient.profiling.getEnhancedQuestions()
+        const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
+          .flat()
+          .map((q: any) => ({
+            id: q.id,
+            question: q.question,
+            category: q.category,
+            module: q.module,
+            options: q.options,
+          }))
+        setQuestions(allQuestions)
+      } catch (questionsError: any) {
+        // Handle FastAPI being unavailable for questions
+        if (questionsError?.status === 404 || questionsError?.status === 0 || 
+            questionsError?.message?.includes('fetch') || 
+            questionsError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for questions')
+          setError('Unable to load profiling questions. Please ensure FastAPI is running on port 8001 and try again.')
+          setLoading(false)
+          return
+        }
+        throw questionsError
+      }
 
       // Initialize module progress
-      const modProgress = await fastapiClient.profiling.getModuleProgress(sessionResponse.session_id)
-      setModuleProgress(modProgress)
-      setCurrentModule((modProgress.current_module as ModuleKey) || null)
+      try {
+        const modProgress = await fastapiClient.profiling.getModuleProgress(sessionResponse.session_id)
+        setModuleProgress(modProgress)
+        setCurrentModule((modProgress.current_module as ModuleKey) || null)
+      } catch (progressError: any) {
+        // Handle FastAPI being unavailable for progress - non-critical, log and continue
+        if (progressError?.status === 404 || progressError?.status === 0 || 
+            progressError?.message?.includes('fetch') || 
+            progressError?.message?.includes('ECONNREFUSED')) {
+          console.warn('[AIProfiler] FastAPI unavailable for progress - continuing without progress data')
+          // Don't set error - progress is optional, user can still proceed
+        } else {
+          throw progressError
+        }
+      }
 
       setLoading(false)
     } catch (err: any) {
-      console.error('[AIProfiler] Error initializing profiling:', err)
-
-      // Check if it's an authentication error (401) or network/API error
-      const isAuthError = err?.status === 401 ||
-                         err?.response?.status === 401 ||
-                         err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials') ||
-                         err?.message?.includes('Not authenticated') ||
-                         err?.message?.includes('Unauthorized')
-
-      // Check if it's a network/API unavailable error
-      const isNetworkError = err?.message?.includes('fetch') ||
-                            err?.message?.includes('Failed to fetch') ||
-                            err?.message?.includes('NetworkError') ||
-                            err?.message?.includes('ECONNREFUSED') ||
-                            err?.message?.includes('Connection refused') ||
-                            (err?.status === undefined && !isAuthError)
-
-      if (isAuthError || isNetworkError) {
-        // Use mock questions for demonstration purposes
-        const errorType = isNetworkError ? 'API unavailable' : 'Authentication failed'
-        console.log(`[AIProfiler] ${errorType}, using mock questions for profiling assessment...`)
-        setQuestions(MOCK_PROFILING_QUESTIONS)
-
-        // Initialize mock module progress
-        const mockModuleProgress: ModuleProgress = {
-          modules: {
-            identity_value: { answered: 0, total: 1, completed: false },
-            cyber_aptitude: { answered: 0, total: 1, completed: false },
-            technical_exposure: { answered: 0, total: 1, completed: false },
-            scenario_preference: { answered: 0, total: 1, completed: false },
-            work_style: { answered: 0, total: 1, completed: false },
-            difficulty_selection: { answered: 0, total: 1, completed: false }
-          },
-          current_module: null,
-          completed_modules: [],
-          remaining_modules: ['identity_value', 'cyber_aptitude', 'technical_exposure', 'scenario_preference', 'work_style', 'difficulty_selection']
-        }
-        setModuleProgress(mockModuleProgress)
-
-        // Set mock session
-        setSession({
-          session_id: 'mock-session-' + Date.now(),
-          status: 'in_progress',
-          progress: {
-            session_id: 'mock-session-' + Date.now(),
-            current_question: 0,
-            total_questions: MOCK_PROFILING_QUESTIONS.length,
-            progress_percentage: 0,
-            estimated_time_remaining: MOCK_PROFILING_QUESTIONS.length * 2 // 2 minutes per question
-          }
-        })
-
-        setError(null)
-        setLoading(false)
-        return
-      }
-
-      setError(err.message || 'Failed to initialize AI profiling')
+      console.error('[AIProfiler] Failed to initialize profiling:', err)
+      
+      const isAuthError = err?.status === 401
+      const isNetworkError = err?.status === 404 || err?.status === 0 || 
+                            err?.message?.includes('fetch') || 
+                            err?.message?.includes('ECONNREFUSED')
+      
+      const errorMessage = isAuthError
+        ? 'Authentication required. Please log in to continue.'
+        : isNetworkError
+        ? 'Cannot connect to profiling service. Please ensure FastAPI is running on port 8001.'
+        : err?.message || 'Failed to initialize profiling'
+      
+      setError(errorMessage)
       setLoading(false)
     }
   }
@@ -535,7 +489,7 @@ export default function AIProfilerPage() {
     if (!session) return
 
     try {
-      // Submit response to backend
+      // Submit response to FastAPI backend
       const response = await fastapiClient.profiling.submitResponse(
         session.session_id,
         questionId,
@@ -564,22 +518,8 @@ export default function AIProfilerPage() {
           const modProgress = await fastapiClient.profiling.getModuleProgress(session.session_id)
           setModuleProgress(modProgress)
         } catch (progressError) {
-          console.log('[AIProfiler] API unavailable for progress tracking, using mock progress')
-          // For mock mode, update progress locally
-          setModuleProgress(prev => {
-            if (!prev) return prev
-            const updatedModules = { ...prev.modules }
-            if (currentModuleKey && updatedModules[currentModuleKey]) {
-              updatedModules[currentModuleKey] = {
-                ...updatedModules[currentModuleKey],
-                answered: updatedModules[currentModuleKey].answered + 1
-              }
-            }
-            return {
-              ...prev,
-              modules: updatedModules
-            }
-          })
+          console.error('[AIProfiler] Failed to get module progress:', progressError)
+          // Don't update progress if API fails - let the error surface
         }
 
         const moduleInfo = currentModuleKey && moduleProgress ? moduleProgress.modules[currentModuleKey] : null
@@ -611,133 +551,46 @@ export default function AIProfilerPage() {
 
     try {
       setLoading(true)
-
-      try {
-        // Complete profiling session in FastAPI (enhanced engine under the hood)
-        const resultResponse = await fastapiClient.profiling.completeSession(session.session_id)
-        // Transform API response to match our interface
-        const transformedResult: ProfilingResult = {
-          user_id: resultResponse.user_id || 'unknown',
-          session_id: resultResponse.session_id,
-          recommendations: resultResponse.recommendations || [],
-          primary_track: resultResponse.primary_track || {
-            key: 'defender',
-            name: 'Cybersecurity Defender',
-            description: 'Focus on defensive security operations',
-            confidence_score: 75
-          },
-          secondary_tracks: resultResponse.secondary_tracks || [],
-          career_readiness_score: resultResponse.career_readiness_score || 70,
-          learning_pathway: resultResponse.learning_pathway || [],
-          recommended_focus: resultResponse.recommended_focus || [],
-          strengths: resultResponse.strengths || [],
-          development_areas: resultResponse.development_areas || [],
-          next_steps: resultResponse.next_steps || [],
-          assessment_summary: resultResponse.assessment_summary || 'Assessment completed',
-          completed_at: resultResponse.completed_at || new Date().toISOString()
-        }
-        setResult(transformedResult)
-      } catch (apiError: any) {
-        console.log('[AIProfiler] FastAPI unavailable for completion, generating mock results')
-
-        // Generate mock profiling results
-        const mockResults: ProfilingResult = {
-          user_id: 'mock-user',
-          session_id: session.session_id,
-          primary_track: {
-            key: 'defender',
-            name: 'Cybersecurity Defender',
-            description: 'Focus on defensive security operations and threat detection',
-            confidence_score: 85
-          },
-          secondary_tracks: [
-            {
-              key: 'grc',
-              name: 'Governance, Risk & Compliance',
-              description: 'Specialize in security governance and compliance',
-              confidence_score: 72
-            }
-          ],
-          career_readiness_score: 78,
-          learning_pathway: [
-            'log-analysis-fundamentals',
-            'siem-searching-basics',
-            'alert-triage-intro'
-          ],
-          recommended_focus: [
-            'threat_intelligence_analysis',
-            'incident_response_coordination'
-          ],
-          strengths: [
-            'Strong analytical skills',
-            'Interest in threat detection',
-            'Experience with log analysis'
-          ],
-          development_areas: [
-            'Advanced threat hunting',
-            'Incident response coordination'
-          ],
-          next_steps: [
-            'Complete SOC Analyst certification',
-            'Practice with real security tools',
-            'Join cybersecurity community'
-          ],
-          assessment_summary: 'Strong foundation in cybersecurity with focus on defensive operations',
-          completed_at: new Date().toISOString()
-        }
-        setResult(mockResults)
+      
+      // Variable to hold the final result (either from FastAPI or mock)
+      let finalResult: ProfilingResult
+      
+      // Complete profiling session in FastAPI (enhanced engine under the hood)
+      const resultResponse = await fastapiClient.profiling.completeSession(session.session_id)
+      
+      // Transform API response to match our interface
+      const transformedResult: ProfilingResult = {
+        user_id: resultResponse.user_id,
+        session_id: resultResponse.session_id,
+        recommendations: resultResponse.recommendations,
+        primary_track: resultResponse.primary_track,
+        secondary_tracks: resultResponse.secondary_tracks || [],
+        career_readiness_score: resultResponse.career_readiness_score,
+        learning_pathway: resultResponse.learning_pathway || [],
+        recommended_focus: resultResponse.recommended_focus || [],
+        strengths: resultResponse.strengths || [],
+        development_areas: resultResponse.development_areas || [],
+        next_steps: resultResponse.next_steps || [],
+        assessment_summary: resultResponse.assessment_summary,
+        completed_at: resultResponse.completed_at
       }
+      
+      finalResult = transformedResult
+      setResult(transformedResult)
 
       // Fetch OCH Blueprint for deeper analysis
-      try {
-        const bp = await fastapiClient.profiling.getBlueprint(session.session_id)
-        setBlueprint(bp)
-      } catch (bpError) {
-        console.log('[AIProfiler] FastAPI unavailable for blueprint, generating mock blueprint')
-
-        // Generate mock blueprint
-        const mockBlueprint: OCHBlueprint = {
-          session_id: session.session_id,
-          user_profile: {
-            primary_motivation: 'career_advancement',
-            learning_style: 'hands_on',
-            time_commitment: 'moderate',
-            technical_background: 'intermediate',
-            career_goals: 'Become a cybersecurity analyst'
-          },
-          track_recommendation: {
-            primary_track: 'defender',
-            confidence_level: 85,
-            reasoning: 'Based on your interest in threat detection and analytical skills'
-          },
-          learning_pathway: {
-            recommended_starting_point: 'defender-beginner',
-            foundational_modules: [
-              'log-analysis-fundamentals',
-              'network-security-basics',
-              'threat-detection-intro'
-            ],
-            progression_timeline: '6-9 months to competency',
-            milestone_checkpoints: [
-              'Complete basic log analysis',
-              'Pass defender certification',
-              'Build incident response portfolio'
-            ]
-          },
-          value_statement: 'You are a natural defender with strong analytical skills and a passion for protecting digital assets. Your methodical approach and attention to detail make you well-suited for cybersecurity defense roles.'
-        }
-        setBlueprint(mockBlueprint)
-      }
+      const bp = await fastapiClient.profiling.getBlueprint(session.session_id)
+      setBlueprint(bp)
       
       // Sync with Django backend to update user.profiling_complete
       try {
         const { apiGateway } = await import('@/services/apiGateway')
         const syncResponse = await apiGateway.post('/profiler/sync-fastapi', {
           user_id: user?.id?.toString(),
-          session_id: resultResponse.session_id,
-          completed_at: resultResponse.completed_at,
-          primary_track: resultResponse.primary_track.key,
-          recommendations: resultResponse.recommendations.map(rec => ({
+          session_id: finalResult.session_id,
+          completed_at: finalResult.completed_at,
+          primary_track: finalResult.primary_track.key,
+          recommendations: finalResult.recommendations.map(rec => ({
             track_key: rec.track_key,
             score: rec.score,
             confidence_level: rec.confidence_level
@@ -749,7 +602,7 @@ export default function AIProfilerPage() {
         if (typeof window !== 'undefined') {
           // Dispatch event for auth hook to refresh user
           window.dispatchEvent(new CustomEvent('profiling-completed', { 
-            detail: { sessionId: resultResponse.session_id }
+            detail: { sessionId: finalResult.session_id }
           }))
           
           // Also reload user directly after a short delay to allow sync to complete

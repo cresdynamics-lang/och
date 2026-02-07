@@ -38,6 +38,7 @@ class Mission(models.Model):
     requires_lab_integration = models.BooleanField(default=False, help_text='Linked to external lab')
     estimated_duration_min = models.IntegerField(validators=[MinValueValidator(1)])
     skills_tags = models.JSONField(default=list, help_text='Array of skill tags')
+    subtasks = models.JSONField(default=list, help_text='Array of mission subtasks with id, title, description, order_index')
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_missions', db_column='created_by', to_field='uuid_id')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -135,3 +136,55 @@ class MissionSubmission(models.Model):
     
     def __str__(self):
         return f"{self.assignment.mission.title} - {self.student.email}"
+
+
+class MissionArtifact(models.Model):
+    """Uploaded artifacts (files/screenshots) for mission submissions"""
+
+    ARTIFACT_TYPE_CHOICES = [
+        ('screenshot', 'Screenshot'),
+        ('document', 'Document'),
+        ('code', 'Code File'),
+        ('log', 'Log File'),
+        ('video', 'Video'),
+        ('other', 'Other'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(MissionSubmission, on_delete=models.CASCADE, related_name='artifacts')
+    file_url = models.URLField(max_length=500, help_text='URL to uploaded file')
+    file_name = models.CharField(max_length=255)
+    file_type = models.CharField(max_length=50, choices=ARTIFACT_TYPE_CHOICES, default='other')
+    file_size = models.IntegerField(help_text='File size in bytes', null=True, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'mission_artifacts'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.file_name} ({self.submission.id})"
+
+
+class AIFeedback(models.Model):
+    """AI-generated feedback for mission submissions"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(MissionSubmission, on_delete=models.CASCADE, related_name='ai_feedback')
+    feedback_text = models.TextField(help_text='AI-generated feedback', blank=True)
+    score = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    strengths = models.JSONField(default=list, help_text='Identified strengths')
+    gaps = models.JSONField(default=list, help_text='Identified gaps')
+    suggestions = models.JSONField(default=list, help_text='Suggested improvements')
+    improvements = models.JSONField(default=list, help_text='Legacy improvements field')
+    competencies_detected = models.JSONField(default=list, help_text='Competencies detected in submission')
+    full_feedback = models.JSONField(default=dict, help_text='Full structured feedback')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    model_version = models.CharField(max_length=50, blank=True, help_text='AI model version used')
+
+    class Meta:
+        db_table = 'ai_feedback'
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f"AI Feedback for {self.submission.id}"

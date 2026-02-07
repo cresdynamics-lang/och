@@ -3,7 +3,7 @@ import pexpect
 import sys
 import time
 
-host = "159.65.76.180"
+host = "138.197.203.235"
 user = "root"
 password = "Ongoza@#1CyberHub"
 commands = [

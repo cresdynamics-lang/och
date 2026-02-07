@@ -11,10 +11,10 @@ import { djangoClient } from '@/services/djangoClient';
 // POST /api/users/[userId]/recipes/[recipeId]/progress - Update recipe progress
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string; recipeId: string } }
+  { params }: { params: Promise<{ userId: string; recipeId: string }> }
 ) {
   try {
-    const { userId, recipeId } = params;
+    const { userId, recipeId } = await params;
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -61,10 +61,10 @@ export async function POST(
 // GET /api/users/[userId]/recipes/[recipeId]/progress - Get current progress
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string; recipeId: string } }
+  { params }: { params: Promise<{ userId: string; recipeId: string }> }
 ) {
   try {
-    const { userId, recipeId } = params;
+    const { userId, recipeId } = await params;
 
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

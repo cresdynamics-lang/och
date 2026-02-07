@@ -169,20 +169,21 @@ def next_actions(request):
     actions = []
     
     pending_missions = MissionSubmission.objects.filter(
-        user=user,
-        status__in=['not_started', 'in_progress', 'draft']
-    ).order_by('mission__estimated_duration_minutes')[:3]
+        student=user,
+        status__in=['draft', 'submitted', 'under_review', 'needs_revision']
+    ).select_related('assignment__mission')[:3]
     
     for submission in pending_missions:
+        mission = submission.assignment.mission if submission.assignment else None
         actions.append({
             'id': str(submission.id),
-            'title': f'Complete {submission.mission.title}',
-            'description': f'Mission {submission.mission.code}',
+            'title': f'Complete {mission.title if mission else "Mission"}',
+            'description': f'Mission {mission.code if mission else "N/A"}',
             'type': 'mission',
-            'urgency': 'high' if submission.status == 'in_progress' else 'medium',
+            'urgency': 'high' if submission.status == 'under_review' else 'medium',
             'progress': 0,
             'due_date': None,
-            'action_url': f'/dashboard/student/missions?mission={submission.mission.id}',
+            'action_url': f'/dashboard/student/missions?mission={mission.id if mission else ""}',
         })
     
     habits = Habit.objects.filter(user=user, type='core')

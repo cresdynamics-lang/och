@@ -41,13 +41,24 @@ export function useAuth() {
       const user = await djangoClient.auth.getCurrentUser();
       setState({ user, isLoading: false, isAuthenticated: true });
     } catch (error: any) {
-      console.error('Failed to load user:', error);
+      // Don't log connection errors (backend not running) as errors - this is expected
+      const isConnectionError = 
+        error?.status === 0 ||
+        error?.message?.includes('Cannot connect') ||
+        error?.message?.includes('Network Error') ||
+        error?.message?.includes('fetch failed') ||
+        error?.message?.includes('ECONNREFUSED');
+      
+      if (!isConnectionError) {
+        console.error('Failed to load user:', error);
+      }
+      
       // Token invalid or expired - only clear if it's an auth error
       if (error?.status === 401 || error?.response?.status === 401) {
         clearAuthTokens();
         setState({ user: null, isLoading: false, isAuthenticated: false });
       } else {
-        // For other errors, keep the token but mark as not authenticated
+        // For other errors (including connection errors), keep the token but mark as not authenticated
         setState({ user: null, isLoading: false, isAuthenticated: false });
       }
     }

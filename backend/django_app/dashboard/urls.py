@@ -18,6 +18,7 @@ urlpatterns = [
     path('sse/', views_websocket.dashboard_sse, name='sse'),
     
     # Portfolio endpoints - order matters! More specific routes first
+    path('portfolio/<str:user_id>/upload', portfolio_views.upload_portfolio_file, name='portfolio-upload'),
     path('portfolio/<str:user_id>/items', portfolio_views.create_portfolio_item, name='portfolio-create'),
     path('portfolio/<str:user_id>/health', portfolio_views.get_portfolio_health, name='portfolio-health'),
     path('portfolio/<str:user_id>', portfolio_views.get_portfolio_items, name='portfolio-items'),

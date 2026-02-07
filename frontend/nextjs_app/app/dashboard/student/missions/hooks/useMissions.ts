@@ -73,7 +73,7 @@ export function useMissions() {
   // Submit mission mutation
   const submitMission = useMutation({
     mutationFn: async ({ missionId, submission }: { missionId: string; submission: FormData }) => {
-      return await apiGateway.post(`/student/missions/${missionId}/submit`, submission, {
+      return await apiGateway.post(`/student/missions/${missionId}/submit-ai/`, submission, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     },
@@ -85,7 +85,7 @@ export function useMissions() {
   // Save draft mutation
   const saveDraft = useMutation({
     mutationFn: async ({ missionId, data }: { missionId: string; data: any }) => {
-      return await apiGateway.post(`/student/missions/${missionId}/draft`, data)
+      return await apiGateway.post(`/student/missions/${missionId}/save-draft/`, data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] })
@@ -95,7 +95,7 @@ export function useMissions() {
   // Upload artifacts mutation
   const uploadArtifacts = useMutation({
     mutationFn: async ({ submissionId, formData }: { submissionId: string; formData: FormData }) => {
-      return await apiGateway.post(`/student/missions/submissions/${submissionId}/artifacts`, formData, {
+      return await apiGateway.post(`/student/submissions/${submissionId}/upload/`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     },
@@ -107,7 +107,7 @@ export function useMissions() {
   // Submit for mentor review mutation
   const submitForMentor = useMutation({
     mutationFn: async (submissionId: string) => {
-      return await apiGateway.post(`/student/missions/submissions/${submissionId}/submit-mentor`, {})
+      return await apiGateway.post(`/student/missions/submissions/${submissionId}/submit-mentor/`, {})
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['missions'] })

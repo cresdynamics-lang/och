@@ -64,10 +64,10 @@ const mockThreads = {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const channelId = params.channelId;
+    const { channelId } = await params;
     const threads = mockThreads[channelId as keyof typeof mockThreads] || [];
 
     // In production, add pagination, sorting, filtering
@@ -98,10 +98,10 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { channelId: string } }
+  { params }: { params: Promise<{ channelId: string }> }
 ) {
   try {
-    const channelId = params.channelId;
+    const { channelId } = await params;
     const body = await request.json();
     const { title, thread_type, mission_id, recipe_slug, module_id } = body;
 

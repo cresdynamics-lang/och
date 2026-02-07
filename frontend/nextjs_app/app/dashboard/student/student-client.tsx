@@ -53,19 +53,39 @@ export default function StudentClient() {
 
     console.log('StudentClient: User is student/mentee, proceeding with checks');
 
-    // Check FastAPI profiling status
+    // Check profiling status - fetch fresh status from Django API
     const checkProfiling = async () => {
       try {
-        const status = await fastapiClient.profiling.checkStatus();
+        // CRITICAL: Fetch fresh user data directly from Django API
+        // This ensures admin resets are immediately respected
+        const { djangoClient } = await import('@/services/djangoClient');
+        let currentProfilingComplete = user.profiling_complete;
         
-        if (!status.completed) {
-          console.log('✅ Profiling not completed - redirecting to FastAPI profiling');
-          hasCheckedRef.current = true;
+        try {
+          console.log('StudentClient: Fetching fresh user data from Django...');
+          const freshUser = await djangoClient.auth.getCurrentUser();
+          currentProfilingComplete = freshUser?.profiling_complete ?? false;
+          console.log('StudentClient: Fresh profiling_complete =', currentProfilingComplete);
+          
+          // Also trigger a background refresh of the auth state
+          if (reloadUser) {
+            reloadUser();
+          }
+        } catch (err) {
+          console.log('StudentClient: Failed to fetch fresh user, using cached data');
+        }
+        
+        // Check Django's profiling_complete as SOURCE OF TRUTH
+        if (!currentProfilingComplete) {
+          console.log('✅ Django profiling_complete=false - redirecting to profiler');
           router.push('/onboarding/ai-profiler');
           return;
         }
         
-        console.log('✅ Profiling completed');
+        // Django says profiling is complete - TRUST IT, don't check FastAPI
+        // FastAPI may have stale session data that conflicts with Django
+        console.log('✅ Django profiling_complete=true - profiling verified complete');
+        
         setCheckingProfiling(false);
         setCheckingFoundations(true);
         
@@ -73,49 +93,88 @@ export default function StudentClient() {
         await checkFoundations();
       } catch (error: any) {
         console.error('❌ Failed to check profiling status:', error);
-        // On error, allow access but log it
-        // This prevents blocking dashboard access if FastAPI is down
+        
+        // On any error, redirect to profiler if profiling not complete
+        if (!user.profiling_complete) {
+          router.push('/onboarding/ai-profiler');
+          return;
+        }
+        
+        // Allow access if Django says complete
         setCheckingProfiling(false);
-        hasCheckedRef.current = true;
+        setCheckingFoundations(true);
+        await checkFoundations();
       }
     };
 
     const checkFoundations = async () => {
       try {
-        // Check if foundations_complete flag is set on user (from Django)
-        if (user.foundations_complete) {
-          console.log('✅ Foundations already completed');
+        // Check URL param first - if redirected from foundations completion, trust it
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('foundations_complete') === 'true') {
+          console.log('✅ Foundations just completed (URL param) - allowing access');
+          // Refresh user state in background
+          if (reloadUser) {
+            reloadUser().catch(console.error);
+          }
+          setCheckingFoundations(false);
+          hasCheckedRef.current = true;
+          return;
+        }
+
+        // CRITICAL: Fetch fresh user data from Django for foundations status
+        // The cached user object may be stale
+        const { djangoClient } = await import('@/services/djangoClient');
+        let currentFoundationsComplete = user.foundations_complete;
+        
+        try {
+          const freshUser = await djangoClient.auth.getCurrentUser();
+          currentFoundationsComplete = freshUser?.foundations_complete ?? false;
+          console.log('StudentClient: Fresh foundations_complete =', currentFoundationsComplete);
+        } catch (err) {
+          console.log('StudentClient: Failed to fetch fresh user for foundations check');
+        }
+
+        if (currentFoundationsComplete) {
+          console.log('✅ Foundations already completed (Django confirmed)');
           setCheckingFoundations(false);
           hasCheckedRef.current = true;
           return;
         }
 
         // Check Foundations status from API
-        const foundationsStatus = await foundationsClient.getStatus();
-        
-        if (!foundationsStatus.foundations_available) {
-          console.log('⚠️ Foundations not available:', foundationsStatus);
-          setCheckingFoundations(false);
-          hasCheckedRef.current = true;
-          return;
-        }
-
-        // If Foundations is not complete, redirect to Foundations
-        if (!foundationsStatus.is_complete) {
-          console.log('✅ Foundations not completed - redirecting to Foundations');
-          hasCheckedRef.current = true;
-          router.push('/dashboard/student/foundations');
-          return;
-        }
-
-        // If complete but user flag not updated, refresh user (fire and forget)
-        if (foundationsStatus.is_complete && !user.foundations_complete) {
-          if (reloadUser) {
-            reloadUser().catch(console.error);
+        try {
+          const foundationsStatus = await foundationsClient.getStatus();
+          
+          if (!foundationsStatus.foundations_available) {
+            console.log('⚠️ Foundations not available:', foundationsStatus);
+            // Don't redirect to profiler - we already confirmed profiling is complete above
+            // Just allow access to dashboard
+            setCheckingFoundations(false);
+            hasCheckedRef.current = true;
+            return;
           }
+
+          // If Foundations is not complete, redirect to Foundations
+          if (!foundationsStatus.is_complete) {
+            console.log('✅ Foundations not completed - redirecting to Foundations');
+            router.push('/dashboard/student/foundations');
+            return;
+          }
+
+          // If complete but user flag not updated, refresh user
+          if (foundationsStatus.is_complete && !currentFoundationsComplete) {
+            if (reloadUser) {
+              reloadUser().catch(console.error);
+            }
+          }
+
+          console.log('✅ Foundations completed');
+        } catch (foundationsError) {
+          console.error('⚠️ Failed to check foundations status:', foundationsError);
+          // On error, allow access - don't block the dashboard
         }
 
-        console.log('✅ Foundations completed');
         setCheckingFoundations(false);
         hasCheckedRef.current = true;
       } catch (error: any) {
@@ -126,13 +185,12 @@ export default function StudentClient() {
       }
     };
 
-    hasCheckedRef.current = true;
     checkProfiling();
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, user]);
 
-  // Show loading only briefly, then show dashboard immediately
-  // This prevents flash of old dashboard
-  if ((checkingProfiling || checkingFoundations) && isAuthenticated && !hasCheckedRef.current) {
+  // Show loading while checking profiling or foundations
+  // This prevents dashboard from rendering and making API calls before redirect
+  if ((checkingProfiling || checkingFoundations) && isAuthenticated) {
     return (
       <div className="min-h-screen bg-och-midnight flex items-center justify-center">
         <Card className="p-8">

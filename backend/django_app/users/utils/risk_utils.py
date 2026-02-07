@@ -66,8 +66,12 @@ def requires_mfa(risk_score, user_role=None, user=None):
     if settings.DEBUG and user and user.email.endswith('@test.com'):
         return False  # Skip MFA for ALL test users in development
 
-    # Role-based MFA requirement
-    if user_role in ['finance', 'admin']:
+    # In development, skip MFA for OCH users (@och.com) if MFA is not explicitly enabled
+    if settings.DEBUG and user and user.email.endswith('@och.com') and not user.mfa_enabled:
+        return False  # Skip MFA for OCH users in development if MFA not enabled
+
+    # Role-based MFA requirement (only if MFA is enabled on user)
+    if user_role in ['finance', 'admin'] and user and user.mfa_enabled:
         return True
 
     # Risk-based MFA requirement

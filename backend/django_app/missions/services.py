@@ -70,7 +70,24 @@ def generate_presigned_upload_url(submission_id: str, filename: str, content_typ
 def validate_file_type(filename: str, allowed_extensions: list = None) -> bool:
     """Validate file type."""
     if allowed_extensions is None:
-        allowed_extensions = ['.pdf', '.zip', '.png', '.jpg', '.jpeg', '.txt', '.log', '.json', '.xml']
+        allowed_extensions = [
+            # Documents
+            '.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt',
+            # Spreadsheets
+            '.xls', '.xlsx', '.csv',
+            # Presentations
+            '.ppt', '.pptx',
+            # Images
+            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg',
+            # Archives
+            '.zip', '.tar', '.gz', '.7z', '.rar',
+            # Code/Data
+            '.json', '.xml', '.yaml', '.yml', '.log',
+            # Scripts
+            '.py', '.js', '.sh', '.sql',
+            # Other
+            '.md', '.html', '.css'
+        ]
     file_ext = os.path.splitext(filename)[1].lower()
     return file_ext in allowed_extensions
 
@@ -83,12 +100,11 @@ def upload_file_to_storage(file: UploadedFile, submission_id: str) -> str:
     max_size = 10 * 1024 * 1024  # 10MB
     if file.size > max_size:
         raise ValueError(f"File exceeds {max_size / 1024 / 1024}MB limit")
-    
-    # Check file type (basic validation)
-    allowed_extensions = ['.pdf', '.zip', '.png', '.jpg', '.jpeg', '.txt', '.log', '.json', '.xml']
-    file_ext = os.path.splitext(file.name)[1].lower()
-    if file_ext not in allowed_extensions:
-        raise ValueError(f"File type {file_ext} not allowed")
+
+    # Check file type using validate_file_type function
+    if not validate_file_type(file.name):
+        file_ext = os.path.splitext(file.name)[1].lower()
+        raise ValueError(f"File type {file_ext} not allowed. Supported types: documents, images, archives, code files.")
     
     s3_client, bucket = get_s3_client()
     

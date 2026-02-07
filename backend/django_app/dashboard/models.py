@@ -8,7 +8,7 @@ User = get_user_model()
 
 class ReadinessScore(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='readiness_scores')
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='readiness_scores')
     score = models.IntegerField(default=0)
     max_score = models.IntegerField(default=100)
     trend = models.FloatField(default=0.0)
@@ -28,7 +28,7 @@ class ReadinessScore(models.Model):
 
 class CohortProgress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cohort_progress')
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='cohort_progress')
     cohort_id = models.UUIDField(null=True, blank=True, db_index=True)
     percentage = models.FloatField(default=0.0)
     current_module = models.CharField(max_length=255, blank=True)
@@ -49,7 +49,7 @@ class CohortProgress(models.Model):
 
 class PortfolioItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='portfolio_items')
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='portfolio_items')
     title = models.CharField(max_length=255)
     summary = models.TextField(blank=True, null=True)
     item_type = models.CharField(max_length=50, default='mission', choices=[
@@ -89,7 +89,7 @@ class PortfolioItem(models.Model):
 
 class MentorshipSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mentorship_sessions')
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='mentorship_sessions')
     mentor_name = models.CharField(max_length=255)
     mentor_avatar = models.URLField(blank=True)
     session_type = models.CharField(max_length=20, choices=[
@@ -116,7 +116,7 @@ class MentorshipSession(models.Model):
 
 class GamificationPoints(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='gamification_points')
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='gamification_points')
     points = models.IntegerField(default=0)
     streak = models.IntegerField(default=0)
     badges = models.IntegerField(default=0)
@@ -135,7 +135,7 @@ class GamificationPoints(models.Model):
 
 class DashboardEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dashboard_events', null=True, blank=True)
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='dashboard_events', null=True, blank=True)
     title = models.CharField(max_length=255)
     date = models.DateField()
     time = models.TimeField(null=True, blank=True)
@@ -170,7 +170,7 @@ class DashboardEvent(models.Model):
 
 class CommunityActivity(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='community_activities', null=True, blank=True)
+    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='community_activities', null=True, blank=True)
     user_display_name = models.CharField(max_length=255)
     action = models.CharField(max_length=255)
     activity_type = models.CharField(max_length=50, choices=[

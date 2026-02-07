@@ -6,11 +6,11 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string; notificationId: string } }
+  { params }: { params: Promise<{ userId: string; notificationId: string }> }
 ) {
   try {
-    const userId = params.userId;
-    const notificationId = params.notificationId;
+    const { userId } = await params;
+    const { notificationId } = await params;
 
     if (!userId || !notificationId) {
       return NextResponse.json(

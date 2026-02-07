@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const protectedRoutes = ['/dashboard'];
+const protectedRoutes = ['/dashboard', '/sponsor'];
 const openRoutes = [
   '/dashboard/student',
   '/dashboard/student/coaching',
@@ -20,7 +20,6 @@ const openRoutes = [
   '/dashboard/student/profiling',
   '/dashboard/student/settings',
   '/dashboard/student/settings/profile',
-  '/dashboard/sponsor',
   '/curriculum',
   '/curriculum/learn',
   '/onboarding',
@@ -32,7 +31,7 @@ function getLoginRouteForPath(pathname: string) {
   // Map dashboard routes to their corresponding login routes
   if (pathname.startsWith('/dashboard/director')) return '/login/director'
   if (pathname.startsWith('/dashboard/admin')) return '/login/admin'
-  if (pathname.startsWith('/mentor/dashboard')) return '/login/mentor'
+  if (pathname.startsWith('/dashboard/mentor')) return '/login/mentor'
   if (pathname.startsWith('/dashboard/sponsor')) return '/login/sponsor'
   if (pathname.startsWith('/dashboard/analyst') || pathname.startsWith('/dashboard/analytics')) return '/login/analyst'
   if (pathname.startsWith('/dashboard/employer') || pathname.startsWith('/dashboard/marketplace')) return '/login/employer'
@@ -88,7 +87,7 @@ function dashboardForRole(role: string | null): string {
   switch (role) {
     case 'admin': return '/dashboard/admin'
     case 'program_director': return '/dashboard/director'
-    case 'mentor': return '/mentor/dashboard'
+    case 'mentor': return '/dashboard/mentor'
     case 'analyst': return '/dashboard/analyst'
     case 'sponsor_admin': return '/dashboard/sponsor'
     case 'employer': return '/dashboard/employer'
@@ -110,10 +109,15 @@ function canAccess(pathname: string, roles: string[]): boolean {
     return roles.includes('student') || roles.includes('mentee')
   }
 
+  // Handle sponsor routes
+  if (pathname.startsWith('/sponsor/')) {
+    return roles.includes('sponsor') || roles.includes('sponsor_admin')
+  }
+
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
     if (pathname.startsWith('/dashboard/director')) return roles.includes('program_director')
     if (pathname.startsWith('/dashboard/admin')) return roles.includes('admin')
-    if (pathname.startsWith('/mentor/dashboard')) return roles.includes('mentor')
+    if (pathname.startsWith('/dashboard/mentor')) return roles.includes('mentor')
     if (pathname.startsWith('/dashboard/sponsor')) return roles.includes('sponsor_admin')
     if (pathname.startsWith('/dashboard/sponsor/marketplace')) return roles.includes('sponsor_admin')
     if (pathname.startsWith('/dashboard/analyst')) return roles.includes('analyst')
@@ -134,7 +138,14 @@ export function middleware(request: NextRequest) {
   const primaryRoleCookie = request.cookies.get('och_primary_role')?.value || null;
   const dashboardCookie = request.cookies.get('och_dashboard')?.value || null;
   const roles = parseRolesCookie(rolesCookie);
-  const home = dashboardCookie || dashboardForRole(primaryRoleCookie);
+  let home = dashboardCookie || dashboardForRole(primaryRoleCookie);
+  
+  // CRITICAL: Ensure mentors always get mentor dashboard as home
+  // This prevents redirects to student dashboard
+  if (roles.includes('mentor') && (!home || home === '/dashboard/student')) {
+    console.log('middleware: Mentor detected but home is not mentor dashboard, correcting:', home);
+    home = '/dashboard/mentor';
+  }
 
   // Check if route is protected
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
@@ -174,7 +185,8 @@ export function middleware(request: NextRequest) {
   }
 
   // Server-side RBAC for dashboard routes (best effort; falls back to client guard if roles cookie missing)
-  if (hasToken && pathname.startsWith('/dashboard') && roles.length > 0) {
+  // Skip RBAC check for student routes - they're open routes and should be accessible
+  if (hasToken && pathname.startsWith('/dashboard') && roles.length > 0 && !pathname.startsWith('/dashboard/student')) {
     // Redirect /dashboard to role home
     if (pathname === '/dashboard' || pathname === '/dashboard/') {
       console.log('middleware: Redirecting /dashboard to role home:', home);
@@ -182,13 +194,20 @@ export function middleware(request: NextRequest) {
     }
 
     if (!canAccess(pathname, roles)) {
-      console.log('middleware: Access denied to', pathname, 'for roles:', roles, '- redirecting to home:', home);
-      return NextResponse.redirect(new URL(home, request.url));
+      // CRITICAL: Before redirecting, ensure mentors don't get student dashboard
+      let redirectHome = home;
+      if (roles.includes('mentor') && (!redirectHome || redirectHome === '/dashboard/student')) {
+        console.log('middleware: 🚨 CRITICAL - Mentor access denied but home is student dashboard, correcting');
+        redirectHome = '/dashboard/mentor';
+      }
+      console.log('middleware: Access denied to', pathname, 'for roles:', roles, '- redirecting to home:', redirectHome);
+      return NextResponse.redirect(new URL(redirectHome, request.url));
     }
   }
 
   // Additional validation: ensure role-specific dashboards exist
-  if (hasToken && pathname.startsWith('/dashboard/') && roles.length > 0) {
+  // Skip this check for student routes - they're open routes
+  if (hasToken && pathname.startsWith('/dashboard/') && roles.length > 0 && !pathname.startsWith('/dashboard/student')) {
     const roleFromPath = pathname.split('/')[2]; // Extract role from /dashboard/{role}/...
     if (roleFromPath) {
       // Map path role to actual roles
@@ -196,7 +215,7 @@ export function middleware(request: NextRequest) {
         'director': ['program_director'],
         'admin': ['admin'],
         'mentor': ['mentor'],
-        'sponsor': ['sponsor_admin'],
+        'sponsor': ['sponsor', 'sponsor_admin'],
         'analyst': ['analyst'],
         'analytics': ['analyst', 'program_director'],
         'employer': ['employer'],
@@ -207,8 +226,14 @@ export function middleware(request: NextRequest) {
 
       const allowedRoles = pathRoleMapping[roleFromPath];
       if (allowedRoles && !allowedRoles.some(role => roles.includes(role))) {
-        console.log('middleware: User with roles', roles, 'trying to access', pathname, '- redirecting to their home dashboard:', home);
-        return NextResponse.redirect(new URL(home, request.url));
+        // CRITICAL: Before redirecting, ensure mentors don't get student dashboard
+        let redirectHome = home;
+        if (roles.includes('mentor') && (!redirectHome || redirectHome === '/dashboard/student')) {
+          console.log('middleware: 🚨 CRITICAL - Mentor role validation failed but home is student dashboard, correcting');
+          redirectHome = '/dashboard/mentor';
+        }
+        console.log('middleware: User with roles', roles, 'trying to access', pathname, '- redirecting to their home dashboard:', redirectHome);
+        return NextResponse.redirect(new URL(redirectHome, request.url));
       }
     }
   }

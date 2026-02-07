@@ -16,10 +16,10 @@ interface CurriculumProgressUpdate {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const userId = params.userId;
+    const { userId } = await params;
     const body: CurriculumProgressUpdate = await request.json();
 
     const {

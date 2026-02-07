@@ -39,8 +39,22 @@ export default function ShortlistPage() {
       const logs = Array.isArray(response) ? response : (response?.results || [])
       setShortlist(logs)
     } catch (err: any) {
-      console.error('Failed to load shortlist:', err)
-      setError(err.message || 'Failed to load shortlist')
+      // Silently handle missing endpoints
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const isNotFound = errorStatus === 404;
+      const isConnectionError = err?.message?.includes('Cannot connect to backend server') ||
+                               err?.message?.includes('fetch failed');
+      
+      if (isNotFound || isConnectionError) {
+        setShortlist([]);
+        setError(null); // Don't show error for missing endpoints
+      } else {
+        const hasErrorContent = err?.message || err?.data || (err && Object.keys(err).length > 0);
+        if (hasErrorContent) {
+          console.error('Failed to load shortlist:', err);
+        }
+        setError(err.message || 'Failed to load shortlist');
+      }
     } finally {
       setLoading(false)
     }
@@ -58,8 +72,23 @@ export default function ShortlistPage() {
       
       setFavoritedProfiles(new Set(favoriteLogs.map((log: EmployerInterestLog) => log.profile.id)))
       setShortlistedProfiles(new Set(shortlistLogs.map((log: EmployerInterestLog) => log.profile.id)))
-    } catch (err) {
-      console.error('Failed to load favorites/shortlists:', err)
+    } catch (err: any) {
+      // Silently handle missing endpoints
+      const errorStatus = err?.status || err?.response?.status || 0;
+      const isNotFound = errorStatus === 404;
+      const isConnectionError = err?.message?.includes('Cannot connect to backend server') ||
+                               err?.message?.includes('fetch failed');
+      
+      // Only log if it's not a 404 or connection error and has meaningful content
+      if (!isNotFound && !isConnectionError) {
+        const hasErrorContent = err?.message || err?.data || (err && Object.keys(err).length > 0);
+        if (hasErrorContent) {
+          console.error('Failed to load favorites/shortlists:', err);
+        }
+      }
+      // Silently set empty state for missing endpoints
+      setFavoritedProfiles(new Set());
+      setShortlistedProfiles(new Set());
     }
   }
 

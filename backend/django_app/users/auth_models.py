@@ -23,7 +23,7 @@ class MFAMethod(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_methods')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_methods', to_field='uuid_id')
     method_type = models.CharField(max_length=20, choices=METHOD_TYPES)
     
     # TOTP specific (RFC 6238)
@@ -57,8 +57,8 @@ class MFACode(models.Model):
     """
     Temporary MFA codes (OTP, magic links).
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_codes')
-    code = models.CharField(max_length=10, db_index=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_codes', to_field='uuid_id')
+    code = models.CharField(max_length=64, db_index=True)  # Increased for magic link tokens
     method = models.CharField(max_length=20)  # totp, sms, email
     expires_at = models.DateTimeField(db_index=True)
     used = models.BooleanField(default=False)
@@ -122,7 +122,7 @@ class SSOConnection(models.Model):
     """
     User's SSO connection/linking.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sso_connections')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sso_connections', to_field='uuid_id')
     provider = models.ForeignKey(SSOProvider, on_delete=models.CASCADE, related_name='connections')
     external_id = models.CharField(max_length=255, db_index=True)  # User ID from provider
     external_email = models.EmailField(null=True, blank=True)
@@ -149,7 +149,7 @@ class UserSession(models.Model):
     User session management with device tracking and refresh token binding.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions', to_field='uuid_id')
     
     # Device tracking
     device_fingerprint = models.CharField(max_length=255, db_index=True)
@@ -189,7 +189,7 @@ class DeviceTrust(models.Model):
     """
     Trusted devices for users (skip MFA on trusted devices).
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trusted_devices')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trusted_devices', to_field='uuid_id')
     device_id = models.UUIDField(unique=True, db_index=True, default=uuid.uuid4)
     device_name = models.CharField(max_length=255)
     device_type = models.CharField(max_length=50)

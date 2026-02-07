@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { marketplaceClient, type MarketplaceProfile, type EmployerInterestLog, type JobPosting, type JobApplication } from '@/services/marketplaceClient'
 import { useAuth } from '@/hooks/useAuth'
 import { useJobApplications } from '@/hooks/useMarketplace'
@@ -13,7 +13,7 @@ import { Eye, EyeOff, CheckCircle, XCircle, TrendingUp, Clock, User, Mail, Build
 import Link from 'next/link'
 
 export default function MarketplaceProfilePage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
   const [activeTab, setActiveTab] = useState('profile')
   const [profile, setProfile] = useState<MarketplaceProfile | null>(null)
   const [contactRequests, setContactRequests] = useState<EmployerInterestLog[]>([])
@@ -224,57 +224,16 @@ export default function MarketplaceProfilePage() {
         stack: err?.stack
       }, null, 2))
 
-      // Provide mock profile data when not authenticated
+      // Show the real error
       const isAuthError = err?.status === 401 ||
                          err?.response?.status === 401 ||
                          err?.message?.includes('401') ||
-                         err?.message?.includes('Authentication') ||
-                         err?.message?.includes('credentials')
-
-      console.log('Is auth error:', isAuthError)
+                         err?.message?.includes('Authentication')
 
       if (isAuthError) {
-        setProfile({
-          id: 'mock-profile',
-          mentee_id: 'mock-user',
-          mentee_name: 'Demo Student',
-          mentee_email: 'demo@student.com',
-          tier: 'free',
-          readiness_score: 75,
-          job_fit_score: 80,
-          hiring_timeline_days: 90,
-          profile_status: 'emerging_talent',
-          primary_role: 'Cybersecurity Analyst',
-          primary_track_key: 'defender',
-          skills: ['Python', 'Network Security', 'SIEM', 'Incident Response'],
-          portfolio_depth: 'moderate',
-          is_visible: false,
-          employer_share_consent: false,
-          updated_at: new Date().toISOString()
-        })
-        setError(null) // Clear error when showing mock data
+        setError('Please log in to view your marketplace profile')
       } else {
-        // For any other error, still show mock data to provide a good user experience
-        console.log('Showing mock data for non-auth error')
-        setProfile({
-          id: 'mock-profile',
-          mentee_id: 'mock-user',
-          mentee_name: 'Demo Student',
-          mentee_email: 'demo@student.com',
-          tier: 'free',
-          readiness_score: 75,
-          job_fit_score: 80,
-          hiring_timeline_days: 90,
-          profile_status: 'emerging_talent',
-          primary_role: 'Cybersecurity Analyst',
-          primary_track_key: 'defender',
-          skills: ['Python', 'Network Security', 'SIEM', 'Incident Response'],
-          portfolio_depth: 'moderate',
-          is_visible: false,
-          employer_share_consent: false,
-          updated_at: new Date().toISOString()
-        })
-        setError('Viewing sample profile. Sign in to access your personalized marketplace profile.')
+        setError(err.message || 'Failed to load marketplace profile')
       }
     } finally {
       setLoading(false)
@@ -556,19 +515,30 @@ export default function MarketplaceProfilePage() {
     return 'steel'
   }
 
-  if (loading && !profile) {
+  // Wait for auth to load before checking authentication
+  if (authLoading || (loading && !profile)) {
     return (
       <div className="min-h-screen bg-och-midnight p-6">
         <div className="max-w-7xl mx-auto">
           <Card className="p-8">
-            <div className="text-center text-och-steel">Loading marketplace...</div>
+            <div className="text-center text-och-steel">
+              {authLoading ? 'Loading...' : 'Loading marketplace...'}
+            </div>
           </Card>
         </div>
       </div>
     )
   }
 
-  if (error && !profile) {
+  // Check for token even if isAuthenticated is false (might be loading)
+  const hasToken = typeof window !== 'undefined' && (
+    localStorage.getItem('access_token') ||
+    document.cookie.includes('access_token=')
+  );
+
+  // Only show error if auth has finished loading AND there's no token AND no profile
+  // If token exists, allow access even if profile failed to load (will show mock data)
+  if (!authLoading && !isAuthenticated && !hasToken && error && !profile) {
     return (
       <div className="min-h-screen bg-och-midnight p-6">
         <div className="max-w-7xl mx-auto">

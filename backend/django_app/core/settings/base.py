@@ -305,6 +305,10 @@ EMAIL_USE_TLS = _use_tls and not _use_ssl
 ACTIVATION_TOKEN_EXPIRY = int(os.environ.get('ACTIVATION_TOKEN_EXPIRY', 24))
 PASSWORD_RESET_TOKEN_EXPIRY = int(os.environ.get('PASSWORD_RESET_TOKEN_EXPIRY', 1))
 
+# AI/LLM Configuration
+CHAT_GPT_API_KEY = os.environ.get('CHAT_GPT_API_KEY', os.environ.get('OPENAI_API_KEY', ''))
+AI_COACH_MODEL = os.environ.get('AI_COACH_MODEL', 'gpt-4o-mini')
+
 # drf-spectacular (Swagger/OpenAPI) Settings
 SPECTACULAR_SETTINGS = {
     'TITLE': 'OCH Cyber Talent Engine API',

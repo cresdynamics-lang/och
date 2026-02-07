@@ -158,7 +158,7 @@ export default function RoleSignupPage() {
           // For other roles, redirect to role-specific dashboard or onboarding
           switch (role) {
             case 'mentor':
-              router.push('/mentor/dashboard');
+              router.push('/dashboard/mentor');
               break;
             case 'director':
             case 'program_director':
