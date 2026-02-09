@@ -77,6 +77,7 @@ class PortfolioItem(models.Model):
     ], default='private')
     skill_tags = models.TextField(blank=True, null=True, help_text='JSON array of skill tags')
     evidence_files = models.TextField(blank=True, null=True, help_text='JSON array of evidence file objects')
+    profiler_session_id = models.UUIDField(null=True, blank=True, db_index=True, help_text='Link to profiler session that created this entry')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

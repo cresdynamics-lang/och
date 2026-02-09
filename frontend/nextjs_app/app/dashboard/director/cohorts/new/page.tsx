@@ -170,7 +170,7 @@ export default function CreateCohortPage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-4xl mx-auto">
           <div className="mb-6">

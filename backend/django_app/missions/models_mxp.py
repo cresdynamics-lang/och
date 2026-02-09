@@ -88,6 +88,16 @@ class MissionProgress(models.Model):
         blank=True
     )
     reflection = models.TextField(blank=True, help_text='Student reflection on mission')
+    reflection_required = models.BooleanField(default=False, help_text='Mission requires reflection submission')
+    reflection_submitted = models.BooleanField(default=False, help_text='Reflection has been submitted')
+    decision_paths = models.JSONField(default=dict, blank=True, help_text='User decisions: {decision_id: choice_id, timestamp: iso}')
+    time_per_stage = models.JSONField(default=dict, blank=True, help_text='Time spent per subtask: {subtask_id: minutes_spent}')
+    hints_used = models.JSONField(default=list, blank=True, help_text='Hints accessed: [{subtask_id: int, hint_level: int, timestamp: iso}]')
+    tools_used = models.JSONField(default=list, blank=True, help_text='Tools used during mission: [tool_name]')
+    drop_off_stage = models.IntegerField(null=True, blank=True, help_text='Subtask number where user dropped off')
+    subtask_scores = models.JSONField(default=dict, blank=True, help_text='Mentor scores per subtask: {subtask_id: score}')
+    mentor_recommended_recipes = models.JSONField(default=list, blank=True, help_text='Recipes recommended by mentor: [recipe_id or slug]')
+    mentor_reviewed_at = models.DateTimeField(null=True, blank=True, help_text='When mentor completed review')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

@@ -60,7 +60,7 @@ export default function EnrollmentPage() {
       try {
         console.log('Loading cohorts...')
         // Use the same API call as the cohorts page
-        const cohortsData = await apiGateway.get('/cohorts/')
+        const cohortsData = await apiGateway.get('/cohorts/') as any
         console.log('Cohorts response:', cohortsData)
         const cohortsList = cohortsData?.results || cohortsData?.data || cohortsData || []
         console.log('Cohorts list:', cohortsList)
@@ -539,7 +539,7 @@ export default function EnrollmentPage() {
                 onClick={async () => {
                   setIsLoading(true)
                   try {
-                    const cohortsData = await apiGateway.get('/cohorts/')
+                    const cohortsData = await apiGateway.get('/cohorts/') as any
                     const cohortsList = cohortsData?.results || cohortsData?.data || cohortsData || []
                     setCohorts(cohortsList)
 

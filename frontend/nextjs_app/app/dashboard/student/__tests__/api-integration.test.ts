@@ -2,6 +2,7 @@
  * API Integration Test
  * Tests API hooks with mock and real data
  */
+import React from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useDashboardOverview, useDashboardMetrics } from '../lib/hooks/useDashboard'

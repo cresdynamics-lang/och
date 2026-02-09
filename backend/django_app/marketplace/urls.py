@@ -30,6 +30,7 @@ from .admin_views import (
     AdminMarketplaceAnalyticsView,
     AdminMarketplaceSettingsView,
 )
+from .profiler_integration import get_talent_matches_by_profiler
 
 
 urlpatterns = [
@@ -202,6 +203,12 @@ urlpatterns = [
         'admin/marketplace/settings/',
         AdminMarketplaceSettingsView.as_view(),
         name='admin-marketplace-settings',
+    ),
+    # Profiler-based talent matching (future feature)
+    path(
+        'marketplace/talent-matches/profiler',
+        get_talent_matches_by_profiler,
+        name='profiler-talent-matches',
     ),
 ]
 

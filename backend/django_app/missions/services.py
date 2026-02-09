@@ -1,240 +1,92 @@
 """
-Mission services - File upload, S3 integration, etc.
+Missions Engine services for difficulty mapping and mission assignment.
 """
-import os
 import logging
-from django.conf import settings
-from django.core.files.storage import default_storage
-from django.core.files.uploadedfile import UploadedFile
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-try:
-    import boto3
-    from botocore.exceptions import ClientError
-    S3_AVAILABLE = True
-except ImportError:
-    S3_AVAILABLE = False
-    logger.warning("boto3 not available, using local storage")
 
-
-def get_s3_client():
-    """Get S3 client if configured."""
-    if not S3_AVAILABLE:
-        return None, None
-    
-    aws_access_key = os.environ.get('AWS_ACCESS_KEY_ID')
-    aws_secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    aws_region = os.environ.get('AWS_REGION', 'us-east-1')
-    s3_bucket = os.environ.get('S3_MISSIONS_BUCKET')
-    
-    if not all([aws_access_key, aws_secret_key, s3_bucket]):
-        return None, None
-    
-    client = boto3.client(
-        's3',
-        aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key,
-        region_name=aws_region
-    )
-    return client, s3_bucket
-
-
-def generate_presigned_upload_url(submission_id: str, filename: str, content_type: str, max_size_mb: int = 10):
+def map_profiler_difficulty_to_mission_difficulty(profiler_difficulty: str) -> int:
     """
-    Generate presigned URL for S3 upload.
-    Returns (presigned_url, object_key) or (None, None) if S3 not configured.
+    Map profiler difficulty_selection to mission difficulty (1-5).
+    
+    Mission difficulty scale:
+    1 = Beginner
+    2 = Intermediate
+    3 = Advanced
+    4 = Expert
+    5 = Master
+    
+    Profiler difficulty options:
+    - novice: No experience
+    - beginner: Some awareness
+    - intermediate: Some training
+    - advanced: Professional experience
+    - elite: Expert level
+    
+    Args:
+        profiler_difficulty: Profiler difficulty_selection value
+        
+    Returns:
+        Mission difficulty level (1-5), defaults to 1 (Beginner)
     """
-    s3_client, bucket = get_s3_client()
-    if not s3_client:
-        return None, None
+    if not profiler_difficulty:
+        return 1  # Default to beginner
     
-    object_key = f'missions/{submission_id}/{filename}'
+    mapping = {
+        'novice': 1,      # Beginner missions
+        'beginner': 1,    # Beginner missions
+        'intermediate': 2,  # Intermediate missions
+        'advanced': 3,    # Advanced missions
+        'elite': 4,       # Expert missions (can access up to Expert level)
+    }
     
+    difficulty = mapping.get(profiler_difficulty.lower(), 1)
+    logger.debug(f"Mapped profiler difficulty '{profiler_difficulty}' to mission difficulty {difficulty}")
+    return difficulty
+
+
+def get_user_profiler_difficulty(user) -> Optional[str]:
+    """
+    Get user's profiler difficulty selection.
+    
+    Args:
+        user: User instance
+        
+    Returns:
+        Profiler difficulty_selection string or None if not available
+    """
     try:
-        presigned_url = s3_client.generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': bucket,
-                'Key': object_key,
-                'ContentType': content_type,
-            },
-            ExpiresIn=3600,  # 1 hour
-        )
-        return presigned_url, object_key
-    except ClientError as e:
-        logger.error(f"Failed to generate presigned URL: {e}")
-        return None, None
+        from profiler.models import ProfilerSession
+        
+        profiler_session = ProfilerSession.objects.filter(
+            user=user,
+            status__in=['finished', 'locked']
+        ).order_by('-completed_at').first()
+        
+        if profiler_session and profiler_session.difficulty_selection:
+            return profiler_session.difficulty_selection
+        
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get profiler difficulty for user {user.id}: {e}", exc_info=True)
+        return None
 
 
-def validate_file_type(filename: str, allowed_extensions: list = None) -> bool:
-    """Validate file type."""
-    if allowed_extensions is None:
-        allowed_extensions = [
-            # Documents
-            '.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt',
-            # Spreadsheets
-            '.xls', '.xlsx', '.csv',
-            # Presentations
-            '.ppt', '.pptx',
-            # Images
-            '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg',
-            # Archives
-            '.zip', '.tar', '.gz', '.7z', '.rar',
-            # Code/Data
-            '.json', '.xml', '.yaml', '.yml', '.log',
-            # Scripts
-            '.py', '.js', '.sh', '.sql',
-            # Other
-            '.md', '.html', '.css'
-        ]
-    file_ext = os.path.splitext(filename)[1].lower()
-    return file_ext in allowed_extensions
-
-
-def upload_file_to_storage(file: UploadedFile, submission_id: str) -> str:
+def get_max_mission_difficulty_for_user(user) -> int:
     """
-    Upload file to S3 or local storage.
-    Returns the file URL.
-    """
-    max_size = 10 * 1024 * 1024  # 10MB
-    if file.size > max_size:
-        raise ValueError(f"File exceeds {max_size / 1024 / 1024}MB limit")
-
-    # Check file type using validate_file_type function
-    if not validate_file_type(file.name):
-        file_ext = os.path.splitext(file.name)[1].lower()
-        raise ValueError(f"File type {file_ext} not allowed. Supported types: documents, images, archives, code files.")
+    Get maximum mission difficulty level user can access based on profiler.
     
-    s3_client, bucket = get_s3_client()
-    
-    if s3_client:
-        # Upload to S3
-        object_key = f'missions/{submission_id}/{file.name}'
-        try:
-            s3_client.upload_fileobj(
-                file,
-                bucket,
-                object_key,
-                ExtraArgs={
-                    'ContentType': file.content_type or 'application/octet-stream',
-                    'ACL': 'private',  # Private by default
-                }
-            )
-            # Generate CDN URL or presigned URL
-            cdn_domain = os.environ.get('S3_CDN_DOMAIN') or os.environ.get('CDN_DOMAIN')
-            if cdn_domain:
-                # Use CDN URL for faster access
-                file_url = f"https://{cdn_domain}/{object_key}"
-            else:
-                # Fallback to presigned URL
-                file_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket, 'Key': object_key},
-                    ExpiresIn=604800  # 7 days
-                )
-            return file_url
-        except ClientError as e:
-            logger.error(f"S3 upload failed: {e}")
-            raise ValueError("Failed to upload file to storage")
-    else:
-        # Fallback to local storage
-        upload_path = f'missions/{submission_id}/{file.name}'
-        saved_path = default_storage.save(upload_path, file)
-        return default_storage.url(saved_path)
-
-
-def scan_file_for_viruses(file_path: str) -> bool:
+    Args:
+        user: User instance
+        
+    Returns:
+        Maximum mission difficulty (1-5)
     """
-    Scan file for viruses (placeholder - integrate with ClamAV or similar).
-    Returns True if file is safe.
-    """
-    # TODO: Integrate with ClamAV or AWS Macie
-    # For now, return True (no scanning)
-    # In production, integrate with:
-    # - ClamAV for on-premise scanning
-    # - AWS Macie for cloud-based scanning
-    # - VirusTotal API for third-party scanning
-    return True
-
-
-def chunk_upload_file(file: UploadedFile, submission_id: str, chunk_size: int = 5 * 1024 * 1024) -> str:
-    """
-    Upload large file in chunks for better progress tracking.
-    Returns the final file URL.
-    """
-    # If this is a single chunk, handle it
-    if chunk_index is not None and total_chunks:
-        # This is a chunk - for now, upload as regular file
-        # In production, implement proper chunk assembly
-        return upload_file_to_storage(file, submission_id)
+    profiler_difficulty = get_user_profiler_difficulty(user)
+    if profiler_difficulty:
+        return map_profiler_difficulty_to_mission_difficulty(profiler_difficulty)
     
-    # For files larger than chunk_size, upload in chunks
-    if file.size <= chunk_size:
-        return upload_file_to_storage(file, submission_id)
-    
-    # Chunked upload implementation
-    # This is a simplified version - in production, use resumable uploads
-    s3_client, bucket = get_s3_client()
-    
-    if s3_client:
-        # Use multipart upload for large files
-        object_key = f'missions/{submission_id}/{file.name}'
-        try:
-            # Initiate multipart upload
-            multipart = s3_client.create_multipart_upload(
-                Bucket=bucket,
-                Key=object_key,
-                ContentType=file.content_type or 'application/octet-stream',
-            )
-            upload_id = multipart['UploadId']
-            
-            parts = []
-            part_number = 1
-            file.seek(0)
-            
-            while True:
-                chunk = file.read(chunk_size)
-                if not chunk:
-                    break
-                
-                # Upload part
-                part = s3_client.upload_part(
-                    Bucket=bucket,
-                    Key=object_key,
-                    PartNumber=part_number,
-                    UploadId=upload_id,
-                    Body=chunk,
-                )
-                parts.append({
-                    'ETag': part['ETag'],
-                    'PartNumber': part_number
-                })
-                part_number += 1
-            
-            # Complete multipart upload
-            s3_client.complete_multipart_upload(
-                Bucket=bucket,
-                Key=object_key,
-                UploadId=upload_id,
-                MultipartUpload={'Parts': parts}
-            )
-            
-            # Generate CDN URL or presigned URL
-            cdn_domain = os.environ.get('S3_CDN_DOMAIN') or os.environ.get('CDN_DOMAIN')
-            if cdn_domain:
-                file_url = f"https://{cdn_domain}/{object_key}"
-            else:
-                file_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket, 'Key': object_key},
-                    ExpiresIn=604800
-                )
-            return file_url
-        except ClientError as e:
-            logger.error(f"Chunked upload failed: {e}")
-            raise ValueError("Failed to upload file")
-    else:
-        # Fallback to regular upload for local storage
-        return upload_file_to_storage(file, submission_id)
-
+    # Default to beginner if no profiler data
+    return 1

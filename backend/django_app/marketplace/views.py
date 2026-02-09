@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes
 import logging
 
 from users.utils.consent_utils import check_consent
@@ -21,6 +22,25 @@ from .serializers import (
     JobApplicationSerializer,
     JobApplicationCreateSerializer,
 )
+
+# Export for URLs
+__all__ = [
+    'MarketplaceTalentListView',
+    'MarketplaceProfileMeView',
+    'EmployerInterestLogView',
+    'EmployerInterestListView',
+    'StudentContactRequestsView',
+    'JobPostingListCreateView',
+    'JobPostingRetrieveUpdateDestroyView',
+    'StudentJobBrowseView',
+    'StudentJobDetailView',
+    'StudentJobApplicationView',
+    'StudentJobApplicationsView',
+    'StudentJobApplicationDetailView',
+    'EmployerJobApplicationsView',
+    'EmployerJobApplicationDetailView',
+    'AdminMarketplaceSettingsView',
+]
 
 
 class IsEmployer(permissions.BasePermission):

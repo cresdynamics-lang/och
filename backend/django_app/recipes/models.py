@@ -20,6 +20,15 @@ class Recipe(models.Model):
         ('advanced', 'Advanced'),
     ]
     
+    RECIPE_TYPE_CHOICES = [
+        ('technical', 'Technical'),
+        ('analysis', 'Analysis'),
+        ('documentation', 'Documentation'),
+        ('leadership', 'Leadership'),
+        ('decision', 'Decision'),
+        ('innovation', 'Innovation'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255, db_index=True, help_text='e.g., "Write Basic Sigma Rule"')
     slug = models.SlugField(max_length=255, unique=True, db_index=True, help_text='URL-friendly identifier')
@@ -31,6 +40,13 @@ class Recipe(models.Model):
         choices=DIFFICULTY_CHOICES,
         default='beginner',
         db_index=True
+    )
+    recipe_type = models.CharField(
+        max_length=20,
+        choices=RECIPE_TYPE_CHOICES,
+        default='technical',
+        db_index=True,
+        help_text='Recipe type: technical/analysis/documentation/leadership/decision/innovation'
     )
     estimated_minutes = models.IntegerField(
         validators=[MinValueValidator(5), MaxValueValidator(60)],

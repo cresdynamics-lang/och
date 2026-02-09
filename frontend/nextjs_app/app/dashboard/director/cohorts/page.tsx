@@ -21,8 +21,8 @@ export default function CohortsPage() {
 
   const fetchCohorts = async () => {
     try {
-      const data = await apiGateway.get('/cohorts/')
-      setCohorts(data.results || data.data || data || [])
+      const data = await apiGateway.get('/cohorts/') as any
+      setCohorts(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch cohorts:', error)
     } finally {
@@ -32,7 +32,7 @@ export default function CohortsPage() {
 
   if (isLoading) {
     return (
-      <RouteGuard allowedRoles={['program_director', 'admin']}>
+      <RouteGuard requiredRoles={['program_director', 'admin']}>
         <DirectorLayout>
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-defender"></div>
@@ -43,7 +43,7 @@ export default function CohortsPage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">

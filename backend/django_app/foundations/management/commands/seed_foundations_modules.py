@@ -20,6 +20,8 @@ class Command(BaseCommand):
                 'order': 1,
                 'is_mandatory': True,
                 'estimated_minutes': 5,
+                'video_url': '',  # TODO: Add video URL when available
+                'diagram_url': '',  # TODO: Add OCH Ecosystem Map diagram URL when available
                 'content': '''
                     <h2>Welcome to Ongoza CyberHub</h2>
                     <p>OCH is a mission-driven, role-based cybersecurity learning platform designed to transform beginners into industry-ready professionals.</p>
@@ -38,6 +40,8 @@ class Command(BaseCommand):
                 'order': 2,
                 'is_mandatory': True,
                 'estimated_minutes': 8,
+                'video_url': '',  # TODO: Add video URL when available
+                'diagram_url': '',  # TODO: Add Mission/Recipe Engine diagram URL when available
                 'content': '''
                     <h2>Mission-Driven Learning</h2>
                     <p><strong>Missions</strong> are real-world cybersecurity scenarios that challenge you to solve actual problems.</p>
@@ -52,6 +56,8 @@ class Command(BaseCommand):
                 'order': 3,
                 'is_mandatory': True,
                 'estimated_minutes': 10,
+                'video_url': '',  # Not applicable for interactive modules
+                'diagram_url': '',  # TODO: Add Learning Pathway Map diagram URL when available
                 'content': '''
                     <h2>OCH Tracks</h2>
                     <p>OCH offers 5 specialized tracks:</p>
@@ -109,6 +115,8 @@ class Command(BaseCommand):
                 'order': 6,
                 'is_mandatory': True,
                 'estimated_minutes': 7,
+                'video_url': '',  # TODO: Add video URL when available
+                'diagram_url': '',  # TODO: Add Portfolio Flow diagram URL when available
                 'content': '''
                     <h2>Portfolio & Marketplace</h2>
                     <p>As you complete missions, you build a portfolio of real work that demonstrates your skills.</p>
@@ -195,6 +203,8 @@ class Command(BaseCommand):
                     'is_mandatory': module_data['is_mandatory'],
                     'estimated_minutes': module_data['estimated_minutes'],
                     'content': module_data.get('content', ''),
+                    'video_url': module_data.get('video_url', ''),
+                    'diagram_url': module_data.get('diagram_url', ''),
                     'is_active': True,
                 }
             )

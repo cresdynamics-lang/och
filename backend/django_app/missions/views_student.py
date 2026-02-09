@@ -172,8 +172,19 @@ def list_student_missions(request):
     # Base queryset - only active missions
     missions = Mission.objects.filter(is_active=True)
     
-    # Apply filters
-    if difficulty_filter != 'all':
+    # Apply profiler-based difficulty filtering if no explicit filter
+    if difficulty_filter == 'all':
+        try:
+            from missions.services import get_max_mission_difficulty_for_user
+            max_difficulty = get_max_mission_difficulty_for_user(user)
+            missions = missions.filter(difficulty__lte=max_difficulty)
+            logger.debug(f"Filtered missions by profiler difficulty for user {user.id}: max_difficulty={max_difficulty}")
+        except Exception as e:
+            logger.warning(f"Failed to apply profiler difficulty filter for user {user.id}: {e}", exc_info=True)
+            # Fallback: show beginner missions only
+            missions = missions.filter(difficulty=1)
+    else:
+        # Apply explicit difficulty filter
         missions = missions.filter(difficulty=difficulty_filter)
     
     if track_filter != 'all':

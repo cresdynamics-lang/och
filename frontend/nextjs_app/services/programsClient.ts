@@ -529,7 +529,7 @@ class ProgramsClient {
 
   // Enrollments
   async getCohortEnrollments(cohortId: string): Promise<Enrollment[]> {
-    return apiGateway.get(`/cohorts/${cohortId}/enrollments/`)
+    return apiGateway.get(`/cohorts/${cohortId}/enrollments/`) as Promise<Enrollment[]>
   }
 
   async createEnrollment(cohortId: string, data: Partial<Enrollment>): Promise<Enrollment> {

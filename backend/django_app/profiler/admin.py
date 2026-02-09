@@ -2,7 +2,8 @@
 Admin interface for Profiler.
 """
 from django.contrib import admin
-from .models import ProfilerSession, ProfilerAnswer, ProfilerQuestion, ProfilerResult
+from django.utils import timezone
+from .models import ProfilerSession, ProfilerAnswer, ProfilerQuestion, ProfilerResult, ProfilerRetakeRequest
 
 
 @admin.register(ProfilerSession)
@@ -70,3 +71,38 @@ class ProfilerResultAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(ProfilerRetakeRequest)
+class ProfilerRetakeRequestAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'status', 'created_at', 'reviewed_by', 'reviewed_at']
+    list_filter = ['status', 'created_at', 'reviewed_at']
+    search_fields = ['user__email', 'reason', 'admin_notes']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    fieldsets = (
+        ('Request Info', {
+            'fields': ('id', 'user', 'original_session', 'reason', 'status', 'created_at', 'updated_at')
+        }),
+        ('Admin Review', {
+            'fields': ('reviewed_by', 'admin_notes', 'reviewed_at', 'new_session')
+        }),
+    )
+    actions = ['approve_requests', 'reject_requests']
+    
+    def approve_requests(self, request, queryset):
+        """Approve selected retake requests."""
+        count = 0
+        for retake_request in queryset.filter(status='pending'):
+            retake_request.approve(request.user, 'Bulk approved via admin')
+            count += 1
+        self.message_user(request, f'{count} retake request(s) approved.')
+    approve_requests.short_description = 'Approve selected retake requests'
+    
+    def reject_requests(self, request, queryset):
+        """Reject selected retake requests."""
+        count = 0
+        for retake_request in queryset.filter(status='pending'):
+            retake_request.reject(request.user, 'Bulk rejected via admin')
+            count += 1
+        self.message_user(request, f'{count} retake request(s) rejected.')
+    reject_requests.short_description = 'Reject selected retake requests'

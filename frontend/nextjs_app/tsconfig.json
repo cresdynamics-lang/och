@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es2015",
     "lib": [
       "dom",
       "dom.iterable",
@@ -39,6 +39,9 @@
   "exclude": [
     "node_modules",
     "supabase/functions",
-    "**/*.disabled/**"
+    "**/*.disabled/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

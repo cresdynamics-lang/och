@@ -98,6 +98,48 @@ class MissionViewSet(viewsets.ModelViewSet):
         
         serializer = MissionSubmissionSerializer(submission)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sample_mission(request):
+    """
+    GET /api/v1/missions/sample
+    Get a sample mission for Foundations preview.
+    Returns a beginner-friendly mission without starting it.
+    """
+    try:
+        # Get a beginner-friendly sample mission
+        sample_mission = Mission.objects.filter(
+            difficulty=1,  # Beginner difficulty
+            mission_type='beginner',
+            is_active=True
+        ).order_by('?').first()
+        
+        # If no beginner mission, try any active mission
+        if not sample_mission:
+            sample_mission = Mission.objects.filter(
+                is_active=True
+            ).order_by('?').first()
+        
+        if not sample_mission:
+            return Response(
+                {'error': 'No sample mission available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Return mission data (preview only, don't start it)
+        serializer = MissionSerializer(sample_mission)
+        return Response({
+            **serializer.data,
+            'preview_only': True,
+            'message': 'This is a preview. You will start missions after completing Foundations.'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to fetch sample mission: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
     
     @action(detail=True, methods=['get'])
     def progress(self, request, pk=None):

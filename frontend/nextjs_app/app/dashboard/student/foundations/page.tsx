@@ -28,7 +28,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 
-type FoundationsView = 'landing' | 'modules' | 'module-viewer' | 'assessment' | 'reflection' | 'track-confirmation' | 'completion'
+type FoundationsView = 'landing' | 'modules' | 'module-viewer' | 'assessment' | 'reflection' | 'track-confirmation' | 'completion' | 'mission-preview' | 'recipe-demo' | 'portfolio-overview' | 'mentorship-overview'
 
 export default function FoundationsPage() {
   const router = useRouter()
@@ -152,7 +152,17 @@ export default function FoundationsPage() {
 
   const handleModuleClick = (module: FoundationsModule) => {
     setCurrentModule(module)
-    if (module.module_type === 'assessment') {
+    
+    // Check if this is an interactive module that needs special handling
+    if (module.title.toLowerCase().includes('mission preview') || module.title.toLowerCase().includes('mission preview')) {
+      setCurrentView('mission-preview')
+    } else if (module.title.toLowerCase().includes('recipe demo') || module.title.toLowerCase().includes('recipe')) {
+      setCurrentView('recipe-demo')
+    } else if (module.title.toLowerCase().includes('portfolio')) {
+      setCurrentView('portfolio-overview')
+    } else if (module.title.toLowerCase().includes('mentorship') || module.title.toLowerCase().includes('mentor')) {
+      setCurrentView('mentorship-overview')
+    } else if (module.module_type === 'assessment') {
       setCurrentView('assessment')
     } else if (module.module_type === 'reflection') {
       setCurrentView('reflection')
@@ -160,9 +170,32 @@ export default function FoundationsPage() {
       setCurrentView('module-viewer')
     }
   }
-
-  const handleModuleComplete = async (moduleId: string, watchPercentage: number = 100) => {
+  
+  const handleInteractionTrack = async (interaction: { type: string; timeSpent: number }) => {
     try {
+      // Track interaction in Foundations progress
+      // This will be stored in the interactions JSON field
+      if (status) {
+        // Update local state or send to API
+        // For now, we'll handle this when completing the module
+        console.log('Interaction tracked:', interaction)
+      }
+    } catch (err) {
+      console.error('Failed to track interaction:', err)
+    }
+  }
+
+  const handleModuleComplete = async (moduleId: string, watchPercentage: number = 100, interactionData?: { type: string; timeSpent: number }) => {
+    try {
+      const payload: any = { watch_percentage: watchPercentage }
+      if (interactionData) {
+        payload.interaction = {
+          type: interactionData.type,
+          timeSpent: interactionData.timeSpent
+        }
+        payload.time_spent_seconds = interactionData.timeSpent
+      }
+      
       await foundationsClient.completeModule(moduleId, watchPercentage)
       hasLoadedRef.current = false
       await loadFoundationsData(true) // Reload to get updated status
@@ -292,7 +325,7 @@ export default function FoundationsPage() {
 
   if (!status) return null
 
-  // Landing View
+  // Landing View (no sidebar)
   if (currentView === 'landing') {
     return (
       <FoundationsLanding 
@@ -303,82 +336,157 @@ export default function FoundationsPage() {
     )
   }
 
-  // Modules List View
-  if (currentView === 'modules') {
-    return (
-      <FoundationsModulesList
-        status={status}
-        onModuleClick={handleModuleClick}
-        onBack={() => setCurrentView('landing')}
-        onComplete={handleCompleteFoundations}
-      />
-    )
-  }
+  // All other views with sidebar
+  const showSidebar = currentView !== 'landing' && currentView !== 'completion'
 
-  // Module Viewer
-  if (currentView === 'module-viewer' && currentModule) {
-    return (
-      <FoundationsModuleViewer
-        module={currentModule}
-        onComplete={(watchPercentage) => handleModuleComplete(currentModule.id, watchPercentage)}
-        onBack={() => {
-          setCurrentView('modules')
-          setCurrentModule(null)
-        }}
-      />
-    )
-  }
+  return (
+    <div className="flex min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson">
+      {/* Persistent Progress Sidebar */}
+      {showSidebar && (
+        <ProgressSidebar
+          status={status}
+          currentModuleId={currentModule?.id}
+          onModuleClick={handleModuleClick}
+        />
+      )}
 
-  // Assessment View
-  if (currentView === 'assessment') {
-    return (
-      <FoundationsAssessment
-        onSubmit={handleAssessmentSubmit}
-        onBack={() => {
-          setCurrentView('modules')
-          setCurrentModule(null)
-        }}
-      />
-    )
-  }
+      {/* Main Content */}
+      <div className="flex-1">
+        {/* Modules List View */}
+        {currentView === 'modules' && (
+          <FoundationsModulesList
+            status={status}
+            onModuleClick={handleModuleClick}
+            onBack={() => setCurrentView('landing')}
+            onComplete={handleCompleteFoundations}
+          />
+        )}
 
-  // Reflection View
-  if (currentView === 'reflection') {
-    return (
-      <FoundationsReflection
-        valueStatement={blueprint?.value_statement || status?.goals_reflection}
-        onSubmit={handleReflectionSubmit}
-        onBack={() => {
-          setCurrentView('modules')
-          setCurrentModule(null)
-        }}
-      />
-    )
-  }
+        {/* Module Viewer */}
+        {currentView === 'module-viewer' && currentModule && (
+          <FoundationsModuleViewer
+            module={currentModule}
+            onComplete={(watchPercentage) => handleModuleComplete(currentModule.id, watchPercentage)}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+          />
+        )}
 
-  // Track Confirmation View
-  if (currentView === 'track-confirmation') {
-    return (
-      <FoundationsTrackConfirmation
-        recommendedTrack={profilerResult?.recommended_track}
-        primaryTrack={profilerResult?.primary_track}
-        onConfirm={handleTrackConfirm}
-        onBack={() => setCurrentView('modules')}
-      />
-    )
-  }
+        {/* Assessment View */}
+        {currentView === 'assessment' && (
+          <FoundationsAssessment
+            onSubmit={handleAssessmentSubmit}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+          />
+        )}
 
-  // Completion View
-  if (currentView === 'completion') {
-    return (
-      <FoundationsCompletion
-        confirmedTrack={status.confirmed_track_key}
-        onComplete={handleCompleteFoundations}
-      />
-    )
-  }
+        {/* Reflection View */}
+        {currentView === 'reflection' && (
+          <FoundationsReflection
+            valueStatement={blueprint?.value_statement || status?.goals_reflection}
+            onSubmit={handleReflectionSubmit}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+          />
+        )}
 
-  return null
+        {/* Track Confirmation View */}
+        {currentView === 'track-confirmation' && (
+          <FoundationsTrackConfirmation
+            recommendedTrack={profilerResult?.recommended_track}
+            primaryTrack={profilerResult?.primary_track}
+            onConfirm={handleTrackConfirm}
+            onBack={() => setCurrentView('modules')}
+          />
+        )}
+
+        {/* Mission Preview View */}
+        {currentView === 'mission-preview' && (
+          <MissionPreview
+            onComplete={async () => {
+              if (currentModule) {
+                await handleModuleComplete(currentModule.id, 100)
+              } else {
+                setCurrentView('modules')
+              }
+            }}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+            onInteractionTrack={handleInteractionTrack}
+          />
+        )}
+
+        {/* Recipe Demo View */}
+        {currentView === 'recipe-demo' && (
+          <RecipeDemo
+            onComplete={async () => {
+              if (currentModule) {
+                await handleModuleComplete(currentModule.id, 100)
+              } else {
+                setCurrentView('modules')
+              }
+            }}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+            onInteractionTrack={handleInteractionTrack}
+          />
+        )}
+
+        {/* Portfolio Overview View */}
+        {currentView === 'portfolio-overview' && (
+          <PortfolioOverview
+            onComplete={async () => {
+              if (currentModule) {
+                await handleModuleComplete(currentModule.id, 100)
+              } else {
+                setCurrentView('modules')
+              }
+            }}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+          />
+        )}
+
+        {/* Mentorship Overview View */}
+        {currentView === 'mentorship-overview' && (
+          <MentorshipOverview
+            onComplete={async () => {
+              if (currentModule) {
+                await handleModuleComplete(currentModule.id, 100)
+              } else {
+                setCurrentView('modules')
+              }
+            }}
+            onBack={() => {
+              setCurrentView('modules')
+              setCurrentModule(null)
+            }}
+          />
+        )}
+
+        {/* Completion View */}
+        {currentView === 'completion' && (
+          <FoundationsCompletion
+            confirmedTrack={status.confirmed_track_key}
+            onComplete={handleCompleteFoundations}
+          />
+        )}
+      </div>
+    </div>
+  )
 }
 
 // Landing Component
