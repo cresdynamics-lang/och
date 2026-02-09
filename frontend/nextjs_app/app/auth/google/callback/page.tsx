@@ -22,6 +22,8 @@ function GoogleOAuthCallbackPageInner() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let redirectTimer: NodeJS.Timeout | null = null
+    
     const handleCallback = async () => {
       try {
         // Get authorization code and state from URL
@@ -101,9 +103,10 @@ function GoogleOAuthCallbackPageInner() {
             : 'Login successful!'
         )
 
-        // Determine redirect path
+        // Determine redirect path based on role and profiling status
         const userRoles = response.user?.roles || []
-        console.log('[OAuth Callback] User roles:', userRoles)
+        const user = response.user || {}
+        console.log('[OAuth Callback] User data:', { roles: userRoles, profiling_complete: user.profiling_complete })
         
         const isStudent = userRoles.some((r: any) => {
           const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase()
@@ -111,13 +114,60 @@ function GoogleOAuthCallbackPageInner() {
           return roleName === 'student' || roleName === 'mentee'
         })
 
-        const redirectPath = isStudent ? '/onboarding/ai-profiler' : '/dashboard'
+        let redirectPath = '/dashboard'
+        
+        if (isStudent) {
+          // Check if profiling is complete (Django is source of truth)
+          const profilingComplete = user.profiling_complete ?? false
+          console.log('[OAuth Callback] Student profiling_complete:', profilingComplete)
+          
+          if (!profilingComplete) {
+            redirectPath = '/onboarding/ai-profiler'
+          } else {
+            redirectPath = '/dashboard/student'
+          }
+        } else {
+          // Determine dashboard for other roles
+          const role = userRoles[0]
+          const roleName = typeof role === 'string' ? role.toLowerCase() : (role?.role || role?.name || '').toLowerCase()
+          
+          switch (roleName) {
+            case 'mentor':
+              redirectPath = '/dashboard/mentor'
+              break
+            case 'director':
+            case 'program_director':
+              redirectPath = '/dashboard/director'
+              break
+            case 'sponsor':
+            case 'sponsor_admin':
+              redirectPath = '/dashboard/sponsor'
+              break
+            case 'analyst':
+              redirectPath = '/dashboard/analyst'
+              break
+            case 'employer':
+              redirectPath = '/dashboard/employer'
+              break
+            case 'finance':
+              redirectPath = '/dashboard/finance'
+              break
+            case 'admin':
+              redirectPath = '/dashboard/admin'
+              break
+            default:
+              redirectPath = '/dashboard'
+          }
+        }
+        
         console.log('[OAuth Callback] Will redirect to:', redirectPath)
 
-        // Redirect with page reload to ensure token/cookies are available everywhere
-        setTimeout(() => {
+        // Redirect with a short delay to show success message
+        redirectTimer = setTimeout(() => {
+          console.log('[OAuth Callback] Executing redirect to:', redirectPath)
+          // Use window.location.href for reliable redirect with full page reload
           window.location.href = redirectPath
-        }, 1500)
+        }, 1000)
 
       } catch (err: any) {
         console.error('Google OAuth callback error:', err)
@@ -131,6 +181,13 @@ function GoogleOAuthCallbackPageInner() {
     }
 
     handleCallback()
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer)
+      }
+    }
   }, [searchParams, router])
 
   return (

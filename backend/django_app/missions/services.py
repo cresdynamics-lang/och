@@ -90,3 +90,37 @@ def get_max_mission_difficulty_for_user(user) -> int:
     
     # Default to beginner if no profiler data
     return 1
+
+
+def upload_file_to_storage(file, identifier: str) -> str:
+    """
+    TODO: Implement file upload to storage (S3/local).
+    Stub function to allow Django to start.
+    
+    Args:
+        file: File object to upload
+        identifier: Unique identifier for the file
+        
+    Returns:
+        URL of the uploaded file
+    """
+    logger.warning("upload_file_to_storage is not implemented, returning placeholder URL")
+    # Return a placeholder URL - this needs to be implemented properly
+    return f"/media/uploads/{identifier}/{file.name if hasattr(file, 'name') else 'file'}"
+
+
+def generate_presigned_upload_url(identifier: str, filename: str) -> str:
+    """
+    TODO: Implement presigned URL generation for direct uploads.
+    Stub function to allow Django to start.
+    
+    Args:
+        identifier: Unique identifier for the upload
+        filename: Name of the file to upload
+        
+    Returns:
+        Presigned URL for upload
+    """
+    logger.warning("generate_presigned_upload_url is not implemented, returning placeholder URL")
+    # Return a placeholder URL - this needs to be implemented properly
+    return f"/api/v1/missions/upload/{identifier}/{filename}"

@@ -204,42 +204,10 @@ def mission_dashboard(request):
         'recommended_recipes': recommended_recipes,
         'next_mission': str(next_mission) if next_mission else None,
         'foundations_complete': user.foundations_complete,
-    }, status=status.HTTP_200_OK) Response({
-        'available_missions': MissionSerializer(available_missions, many=True).data,
-        'locked_missions': [
-            {
-                'mission': MissionSerializer(item['mission']).data,
-                'gates': item['gates'],
-                'warnings': item['warnings']
-            } for item in locked_missions
-        ],
-        'in_progress_missions': [
-            {
-                'id': str(progress.id),
-                'mission': MissionSerializer(progress.mission).data,
-                'status': progress.status,
-                'current_subtask': progress.current_subtask,
-                'progress_percentage': len([s for s in progress.subtasks_progress.values() if s.get('completed')]) / len(progress.subtasks_progress) * 100 if progress.subtasks_progress else 0,
-            }
-            for progress in in_progress
-        ],
-        'completed_missions': [
-            {
-                'id': str(progress.id),
-                'mission': MissionSerializer(progress.mission).data,
-                'final_status': progress.final_status,
-                'ai_score': float(progress.ai_score) if progress.ai_score else None,
-                'mentor_score': float(progress.mentor_score) if progress.mentor_score else None,
-                'submitted_at': progress.submitted_at.isoformat() if progress.submitted_at else None,
-            }
-            for progress in completed
-        ],
-        'recommended_recipes': recommended_recipes,
-        'next_mission': str(next_mission) if next_mission else None,
         'tier_lock': tier_lock,
         'user_tier': user_tier,
         'coaching_eligibility': coaching_eligibility,
-    })
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
