@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import Prefetch
 from .models import Mission, MissionAssignment, MissionSubmission
 from .serializers import MissionSerializer, MissionAssignmentSerializer, MissionSubmissionSerializer
 
@@ -16,6 +17,44 @@ class MissionViewSet(viewsets.ModelViewSet):
     queryset = Mission.objects.filter(is_active=True)
     serializer_class = MissionSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Mission.objects.filter(is_active=True)
+            .prefetch_related(
+                Prefetch(
+                    'assignments',
+                    queryset=MissionAssignment.objects.filter(assignment_type='cohort'),
+                )
+            )
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action in ('list', 'retrieve'):
+            if self.action == 'list':
+                qs = self.filter_queryset(self.get_queryset())
+                cohort_ids = list(
+                    MissionAssignment.objects.filter(
+                        mission__in=qs, assignment_type='cohort'
+                    ).values_list('cohort_id', flat=True).distinct()
+                )
+            else:
+                mission = self.get_object()
+                cohort_ids = list(
+                    MissionAssignment.objects.filter(
+                        mission=mission, assignment_type='cohort'
+                    ).values_list('cohort_id', flat=True).distinct()
+                )
+            if cohort_ids:
+                from programs.models import Cohort
+                context['cohort_map'] = {
+                    str(c.id): c.name
+                    for c in Cohort.objects.filter(id__in=cohort_ids)
+                }
+            else:
+                context['cohort_map'] = {}
+        return context
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

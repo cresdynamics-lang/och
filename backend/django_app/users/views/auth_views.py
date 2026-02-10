@@ -346,14 +346,20 @@ class LoginView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
-        email = data['email']
+        email = (data['email'] or '').strip().lower()
         password = data.get('password')
         code = data.get('code')
         device_fingerprint = data.get('device_fingerprint', 'unknown')
         device_name = data.get('device_name', 'Unknown Device')
         
+        if not email:
+            return Response(
+                {'detail': 'Email is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             _log_audit_event(None, 'login', 'user', 'failure', {'email': email})
             return Response(

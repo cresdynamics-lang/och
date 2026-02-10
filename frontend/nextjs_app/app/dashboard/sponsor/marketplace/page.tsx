@@ -9,6 +9,7 @@ import {
   MarketplaceProfile,
   EmployerInterestLog,
   JobPosting,
+  JobApplication,
 } from '@/services/marketplaceClient'
 import { sponsorClient, SponsorDashboardSummary } from '@/services/sponsorClient'
 
@@ -20,13 +21,18 @@ interface SnapshotStats {
   activeJobs: number
 }
 
+/** Unified shortlist: talent browser bookmark + job applications with status=shortlisted */
+type ShortlistItem =
+  | { type: 'interest'; log: EmployerInterestLog }
+  | { type: 'application'; app: JobApplication }
+
 interface MarketplaceState {
   snapshot: SnapshotStats
   sponsorSummary: SponsorDashboardSummary | null
   talentSample: MarketplaceProfile[]
   favorites: EmployerInterestLog[]
   contacts: EmployerInterestLog[]
-  shortlist: EmployerInterestLog[]
+  shortlist: ShortlistItem[]
   jobs: JobPosting[]
 }
 
@@ -71,6 +77,7 @@ export default function MarketplacePage() {
         favoritesLogs,
         contactLogs,
         shortlistLogs,
+        applicationsData,
       ] = await Promise.all([
         sponsorClient.getSummary().catch(() => null),
         marketplaceClient
@@ -85,6 +92,7 @@ export default function MarketplacePage() {
         marketplaceClient.getInterestLogs('favorite').catch(() => []),
         marketplaceClient.getInterestLogs('contact_request').catch(() => []),
         marketplaceClient.getInterestLogs('shortlist').catch(() => []),
+        marketplaceClient.getAllApplications().catch(() => ({ results: [] })),
       ])
 
       const jobsArray: JobPosting[] = Array.isArray(jobsData)
@@ -105,6 +113,15 @@ export default function MarketplacePage() {
         ? shortlistLogs
         : (shortlistLogs as any).results || []
 
+      const appsList: JobApplication[] = Array.isArray(applicationsData?.results)
+        ? applicationsData.results
+        : []
+      const shortlistedApps = appsList.filter((a) => a.status === 'shortlisted')
+      const unifiedShortlist: ShortlistItem[] = [
+        ...shortlistArray.map((log) => ({ type: 'interest' as const, log })),
+        ...shortlistedApps.map((app) => ({ type: 'application' as const, app })),
+      ]
+
       const snapshot: SnapshotStats = {
         totalTalent: talentPage.count || talentPage.results.length || 0,
         jobReady: talentPage.results.filter((t) => t.profile_status === 'job_ready').length,
@@ -117,7 +134,7 @@ export default function MarketplacePage() {
         talentSample: talentPage.results.slice(0, MAX_RECENT_ITEMS),
         favorites: favoritesArray.slice(0, MAX_RECENT_ITEMS),
         contacts: contactsArray.slice(0, MAX_RECENT_ITEMS),
-        shortlist: shortlistArray.slice(0, MAX_RECENT_ITEMS),
+        shortlist: unifiedShortlist,
         jobs: jobsArray.slice(0, MAX_RECENT_ITEMS),
       })
     } catch (err: any) {
@@ -460,16 +477,29 @@ export default function MarketplacePage() {
                     Move serious candidates here as you progress toward hire.
                   </li>
                 ) : (
-                  state.shortlist.map((log) => (
-                    <li key={log.id} className="flex justify-between gap-2">
-                      <span className="text-white truncate">
-                        {log.profile?.mentee_name ?? 'Talent'}
-                      </span>
-                      <span className="text-och-steel shrink-0">
-                        {Number(log.profile?.job_fit_score ?? 0).toFixed(1)}
-                      </span>
-                    </li>
-                  ))
+                  state.shortlist.slice(0, MAX_RECENT_ITEMS).map((item, idx) =>
+                    item.type === 'interest' ? (
+                      <li key={`interest-${item.log.id}`} className="flex justify-between gap-2">
+                        <span className="text-white truncate">
+                          {item.log.profile?.mentee_name ?? 'Talent'}
+                        </span>
+                        <span className="text-och-steel shrink-0">
+                          {Number(item.log.profile?.job_fit_score ?? 0).toFixed(1)}
+                        </span>
+                      </li>
+                    ) : (
+                      <li key={`app-${item.app.id}`} className="flex justify-between gap-2">
+                        <span className="text-white truncate">
+                          {item.app.applicant_name ?? item.app.applicant_email ?? 'Applicant'}
+                        </span>
+                        <span className="text-och-steel shrink-0">
+                          {item.app.match_score != null
+                            ? `${Number(item.app.match_score).toFixed(1)}%`
+                            : '—'}
+                        </span>
+                      </li>
+                    )
+                  )
                 )}
               </ul>
             </Card>

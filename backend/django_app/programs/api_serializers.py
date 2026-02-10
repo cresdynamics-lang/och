@@ -51,8 +51,8 @@ class CohortSerializer(serializers.ModelSerializer):
 
 
 class CreateCohortSerializer(serializers.ModelSerializer):
-    """Serializer for creating cohorts."""
-    track = serializers.UUIDField()
+    """Serializer for creating and updating cohorts."""
+    track = serializers.UUIDField(required=False)
     coordinator = serializers.UUIDField(required=False, allow_null=True)
     assigned_staff = serializers.DictField(required=False, allow_empty=True)
     
@@ -61,7 +61,7 @@ class CreateCohortSerializer(serializers.ModelSerializer):
         fields = [
             'track', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id',
-            'coordinator', 'seat_pool', 'assigned_staff'
+            'coordinator', 'seat_pool', 'assigned_staff', 'status'
         ]
     
     def validate_track(self, value):

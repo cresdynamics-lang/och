@@ -19,7 +19,7 @@ interface Lesson {
 }
 
 export default function CurriculumLearnPage() {
-  const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defensive-security' : 'defensive-security';
+  const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defender' : 'defender';
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [currentLevel, setCurrentLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');

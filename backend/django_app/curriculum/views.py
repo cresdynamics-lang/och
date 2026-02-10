@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django.http import Http404
 from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 
@@ -53,21 +54,71 @@ def get_user_subscription_tier(user):
     return 'free'
 
 
+def _is_uuid(value):
+    if not value or not isinstance(value, str):
+        return False
+    try:
+        import uuid
+        uuid.UUID(value)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+# Common slug/code aliases so "defender" and "defensive-security" resolve to Defender track
+CURRICULUM_TRACK_ALIASES = {
+    'defender': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE', 'SOCDEF')},
+    'defensive-security': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE')},
+    'offensive': {'slugs': ('offensive',), 'codes': ('OFFENSIVE', 'offensive')},
+    'grc': {'slugs': ('grc',), 'codes': ('GRC', 'grc')},
+    'innovation': {'slugs': ('innovation',), 'codes': ('INNOVATION', 'innovation')},
+    'leadership': {'slugs': ('leadership',), 'codes': ('LEADERSHIP', 'leadership')},
+}
+
+
 class CurriculumTrackViewSet(viewsets.ModelViewSet):
     """
     ViewSet for curriculum tracks.
 
     Endpoints:
     - GET /tracks/ - List all active tracks
-    - GET /tracks/{code}/ - Get track details with modules
-    - POST /tracks/{code}/enroll/ - Enroll in a track
-    - GET /tracks/{code}/progress/ - Get user's progress in track
+    - GET /tracks/{code_or_slug}/ - Get track details (lookup by code or slug)
+    - POST /tracks/{code_or_slug}/enroll/ - Enroll in a track
+    - GET /tracks/{code_or_slug}/progress/ - Get user's progress in track
     """
     queryset = CurriculumTrack.objects.filter(is_active=True)
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]  # Allow browsing without auth
     lookup_field = 'code'
+    lookup_url_kwarg = 'code'
     pagination_class = None  # Disable pagination - return plain array
-    
+
+    def get_object(self):
+        """Resolve by slug first, then by code, then by alias, so /tracks/defender/ works even if slug is cyberdef."""
+        queryset = self.filter_queryset(self.get_queryset())
+        code_or_slug = self.kwargs.get(self.lookup_url_kwarg)
+        if not code_or_slug:
+            raise Http404('Track not found.')
+        key = (code_or_slug or '').strip().lower()
+        obj = queryset.filter(slug=code_or_slug).first()
+        if obj is not None:
+            return obj
+        obj = queryset.filter(code=code_or_slug).first()
+        if obj is not None:
+            return obj
+        if _is_uuid(code_or_slug):
+            obj = queryset.filter(pk=code_or_slug).first()
+            if obj is not None:
+                return obj
+        aliases = CURRICULUM_TRACK_ALIASES.get(key)
+        if aliases:
+            obj = queryset.filter(slug__in=aliases['slugs']).first()
+            if obj is not None:
+                return obj
+            obj = queryset.filter(code__in=aliases['codes']).first()
+            if obj is not None:
+                return obj
+        raise Http404('Track not found.')
+
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return CurriculumTrackDetailSerializer

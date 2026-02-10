@@ -28,6 +28,8 @@ from .views import (
     get_mentor_assignments,
     mentor_assignments_list,
     mentor_assigned_cohorts,
+    mentor_capstones,
+    mentorship_registry,
     messages_endpoint,
     mark_message_read,
     send_notification,
@@ -41,6 +43,7 @@ urlpatterns = [
     # CRITICAL: More specific patterns MUST come first to avoid conflicts
     # The order matters - Django matches patterns in order
     path('mentor-assignments/', mentor_assignments_list, name='mentor-assignments-list'),
+    path('mentors/<int:mentor_id>/capstones', mentor_capstones, name='mentor-capstones'),
     path('mentors/<int:mentor_id>/cohorts', mentor_assigned_cohorts, name='mentor-assigned-cohorts'),
     path('mentors/<int:mentor_id>/mentees/<int:mentee_id>/talentscope/', mentor_mentee_talentscope, name='mentor-mentee-talentscope'),
     path('mentors/<int:mentor_id>/mentees/<int:mentee_id>/talentscope', mentor_mentee_talentscope, name='mentor-mentee-talentscope-no-slash'),
@@ -56,6 +59,7 @@ urlpatterns = [
     path('mentor/workqueue', mentor_workqueue, name='workqueue'),
     path('mentor/mentees/<int:mentee_id>/cockpit', mentee_cockpit, name='mentee-cockpit'),
     path('mentor/sessions', create_session, name='create-session'),
+    path('mentorship/registry', mentorship_registry, name='mentorship-registry'),
     path('mentorship/sessions/request', request_session, name='request-session'),
     path('mentorship/sessions', mentee_sessions, name='mentee-sessions'),
     path('mentors/sessions/<uuid:session_id>', update_group_session, name='update-group-session'),

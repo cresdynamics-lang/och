@@ -96,74 +96,21 @@ def create_user_session(user, device_fingerprint, device_name=None, ip_address=N
     refresh_token_str = str(refresh)
     refresh_token_hash = hash_refresh_token(refresh_token_str)
     
-    # Create session
+    # Create session (ORM uses user.id / bigint for user_id; matches PostgreSQL schema)
     expires_at = timezone.now() + timedelta(days=30)  # 30 days per spec
-    
-    # For local SQLite development: bypass ORM foreign key enforcement
-    import uuid
-    from django.db import connection
-    
-    session_uuid = uuid.uuid4()
-    session_id_str = str(session_uuid).replace('-', '')  # Remove dashes for SQLite TEXT primary key
     device_type = _detect_device_type(user_agent)
-    now = timezone.now()
     
-    # Use raw SQL to insert session (bypasses Django ORM foreign key checks)
-    try:
-        with connection.cursor() as cursor:
-            # Check database vendor for proper SQL syntax
-            is_postgres = connection.vendor == 'postgresql'
-
-            # Disable foreign key checks for this transaction (database-specific)
-            if not is_postgres:
-                cursor.execute('PRAGMA foreign_keys=OFF')
-
-            # Use appropriate placeholder for database
-            placeholder = '%s' if is_postgres else '?'
-
-            cursor.execute(f"""
-                INSERT INTO user_sessions
-                (id, user_id, device_fingerprint, device_name, device_type, ip_address, ua,
-                 refresh_token_hash, is_trusted, mfa_verified, risk_score, created_at, last_activity, expires_at)
-                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-            """, (
-                session_id_str,
-                str(user.uuid_id),  # Ensure string format
-                device_fingerprint or 'unknown',
-                device_name or 'Unknown Device',
-                device_type or 'desktop',
-                ip_address,
-                user_agent,
-                refresh_token_hash,
-                False if is_postgres else 0,  # Use proper boolean for PostgreSQL
-                False if is_postgres else 0,  # Use proper boolean for PostgreSQL
-                0.0,
-                now,
-                now,
-                expires_at
-            ))
-
-            if not is_postgres:
-                cursor.execute('PRAGMA foreign_keys=ON')
-        
-        # Fetch the session using ORM (now that it exists in DB)
-        session = UserSession.objects.get(id=session_uuid)
-    except Exception as e:
-        # Fallback to ORM if raw SQL fails
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f'Raw SQL session creation failed: {e}, falling back to ORM')
-        session = UserSession.objects.create(
-            user=user,
-            device_fingerprint=device_fingerprint,
-            device_name=device_name or 'Unknown Device',
-            device_type=device_type,
-            ip_address=ip_address,
-            ua=user_agent,
-            refresh_token_hash=refresh_token_hash,
-            expires_at=expires_at,
-            mfa_verified=False,
-        )
+    session = UserSession.objects.create(
+        user=user,
+        device_fingerprint=device_fingerprint or 'unknown',
+        device_name=device_name or 'Unknown Device',
+        device_type=device_type or 'desktop',
+        ip_address=ip_address,
+        ua=user_agent,
+        refresh_token_hash=refresh_token_hash,
+        expires_at=expires_at,
+        mfa_verified=False,
+    )
     
     # Get access token (15 min lifetime)
     access_token = refresh.access_token

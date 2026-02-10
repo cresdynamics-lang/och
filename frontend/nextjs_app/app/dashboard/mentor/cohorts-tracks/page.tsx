@@ -297,27 +297,31 @@ export default function MentorCohortsTracksPage() {
     })
   }, [programsCache])
 
-  // Load enrollments for a cohort
+  // Load enrollments for a cohort (cache key: String(cohortId); on failure remove key so retry works)
   const loadCohortEnrollments = async (cohortId: string) => {
-    if (cohortEnrollments[cohortId]) return // Already loaded
+    const key = String(cohortId)
+    const existing = cohortEnrollments[key]
+    if (existing?.loading) return
 
     setCohortEnrollments(prev => ({
       ...prev,
-      [cohortId]: { enrollments: [], loading: true },
+      [key]: { enrollments: [], loading: true },
     }))
 
     try {
-      const enrollments = await programsClient.getCohortEnrollments(cohortId)
+      const list = await programsClient.getCohortEnrollments(cohortId)
+      const enrollments = Array.isArray(list) ? list : []
       setCohortEnrollments(prev => ({
         ...prev,
-        [cohortId]: { enrollments, loading: false },
+        [key]: { enrollments, loading: false },
       }))
     } catch (err) {
       console.error(`Failed to load enrollments for cohort ${cohortId}:`, err)
-      setCohortEnrollments(prev => ({
-        ...prev,
-        [cohortId]: { enrollments: [], loading: false },
-      }))
+      setCohortEnrollments(prev => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
     }
   }
 
@@ -367,7 +371,7 @@ export default function MentorCohortsTracksPage() {
       const assignment = filteredAssignments.find(a => a.cohort.id === selectedCohortId)
       if (assignment) {
         // Load enrollments
-        if (!cohortEnrollments[selectedCohortId]) {
+        if (!cohortEnrollments[String(selectedCohortId)]) {
           loadCohortEnrollments(selectedCohortId)
         }
         // Load track details
@@ -456,7 +460,7 @@ export default function MentorCohortsTracksPage() {
   }
 
   const selectAllMentees = (cohortId: string) => {
-    const enrollmentData = cohortEnrollments[cohortId]
+    const enrollmentData = cohortEnrollments[String(cohortId)]
     if (!enrollmentData) return
     
     const activeEnrollments = enrollmentData.enrollments.filter(
@@ -467,7 +471,7 @@ export default function MentorCohortsTracksPage() {
   }
 
   const deselectAllMentees = (cohortId: string) => {
-    const enrollmentData = cohortEnrollments[cohortId]
+    const enrollmentData = cohortEnrollments[String(cohortId)]
     if (!enrollmentData) return
     
     const activeEnrollments = enrollmentData.enrollments.filter(
@@ -765,7 +769,7 @@ export default function MentorCohortsTracksPage() {
                                       {assignment.cohort.status}
                                     </Badge>
                                     <span className="text-sm text-och-steel">
-                                      {assignment.cohort.enrolled_count || 0} enrolled
+                                      {(assignment.cohort.enrollment_count ?? assignment.cohort.enrolled_count) ?? 0} enrolled
                                     </span>
                                   </div>
                                 </div>
@@ -777,7 +781,9 @@ export default function MentorCohortsTracksPage() {
                             <div className="px-4 pb-4 border-t border-och-steel/20">
                               {/* Student list and other details - reuse existing code */}
                               {(() => {
-                                const enrollmentData = cohortEnrollments[assignment.cohort.id]
+                                const cohortKey = String(assignment.cohort.id)
+                                const enrollmentData = cohortEnrollments[cohortKey]
+                                const studentCount = (assignment.cohort.enrollment_count ?? assignment.cohort.enrolled_count) ?? 0
                                 if (!enrollmentData) {
                                   loadCohortEnrollments(assignment.cohort.id)
                                   return <div className="text-sm text-och-steel mt-4">Loading students...</div>
@@ -789,6 +795,16 @@ export default function MentorCohortsTracksPage() {
                                   (e) => e.status === 'active' || e.status === 'completed'
                                 )
                                 if (activeEnrollments.length === 0) {
+                                  if (studentCount > 0) {
+                                    return (
+                                      <div className="mt-4 space-y-2">
+                                        <p className="text-sm text-och-orange">Enrollment list did not load. Please retry.</p>
+                                        <Button variant="outline" size="sm" onClick={() => loadCohortEnrollments(assignment.cohort.id)}>
+                                          Retry loading students
+                                        </Button>
+                                      </div>
+                                    )
+                                  }
                                   return <div className="text-sm text-och-steel mt-4">No active students.</div>
                                 }
                                 return (
@@ -870,7 +886,7 @@ export default function MentorCohortsTracksPage() {
                                 </div>
                               )}
                               <div className="flex items-center gap-2">
-                                <span>{cohort.enrolled_count || 0} students</span>
+                                <span>{(cohort.enrollment_count ?? cohort.enrolled_count) ?? 0} students</span>
                                 <span>•</span>
                                 <span>{cohort.mode}</span>
                               </div>
@@ -918,7 +934,7 @@ export default function MentorCohortsTracksPage() {
                                 {mentorAssignment.role}
                               </Badge>
                               <span className="text-sm text-och-steel">
-                                {cohort.enrolled_count || 0} enrolled
+                                {(cohort.enrollment_count ?? cohort.enrolled_count) ?? 0} enrolled
                               </span>
                             </div>
                           </div>
@@ -949,7 +965,7 @@ export default function MentorCohortsTracksPage() {
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-semibold text-white">Enrolled Students</h3>
                           {(() => {
-                            const enrollmentData = cohortEnrollments[cohort.id]
+                            const enrollmentData = cohortEnrollments[String(cohort.id)]
                             if (!enrollmentData || enrollmentData.loading) return null
                             const activeEnrollments = enrollmentData.enrollments.filter(
                               (e) => e.status === 'active' || e.status === 'completed'
@@ -980,7 +996,8 @@ export default function MentorCohortsTracksPage() {
                           })()}
                         </div>
                         {(() => {
-                          const enrollmentData = cohortEnrollments[cohort.id]
+                          const enrollmentData = cohortEnrollments[String(cohort.id)]
+                          const studentCount = (cohort.enrollment_count ?? cohort.enrolled_count) ?? 0
                           if (!enrollmentData) {
                             return (
                               <div className="text-sm text-och-steel">Loading students...</div>
@@ -995,6 +1012,16 @@ export default function MentorCohortsTracksPage() {
                             (e) => e.status === 'active' || e.status === 'completed'
                           )
                           if (activeEnrollments.length === 0) {
+                            if (studentCount > 0) {
+                              return (
+                                <div className="space-y-2">
+                                  <p className="text-sm text-och-orange">Enrollment list did not load. Please retry.</p>
+                                  <Button variant="outline" size="sm" onClick={() => loadCohortEnrollments(cohort.id)}>
+                                    Retry loading students
+                                  </Button>
+                                </div>
+                              )
+                            }
                             return (
                               <div className="text-sm text-och-steel">No active students enrolled in this cohort.</div>
                             )
@@ -1365,7 +1392,7 @@ export default function MentorCohortsTracksPage() {
               <div>
                 <div className="text-sm text-och-steel">Total Students</div>
                 <div className="text-2xl font-bold text-och-mint">
-                  {assignments.reduce((sum, a) => sum + (a.cohort.enrolled_count || 0), 0)}
+                  {assignments.reduce((sum, a) => sum + ((a.cohort.enrollment_count ?? a.cohort.enrolled_count) ?? 0), 0)}
                 </div>
               </div>
             </div>

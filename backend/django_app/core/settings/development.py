@@ -66,12 +66,10 @@ INSTALLED_APPS = INSTALLED_APPS + [
     'django_extensions',  # Optional: for enhanced shell, etc.
 ]
 
-# Use PostgreSQL for development (consistent with production)
-# TEMPORARILY USING SQLITE FOR LOCAL DEVELOPMENT
-# Override with environment variables if needed
-USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'true').lower() == 'true'  # Default to SQLite for local dev
+# Use PostgreSQL for development (uses existing users table and data)
+# Set USE_SQLITE=true in .env to use SQLite instead (e.g. if PostgreSQL is not running)
+USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'false').lower() == 'true'
 if USE_SQLITE_FORCE:
-    # Use SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -79,8 +77,12 @@ if USE_SQLITE_FORCE:
         }
     }
 else:
-    # Use PostgreSQL configuration from base.py
-    pass  # DATABASES already configured in base.py
+    # PostgreSQL from base.py: DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+    # Or set DATABASE_URL (see production.py) to override
+    if os.environ.get('DATABASE_URL'):
+        import dj_database_url
+        DATABASES = {'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'), conn_max_age=600)}
+    # else DATABASES already set in base.py (PostgreSQL with env vars)
 
 # Use .env MAIL_* (SMTP) when MAIL_HOST is set; otherwise console for local testing
 if os.environ.get('MAIL_HOST'):

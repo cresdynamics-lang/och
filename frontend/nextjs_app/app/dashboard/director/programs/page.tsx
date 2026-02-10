@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
@@ -27,34 +27,40 @@ export default function ProgramsPage() {
   const { programs, isLoading, reload } = usePrograms()
   const { deleteProgram, isLoading: isDeleting } = useDeleteProgram()
   const [programDetails, setProgramDetails] = useState<Record<string, ProgramDetails>>({})
+  const programDetailsRef = useRef(programDetails)
   const [refreshingPrograms, setRefreshingPrograms] = useState<Set<string>>(new Set())
-  
+
+  programDetailsRef.current = programDetails
+
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
+  const programIdsFetchedRef = useRef<string | null>(null)
+
   const fetchProgramDetails = useCallback(async (programId: string, force = false) => {
     if (!programId) return
-    
+
+    const currentDetails = programDetailsRef.current
     if (!force) {
-      const existing = programDetails[programId]
+      const existing = currentDetails[programId]
       if (existing && Date.now() - existing.lastUpdated < 30000) {
         return existing
       }
     }
-    
+
     setRefreshingPrograms(prev => new Set(prev).add(programId))
-    
+
     try {
       const [programData, tracksData] = await Promise.allSettled([
         programsClient.getProgram(programId),
         programsClient.getTracks(programId)
       ])
-      
-      const tracks = tracksData.status === 'fulfilled' && Array.isArray(tracksData.value) 
-        ? tracksData.value 
+
+      const tracks = tracksData.status === 'fulfilled' && Array.isArray(tracksData.value)
+        ? tracksData.value
         : []
-      
+
       const trackIds = tracks.map((t: any) => t.id)
       const cohortPromises = trackIds.map(async (trackId: string) => {
         try {
@@ -64,10 +70,10 @@ export default function ProgramsPage() {
           return []
         }
       })
-      
+
       const allCohortsData = await Promise.all(cohortPromises)
       const cohorts = allCohortsData.flat()
-      
+
       const enrollmentStatsPromises = cohorts.slice(0, 10).map(async (cohort: any) => {
         try {
           const enrollments = await programsClient.getCohortEnrollments(cohort.id)
@@ -76,16 +82,16 @@ export default function ProgramsPage() {
           return []
         }
       })
-      
+
       const enrollmentsArrays = await Promise.all(enrollmentStatsPromises)
       const allEnrollments = enrollmentsArrays.flat()
-      
+
       const enrollmentStats = {
         total: allEnrollments.length,
         active: allEnrollments.filter((e: any) => e.status === 'active').length,
         pending: allEnrollments.filter((e: any) => e.status === 'pending' || e.status === 'pending_payment').length,
       }
-      
+
       const newDetails = {
         tracks,
         cohorts,
@@ -93,28 +99,28 @@ export default function ProgramsPage() {
         isLoading: false,
         lastUpdated: Date.now()
       }
-      
+
       setProgramDetails(prev => ({
         ...prev,
         [programId]: newDetails
       }))
-      
+
       return newDetails
     } catch (err) {
       console.error(`Failed to fetch details for program ${programId}:`, err)
       const fallbackDetails = {
-        tracks: programDetails[programId]?.tracks || [],
-        cohorts: programDetails[programId]?.cohorts || [],
-        enrollmentStats: programDetails[programId]?.enrollmentStats || { total: 0, active: 0, pending: 0 },
+        tracks: programDetailsRef.current[programId]?.tracks || [],
+        cohorts: programDetailsRef.current[programId]?.cohorts || [],
+        enrollmentStats: programDetailsRef.current[programId]?.enrollmentStats || { total: 0, active: 0, pending: 0 },
         isLoading: false,
-        lastUpdated: programDetails[programId]?.lastUpdated || Date.now()
+        lastUpdated: programDetailsRef.current[programId]?.lastUpdated || Date.now()
       }
-      
+
       setProgramDetails(prev => ({
         ...prev,
         [programId]: fallbackDetails
       }))
-      
+
       return fallbackDetails
     } finally {
       setRefreshingPrograms(prev => {
@@ -123,34 +129,39 @@ export default function ProgramsPage() {
         return next
       })
     }
-  }, [programDetails])
+  }, [])
+
+  const programIdsKey = useMemo(
+    () => programs.map((p: any) => p.id).filter(Boolean).sort().join(','),
+    [programs]
+  )
 
   useEffect(() => {
-    if (!isLoading && programs.length > 0) {
-      const batchSize = 3
-      const processBatch = async (batch: any[]) => {
-        const promises = batch.map((program: any) => {
-          if (program.id) {
-            return fetchProgramDetails(program.id)
-          }
-          return Promise.resolve()
-        })
-        await Promise.allSettled(promises)
-      }
-      
-      const processBatches = async () => {
-        for (let i = 0; i < programs.length; i += batchSize) {
-          const batch = programs.slice(i, i + batchSize)
-          await processBatch(batch)
-          if (i + batchSize < programs.length) {
-            await new Promise(resolve => setTimeout(resolve, 100))
-          }
+    if (isLoading || programs.length === 0) return
+    if (programIdsFetchedRef.current === programIdsKey) return
+    programIdsFetchedRef.current = programIdsKey
+
+    const batchSize = 3
+    const processBatch = async (batch: any[]) => {
+      const promises = batch.map((program: any) => {
+        if (program.id) return fetchProgramDetails(program.id)
+        return Promise.resolve()
+      })
+      await Promise.allSettled(promises)
+    }
+
+    const runBatches = async () => {
+      for (let i = 0; i < programs.length; i += batchSize) {
+        const batch = programs.slice(i, i + batchSize)
+        await processBatch(batch)
+        if (i + batchSize < programs.length) {
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
       }
-      
-      processBatches()
     }
-  }, [programs, isLoading, fetchProgramDetails])
+
+    runBatches()
+  }, [programIdsKey, isLoading, programs.length, fetchProgramDetails])
 
   useEffect(() => {
     const handleProgramCreated = () => {

@@ -95,10 +95,7 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
     <Card className="mb-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Mission Review Inbox</h2>
-          <p className="text-sm text-och-steel">
-            Your submission queue for <strong className="text-white">$7 Premium tier mentees</strong>. Review missions, provide deeper analysis, issue pass/fail grades, tag competencies, and use rubric scoring.
-          </p>
+          <h2 className="text-xl font-bold text-white">Mission Review Inbox</h2>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleBulkApprove}>

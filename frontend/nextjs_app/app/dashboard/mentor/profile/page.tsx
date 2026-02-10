@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -60,7 +60,14 @@ export default function MentorProfilePage() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'profile' | 'mentor' | 'account' | 'security'>('profile')
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<'profile' | 'mentor' | 'account' | 'security' | 'guide'>(
+    tabFromUrl === 'guide' ? 'guide' : 'profile'
+  )
+  useEffect(() => {
+    if (tabFromUrl === 'guide') setActiveTab('guide')
+  }, [tabFromUrl])
   const [isEditing, setIsEditing] = useState(false)
   const [newSpecialty, setNewSpecialty] = useState('')
   const [availabilityDay, setAvailabilityDay] = useState('')
@@ -383,11 +390,11 @@ export default function MentorProfilePage() {
 
       {/* Tabs */}
       <div className="flex gap-4 mb-6 border-b border-och-steel/20">
-        {['profile', 'mentor', 'account', 'security'].map((tab) => (
+        {['profile', 'mentor', 'account', 'security', 'guide'].map((tab) => (
           <button
             key={tab}
             onClick={() => {
-              setActiveTab(tab as any)
+              setActiveTab(tab as typeof activeTab)
               setIsEditing(false)
             }}
             className={`px-4 py-2 font-medium transition-colors ${
@@ -1007,6 +1014,54 @@ export default function MentorProfilePage() {
               </div>
             </div>
           </div>
+        </Card>
+      )}
+
+      {activeTab === 'guide' && (
+        <Card>
+          <h2 className="text-2xl font-bold mb-4 text-white">Mentor Guide</h2>
+
+          <section className="mb-6">
+            <h3 className="text-lg font-semibold text-och-mint mb-2">Mission Review</h3>
+            <p className="text-sm text-och-steel mb-4">
+              As an OCH Mentor, your responsibility in Mission Review is critical. You perform human-in-the-loop validation
+              for mentees on the $7 Premium tier, confirming skill mastery and guiding development according to the core
+              philosophy: <span className="text-och-mint font-semibold">&quot;We guide the transformation&quot;</span>.
+            </p>
+          </section>
+
+          <section className="mb-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Mission Hall — Your Mission Review Responsibilities</h3>
+            <ul className="text-sm text-och-steel space-y-2 list-disc list-inside">
+              <li>Review submissions for <strong className="text-white">Professional tier ($7 Premium) mentees</strong> completing Intermediate, Advanced, Mastery, and Capstone missions</li>
+              <li>Provide <strong className="text-white">deeper analysis</strong> complementing AI feedback, issue pass/fail grades, and add written feedback</li>
+              <li><strong className="text-white">Tag technical competencies</strong> proven or missed to update mentee skill profiles (TalentScope Analytics)</li>
+              <li>Use <strong className="text-white">rubric-based scoring</strong> for Capstones and Advanced/Mastery missions</li>
+              <li>Recommend <strong className="text-white">next missions or recipes</strong> based on skill gaps detected</li>
+              <li>All actions are logged in the <strong className="text-white">immutable Activity Audit Trail</strong></li>
+            </ul>
+          </section>
+
+          <section className="mb-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Mission Review Inbox</h3>
+            <p className="text-sm text-och-steel">
+              Your submission queue for $7 Premium tier mentees. Review missions, provide deeper analysis, issue pass/fail grades, tag competencies, and use rubric scoring.
+            </p>
+          </section>
+
+          <section className="mb-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Cohort Missions</h3>
+            <p className="text-sm text-och-steel">
+              View missions from your assigned cohorts. This is a read-only view of missions assigned by program directors.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold text-white mb-2">Capstone Projects</h3>
+            <p className="text-sm text-och-steel">
+              Score capstone projects using assigned rubrics. Capstones are complex projects required in the $7 Premium tier and Mastery Tracks.
+            </p>
+          </section>
         </Card>
       )}
 

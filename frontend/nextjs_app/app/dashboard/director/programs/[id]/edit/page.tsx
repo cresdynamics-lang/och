@@ -5,7 +5,7 @@ import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useProgram, useUpdateProgram, useTracks, useCreateTrack, useDeleteTrack } from '@/hooks/usePrograms'
+import { useProgram, useUpdateProgram, useTracks, useCreateTrack, useDeleteTrack, useUpdateTrack } from '@/hooks/usePrograms'
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { programsClient, type Program, type Track } from '@/services/programsClient'
@@ -21,11 +21,16 @@ export default function EditProgramPage() {
   const { updateProgram, isLoading: isUpdating } = useUpdateProgram()
   const { createTrack, isLoading: isCreatingTrack } = useCreateTrack()
   const { deleteTrack, isLoading: isDeletingTrack } = useDeleteTrack()
+  const { updateTrack: updateTrackApi, isLoading: isAssigningTrack } = useUpdateTrack()
   const { users } = useUsers({ page: 1, page_size: 200 })
-  
+
   const [formData, setFormData] = useState<Partial<Program>>({})
   const [error, setError] = useState<string | null>(null)
   const [showAddTrack, setShowAddTrack] = useState(false)
+  const [addTrackMode, setAddTrackMode] = useState<'new' | 'existing'>('new')
+  const [allTracks, setAllTracks] = useState<Track[]>([])
+  const [loadingAllTracks, setLoadingAllTracks] = useState(false)
+  const [selectedExistingTrackId, setSelectedExistingTrackId] = useState<string>('')
   const [newTrack, setNewTrack] = useState<Partial<Track>>({
     name: '',
     key: '',
@@ -60,6 +65,22 @@ export default function EditProgramPage() {
       })
     }
   }, [program])
+
+  // Load all tracks when "Add existing track" is shown (for dropdown)
+  useEffect(() => {
+    if (!showAddTrack || addTrackMode !== 'existing') return
+    let cancelled = false
+    setLoadingAllTracks(true)
+    setTrackError(null)
+    programsClient.getTracks().then((list) => {
+      if (!cancelled) setAllTracks(Array.isArray(list) ? list : [])
+    }).catch(() => {
+      if (!cancelled) setTrackError('Failed to load tracks')
+    }).finally(() => {
+      if (!cancelled) setLoadingAllTracks(false)
+    })
+    return () => { cancelled = true }
+  }, [showAddTrack, addTrackMode])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -280,6 +301,26 @@ export default function EditProgramPage() {
     }
   }
 
+  const currentTrackIds = new Set(tracks.map((t) => t.id).filter(Boolean))
+  const tracksNotInProgram = allTracks.filter((t) => t.id && !currentTrackIds.has(t.id))
+
+  const handleAddExistingTrack = async () => {
+    if (!selectedExistingTrackId) {
+      setTrackError('Please select a track')
+      return
+    }
+    setTrackError(null)
+    try {
+      await updateTrackApi(selectedExistingTrackId, { program: programId })
+      setSelectedExistingTrackId('')
+      setShowAddTrack(false)
+      reloadTracks()
+      reloadProgram()
+    } catch (err: any) {
+      setTrackError(err?.message || err?.data?.detail || 'Failed to assign track to program')
+    }
+  }
+
   if (loadingProgram) {
     return (
       <RouteGuard>
@@ -492,8 +533,77 @@ export default function EditProgramPage() {
               {showAddTrack && (
                 <Card className="mb-6 border-och-defender/30 bg-och-midnight/30">
                   <div className="p-6 space-y-4">
-                    <h3 className="text-lg font-bold text-white">Add New Track</h3>
-                    
+                    <h3 className="text-lg font-bold text-white">Add Track</h3>
+                    <div className="flex gap-2 border-b border-och-steel/20 pb-3">
+                      <button
+                        type="button"
+                        onClick={() => { setAddTrackMode('new'); setTrackError(null); setSelectedExistingTrackId('') }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${addTrackMode === 'new' ? 'bg-och-defender text-white' : 'bg-och-midnight/50 text-och-steel hover:text-white'}`}
+                      >
+                        Create new track
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setAddTrackMode('existing'); setTrackError(null) }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${addTrackMode === 'existing' ? 'bg-och-defender text-white' : 'bg-och-midnight/50 text-och-steel hover:text-white'}`}
+                      >
+                        Add existing track
+                      </button>
+                    </div>
+
+                    {addTrackMode === 'existing' ? (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-white mb-2">
+                            Select a track to add to this program
+                          </label>
+                          <select
+                            value={selectedExistingTrackId}
+                            onChange={(e) => setSelectedExistingTrackId(e.target.value)}
+                            disabled={loadingAllTracks}
+                            className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                          >
+                            <option value="">— Select track —</option>
+                            {tracksNotInProgram.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} ({t.key}){t.program_name ? ` · ${t.program_name}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {loadingAllTracks && <p className="text-och-steel text-sm mt-1">Loading tracks...</p>}
+                          {!loadingAllTracks && tracksNotInProgram.length === 0 && allTracks.length > 0 && (
+                            <p className="text-och-steel text-sm mt-1">All tracks are already in this program.</p>
+                          )}
+                        </div>
+                        {trackError && (
+                          <div className="p-3 bg-och-orange/20 border border-och-orange rounded-lg text-och-orange text-sm">
+                            {trackError}
+                          </div>
+                        )}
+                        <div className="flex gap-3">
+                          <Button
+                            type="button"
+                            variant="defender"
+                            onClick={handleAddExistingTrack}
+                            disabled={isAssigningTrack || !selectedExistingTrackId}
+                          >
+                            {isAssigningTrack ? 'Adding...' : 'Add to program'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setShowAddTrack(false)
+                              setTrackError(null)
+                              setSelectedExistingTrackId('')
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-white mb-2">
@@ -599,6 +709,8 @@ export default function EditProgramPage() {
                         Cancel
                       </Button>
                     </div>
+                      </>
+                    )}
                   </div>
                 </Card>
               )}

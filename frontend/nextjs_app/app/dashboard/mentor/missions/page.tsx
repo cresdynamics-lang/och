@@ -48,15 +48,16 @@ function MissionsPageInner() {
     setLoadingCapstones(true)
     try {
       const data = await mentorClient.getCapstoneProjects(mentorId, { status: 'pending_scoring' })
-      setCapstones(data)
+      const list = Array.isArray(data) ? data : (data as any)?.results ?? (data as any)?.data ?? []
+      setCapstones(Array.isArray(list) ? list : [])
     } catch (err: any) {
       // 404 is expected if mentor has no capstones - handle gracefully
       if (err?.status === 404 || err?.response?.status === 404) {
         console.log('[loadCapstones] No capstones found for mentor (404) - this is normal');
-        setCapstones([]);
       } else {
         console.error('Failed to load capstones:', err);
       }
+      setCapstones([])
     } finally {
       setLoadingCapstones(false)
     }
@@ -181,16 +182,12 @@ function MissionsPageInner() {
 
   return (
     <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-        <h1 className="text-4xl font-bold mb-2 text-och-mint">Mission Review</h1>
-        <p className="text-och-steel mb-4">
-          As an OCH Mentor, your responsibility in Mission Review is critical. You perform human-in-the-loop validation 
-          for mentees on the $7 Premium tier, confirming skill mastery and guiding development according to the core 
-          philosophy: <span className="text-och-mint font-semibold">"We guide the transformation"</span>.
-        </p>
-          </div>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold text-och-mint">Mission Review</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/mentor/profile?tab=guide')}>
+            Guide
+          </Button>
           <Button
             variant="defender"
             onClick={() => router.push('/dashboard/mentor/missions/hall')}
@@ -202,17 +199,6 @@ function MissionsPageInner() {
             Mission Hall
           </Button>
         </div>
-        <div className="bg-och-midnight/50 border border-och-steel/20 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-white mb-2">Your Mission Review Responsibilities:</h3>
-          <ul className="text-xs text-och-steel space-y-1 list-disc list-inside">
-            <li>Review submissions for <strong className="text-white">Professional tier ($7 Premium) mentees</strong> completing Intermediate, Advanced, Mastery, and Capstone missions</li>
-            <li>Provide <strong className="text-white">deeper analysis</strong> complementing AI feedback, issue pass/fail grades, and add written feedback</li>
-            <li><strong className="text-white">Tag technical competencies</strong> proven or missed to update mentee skill profiles (TalentScope Analytics)</li>
-            <li>Use <strong className="text-white">rubric-based scoring</strong> for Capstones and Advanced/Mastery missions</li>
-            <li>Recommend <strong className="text-white">next missions or recipes</strong> based on skill gaps detected</li>
-            <li>All actions are logged in the <strong className="text-white">immutable Activity Audit Trail</strong></li>
-          </ul>
-        </div>
       </div>
 
       <div className="space-y-6">
@@ -221,12 +207,7 @@ function MissionsPageInner() {
         {/* Cohort Missions - Read-Only View */}
         <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6">
           <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Cohort Missions</h2>
-              <p className="text-sm text-och-steel">
-                View missions from your assigned cohorts. This is a read-only view of missions assigned by program directors.
-              </p>
-            </div>
+            <h2 className="text-xl font-bold text-white">Cohort Missions</h2>
             <button
               onClick={loadCohortMissions}
               className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-opacity-90 text-sm"
@@ -388,12 +369,7 @@ function MissionsPageInner() {
         
         <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6">
           <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Capstone Projects</h2>
-              <p className="text-sm text-och-steel">
-                Score capstone projects using assigned rubrics. Capstones are complex projects required in the $7 Premium tier and Mastery Tracks.
-              </p>
-            </div>
+            <h2 className="text-xl font-bold text-white">Capstone Projects</h2>
             <button
               onClick={loadCapstones}
               className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-opacity-90 text-sm"
@@ -402,13 +378,13 @@ function MissionsPageInner() {
             </button>
           </div>
 
-          {capstones.length === 0 && !loadingCapstones && (
+          {(capstones ?? []).length === 0 && !loadingCapstones && (
             <div className="text-och-steel text-sm">No capstones pending scoring.</div>
           )}
 
-          {capstones.length > 0 && (
+          {(capstones ?? []).length > 0 && (
             <div className="space-y-3">
-              {capstones.map((capstone) => (
+              {(capstones ?? []).map((capstone) => (
                 <div
                   key={capstone.id}
                   className="p-4 bg-och-midnight/50 rounded-lg flex justify-between items-center hover:bg-och-midnight/70 transition-colors"

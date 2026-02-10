@@ -50,7 +50,6 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         related_name='audit_logs',
-        to_field='uuid_id'
     )
     api_key = models.ForeignKey(
         'APIKey',
@@ -112,13 +111,12 @@ class DataExport(models.Model):
     """
     Data export logs for GDPR/DPA compliance.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='data_exports', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='data_exports')
     requested_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
         related_name='exports_requested',
-        to_field='uuid_id'
     )
     
     # Export details
@@ -167,7 +165,7 @@ class DataErasure(models.Model):
     """
     Data erasure logs for GDPR/DPA compliance.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='data_erasures', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='data_erasures')
     requested_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
