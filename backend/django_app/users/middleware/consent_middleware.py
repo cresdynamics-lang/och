@@ -13,11 +13,12 @@ class ConsentMiddleware:
     Usage: Add to MIDDLEWARE in settings.py
     """
     
-    # Map of resource types to required consent scopes
+    # Map of resource types to required consent scopes (billing/analytics visibility)
     RESOURCE_CONSENT_MAP = {
-        'profiling': 'share_with_mentor',  # Example
+        'profiling': 'share_with_mentor',
         'portfolio': 'public_portfolio',
         'sponsor_data': 'share_with_sponsor',
+        'analytics': 'analytics',
     }
     
     def __init__(self, get_response):

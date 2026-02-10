@@ -662,26 +662,42 @@ def create_checkout_session(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsSponsorUser])
 def sponsor_invoices(request):
-    """GET /api/v1/billing/invoices - Retrieve invoices linked to sponsor (user role + org)."""
+    """GET /api/v1/billing/invoices - Retrieve invoices linked to sponsor (org_id scoping; Finance/Admin/Sponsor)."""
     try:
-        # Sponsors are defined by user role (sponsor/sponsor_admin) and org_type='sponsor', not a separate sponsors table
-        sponsor_org = Organization.objects.filter(
-            org_type='sponsor',
-            organizationmember__user=request.user
-        ).first()
-
-        if not sponsor_org:
+        # Org-level segregation: user must be member or have scoped Finance/Sponsor role for a sponsor org
+        from .permissions import _user_sponsor_orgs
+        sponsor_orgs = list(_user_sponsor_orgs(request.user))
+        if not sponsor_orgs:
             return Response({
                 'error': 'User is not associated with a sponsor organization'
             }, status=status.HTTP_403_FORBIDDEN)
 
-        # No separate Sponsor model: invoice data would be keyed by org in a future billing integration.
-        # For now return empty list so the endpoint works without the sponsors table.
-        return Response({
-            'invoices': [],
-            'total_invoices': 0
-        })
+        # Sponsor model keyed by org slug; get all sponsors for user's orgs
+        org_slugs = [o.slug for o in sponsor_orgs]
+        sponsors = list(Sponsor.objects.filter(slug__in=org_slugs, is_active=True))
+        if not sponsors:
+            return Response({'invoices': [], 'total_invoices': 0})
 
+        # Invoices = billing records (SponsorCohortBilling) for those sponsors
+        billing_qs = SponsorCohortBilling.objects.filter(
+            sponsor_cohort__sponsor__in=sponsors
+        ).select_related('sponsor_cohort', 'sponsor_cohort__sponsor').order_by('-billing_month')
+
+        invoices = []
+        for b in billing_qs:
+            invoices.append({
+                'id': str(b.id),
+                'cohort_id': str(b.sponsor_cohort.id),
+                'cohort_name': b.sponsor_cohort.name,
+                'sponsor_id': str(b.sponsor_cohort.sponsor.id),
+                'billing_month': b.billing_month.isoformat(),
+                'net_amount': float(b.net_amount),
+                'currency': 'KES',
+                'payment_status': b.payment_status,
+                'invoice_generated': b.invoice_generated,
+                'created_at': b.created_at.isoformat(),
+            })
+        return Response({'invoices': invoices, 'total_invoices': len(invoices)})
     except Exception as e:
         return Response({
             'error': f'Failed to retrieve invoices: {str(e)}'

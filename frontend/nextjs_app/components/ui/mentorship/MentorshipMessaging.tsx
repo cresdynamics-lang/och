@@ -8,7 +8,13 @@ import type { MentorshipMessage } from '@/services/types/mentor'
 import { Card } from '@/components/ui/Card'
 import { Send, Paperclip } from 'lucide-react'
 
-export function MentorshipMessaging() {
+interface MentorshipMessagingProps {
+  assignmentId?: string
+  mentorIdOverride?: string
+  mentorNameOverride?: string
+}
+
+export function MentorshipMessaging(props: MentorshipMessagingProps = {}) {
   const { user } = useAuth()
   const [assignment, setAssignment] = useState<{
     id: string
@@ -37,6 +43,17 @@ export function MentorshipMessaging() {
   // Load assignment
   useEffect(() => {
     const loadAssignment = async () => {
+      // If an assignment is explicitly provided (from cohort filter), use it directly.
+      if (props.assignmentId && props.mentorIdOverride && props.mentorNameOverride) {
+        setAssignment({
+          id: props.assignmentId,
+          mentor_id: props.mentorIdOverride,
+          mentor_name: props.mentorNameOverride,
+        })
+        setIsLoading(false)
+        return
+      }
+
       if (!user?.id) {
         setIsLoading(false)
         return
@@ -68,7 +85,7 @@ export function MentorshipMessaging() {
     }
 
     loadAssignment()
-  }, [user?.id])
+  }, [user?.id, props.assignmentId, props.mentorIdOverride, props.mentorNameOverride])
 
   // Load messages
   const loadMessages = async () => {

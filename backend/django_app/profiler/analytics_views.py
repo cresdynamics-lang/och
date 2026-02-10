@@ -19,15 +19,12 @@ from rest_framework.response import Response
 from .models import ProfilerSession
 
 
-def _is_admin(user) -> bool:
+def _is_admin_or_analyst(user) -> bool:
     """
-    Helper to determine if a user has admin-like permissions.
-
-    Mirrors the simple pattern used elsewhere in the profiler views:
-    checking `is_staff` or an 'admin' role assignment.
+    Helper for analytics access: admin or analyst role (read-only for analyst).
     """
     user_roles = [ur.role.name for ur in user.user_roles.filter(is_active=True)]
-    return user.is_staff or "admin" in user_roles
+    return user.is_staff or "admin" in user_roles or "analyst" in user_roles
 
 
 @api_view(["GET"])
@@ -44,17 +41,18 @@ def get_track_acceptance_analytics(request):
       - days: integer window size (e.g. 7, 30) for recent data; defaults to 30
     """
     user = request.user
-    if not _is_admin(user):
+    if not _is_admin_or_analyst(user):
         return Response(
-            {"error": "Admin access required"},
+            {"error": "Admin or Analyst access required"},
             status=403,
         )
-
     # Time window
     try:
         days = int(request.query_params.get("days", 30))
     except (TypeError, ValueError):
         days = 30
+    from users.utils.audit_utils import log_analytics_access
+    log_analytics_access(request, user, "profiler_acceptance_rate", metadata={"days": days})
 
     window_start = timezone.now() - timedelta(days=days)
 
@@ -101,11 +99,13 @@ def get_role_mapping_accuracy(request):
     configuration remain stable.
     """
     user = request.user
-    if not _is_admin(user):
+    if not _is_admin_or_analyst(user):
         return Response(
-            {"error": "Admin access required"},
+            {"error": "Admin or Analyst access required"},
             status=403,
         )
+    from users.utils.audit_utils import log_analytics_access
+    log_analytics_access(request, user, "profiler_role_mapping_accuracy", metadata={})
 
     payload = {
         "status": "placeholder",

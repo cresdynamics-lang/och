@@ -55,6 +55,19 @@ export interface MentorshipFeedback {
   mentor_engagement: number;
 }
 
+export interface StudentMentorAssignment {
+  // Backend assignment id (MenteeMentorAssignment); used for chat/messages.
+  id: string;
+  // UI key so that the same mentor+student pair can appear once per cohort.
+  uiId: string;
+  mentor_id: string;
+  mentor_name: string;
+  cohort_id?: string;
+  cohort_name?: string;
+  status: string;
+  assigned_at?: string;
+}
+
 export function useMentorship(userId?: string) {
   const queryClient = useQueryClient();
 
@@ -125,6 +138,36 @@ export function useMentorship(userId?: string) {
       } catch (error) {
         console.error('Failed to fetch sessions:', error);
         return [] as MentorshipSession[];
+      }
+    },
+    enabled: !!userId,
+  });
+
+  // 2b. All mentorship assignments for this student (all mentors & cohorts)
+  const assignmentsQuery = useQuery({
+    queryKey: ['mentorship', 'assignments', userId],
+    queryFn: async () => {
+      if (!userId) return [] as StudentMentorAssignment[];
+      try {
+        const response = await apiGateway.get(`/mentorship/mentees/${userId}/assignments`);
+        const items = Array.isArray(response) ? response : (((response as any)?.results) || []);
+        return (items as any[]).map((item) => {
+          const rawId = String(item.id);
+          const cohortId = item.cohort_id || 'none';
+          return {
+            id: rawId,
+            uiId: `${rawId}:${cohortId}`,
+            mentor_id: String(item.mentor_id),
+            mentor_name: item.mentor_name || 'Mentor',
+            cohort_id: item.cohort_id || undefined,
+            cohort_name: item.cohort_name || undefined,
+            status: item.status || 'active',
+            assigned_at: item.assigned_at || undefined,
+          } as StudentMentorAssignment;
+        });
+      } catch (error) {
+        console.error('Failed to fetch mentorship assignments:', error);
+        return [] as StudentMentorAssignment[];
       }
     },
     enabled: !!userId,
@@ -225,7 +268,8 @@ export function useMentorship(userId?: string) {
     mentor: mentorQuery.data,
     sessions: sessionsQuery.data || [],
     goals: goalsQuery.data || [],
-    isLoading: mentorQuery.isLoading || sessionsQuery.isLoading || goalsQuery.isLoading,
+    assignments: assignmentsQuery.data || [],
+    isLoading: mentorQuery.isLoading || sessionsQuery.isLoading || goalsQuery.isLoading || assignmentsQuery.isLoading,
     scheduleSession,
     updateGoalStatus,
     submitFeedback,

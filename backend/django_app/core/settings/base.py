@@ -89,6 +89,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'users.middleware.consent_middleware.ConsentMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -134,9 +135,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+    # CommonPasswordValidator has been disabled to allow common passwords.
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
