@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useUsers } from '@/hooks/useUsers'
 import { UserManagementModal } from '@/components/admin/UserManagementModal'
 import { apiGateway } from '@/services/apiGateway'
+import { djangoClient } from '@/services/djangoClient'
 // Icon components (simple SVG icons)
 const SearchIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -57,6 +58,19 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    password: '',
+    role: 'mentor' as 'mentor' | 'student' | 'admin' | 'program_director' | 'finance',
+  })
+  const [isCreating, setIsCreating] = useState(false)
+  const passwordValue = createForm.password || ''
+  const passwordTooShort = passwordValue.length > 0 && passwordValue.length < 8
+  const passwordAllNumeric = passwordValue.length > 0 && /^\d+$/.test(passwordValue)
+  const passwordLocallyInvalid = passwordTooShort || passwordAllNumeric
 
   // Debounce search query
   useEffect(() => {
@@ -134,6 +148,75 @@ export default function UsersPage() {
   const handleUserUpdate = async () => {
     setSelectedUser(null)
     await refetch()
+  }
+
+  const handleCreateUser = async () => {
+    if (!createForm.email || !createForm.first_name || !createForm.last_name) {
+      alert('Email, first name, and last name are required.')
+      return
+    }
+
+    // If a password is provided, enforce basic client-side rules before hitting the API
+    if (passwordLocallyInvalid) {
+      alert('Password must be at least 8 characters and cannot be all numbers.')
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      // Create the user via auth.signup so role is assigned in one step
+      await djangoClient.auth.signup({
+        email: createForm.email.trim(),
+        password: createForm.password || undefined,
+        first_name: createForm.first_name.trim(),
+        last_name: createForm.last_name.trim(),
+        role: createForm.role,
+      } as any)
+
+      alert(`User ${createForm.email} created as ${createForm.role}.`)
+      setShowCreateModal(false)
+      setCreateForm({
+        email: '',
+        first_name: '',
+        last_name: '',
+        password: '',
+        role: createForm.role,
+      })
+      await refetch()
+    } catch (error: any) {
+      console.error('Failed to create user:', error)
+
+      // Try to surface Django/DRF validation errors clearly (especially password rules)
+      let message = 'Failed to create user.'
+
+      const data = error?.response?.data || error?.data
+      if (data) {
+        if (typeof data === 'string') {
+          message = data
+        } else if (data.detail) {
+          message = data.detail
+        } else {
+          // Collect field-specific errors like { password: ["This password is too common."] }
+          const fieldErrors: string[] = []
+          for (const [field, value] of Object.entries(data)) {
+            if (Array.isArray(value)) {
+              fieldErrors.push(`${field}: ${value.join(' ')}`)
+            } else if (typeof value === 'string') {
+              fieldErrors.push(`${field}: ${value}`)
+            }
+          }
+          if (fieldErrors.length > 0) {
+            message = fieldErrors.join('\n')
+          }
+        }
+      } else if (error?.message) {
+        message = error.message
+      }
+
+      alert(message)
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   // Multi-select handlers
@@ -437,10 +520,19 @@ export default function UsersPage() {
                 </h1>
             <p className="text-och-steel">Manage all platform users and their roles</p>
               </div>
-              <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isLoading}>
-                <RefreshIcon className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="defender"
+                  size="sm"
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  + Add User
+                </Button>
+                <Button onClick={() => refetch()} variant="outline" size="sm" disabled={isLoading}>
+                  <RefreshIcon className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -780,6 +872,120 @@ export default function UsersPage() {
               onClose={() => setSelectedUser(null)}
               onUpdate={handleUserUpdate}
             />
+          )}
+
+          {/* Create User Modal */}
+          {showCreateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <Card className="w-full max-w-lg m-4">
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">Add New User</h2>
+                      <p className="text-och-steel text-sm">
+                        Create a platform user and assign their primary role.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => !isCreating && setShowCreateModal(false)}
+                      disabled={isCreating}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-xs text-och-steel mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-och-midnight/70 border border-och-steel/40 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-mint"
+                        placeholder="mentor@example.com"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-och-steel mb-1">First name</label>
+                        <input
+                          type="text"
+                          value={createForm.first_name}
+                          onChange={(e) => setCreateForm(f => ({ ...f, first_name: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-och-midnight/70 border border-och-steel/40 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-mint"
+                          placeholder="Jane"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-och-steel mb-1">Last name</label>
+                        <input
+                          type="text"
+                          value={createForm.last_name}
+                          onChange={(e) => setCreateForm(f => ({ ...f, last_name: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-lg bg-och-midnight/70 border border-och-steel/40 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-mint"
+                          placeholder="Smith"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-och-steel mb-1">
+                        Temporary password (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.password}
+                        onChange={(e) => setCreateForm(f => ({ ...f, password: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-och-midnight/70 border border-och-steel/40 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-mint"
+                        placeholder="Leave empty for passwordless; otherwise enter a strong password."
+                      />
+                      {passwordValue && (
+                        <div className="mt-1 text-[11px] space-y-0.5">
+                          <div className={passwordTooShort ? 'text-och-orange' : 'text-och-mint'}>
+                            • At least 8 characters
+                          </div>
+                          <div className={passwordAllNumeric ? 'text-och-orange' : 'text-och-mint'}>
+                            • Cannot be only numbers
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs text-och-steel mb-1">Primary role</label>
+                      <select
+                        value={createForm.role}
+                        onChange={(e) => setCreateForm(f => ({ ...f, role: e.target.value as any }))}
+                        className="w-full px-3 py-2 rounded-lg bg-och-midnight/70 border border-och-steel/40 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-mint"
+                      >
+                        <option value="mentor">Mentor</option>
+                        <option value="student">Student</option>
+                        <option value="admin">Admin</option>
+                        <option value="program_director">Program Director</option>
+                        <option value="finance">Finance</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => !isCreating && setShowCreateModal(false)}
+                      disabled={isCreating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="defender"
+                      onClick={handleCreateUser}
+                      disabled={isCreating}
+                    >
+                      {isCreating ? 'Creating...' : 'Create User'}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
           )}
         </div>
       </AdminLayout>

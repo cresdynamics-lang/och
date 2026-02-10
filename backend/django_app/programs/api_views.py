@@ -160,13 +160,50 @@ class CohortViewSet(viewsets.ModelViewSet):
             )
         User = get_user_model()
         try:
+            # Step 1: Resolve the user either by integer ID or UUID string,
+            # WITHOUT assuming they are already flagged as a mentor.
+            mentor_user = None
+            mentor_pk = None
             try:
-                mentor_user = User.objects.get(id=int(mentor_id), is_mentor=True)
-            except (ValueError, User.DoesNotExist):
-                mentor_user = User.objects.get(uuid_id=uuid_module.UUID(str(mentor_id)), is_mentor=True)
+                mentor_pk = int(mentor_id)
+            except (ValueError, TypeError):
+                mentor_pk = None
+
+            if mentor_pk is not None:
+                mentor_user = User.objects.get(id=mentor_pk)
+            else:
+                # Fallback to UUID-based lookup
+                try:
+                    mentor_uuid = uuid_module.UUID(str(mentor_id))
+                except (ValueError, TypeError):
+                    return Response(
+                        {'mentor': ['Invalid mentor identifier. Expected numeric ID or UUID.']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                mentor_user = User.objects.get(uuid_id=mentor_uuid)
+
+            # Step 2: Verify that this user is actually a mentor
+            # We consider them a mentor if either:
+            # - user.is_mentor is True, OR
+            # - they have an active UserRole with role.name == 'mentor'
+            is_mentor_flag = getattr(mentor_user, 'is_mentor', False)
+
+            if not is_mentor_flag:
+                from users.models import UserRole
+                has_mentor_role = UserRole.objects.filter(
+                    user=mentor_user,
+                    role__name='mentor',
+                    is_active=True,
+                ).exists()
+                if not has_mentor_role:
+                    return Response(
+                        {'mentor': ['User exists but is not marked as a mentor. Assign the mentor role first.']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
         except User.DoesNotExist:
             return Response(
-                {'mentor': ['Mentor not found or user is not a mentor.']},
+                {'mentor': ['Mentor not found.']},
                 status=status.HTTP_404_NOT_FOUND
             )
         if MentorAssignment.objects.filter(cohort=cohort, mentor=mentor_user, active=True).exists():

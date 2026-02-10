@@ -135,7 +135,23 @@ export default function MentorCohortsTracksPage() {
         const validAssignments = assignmentResults.filter(item => item && item.mentorAssignment) as Array<{ cohort: Cohort; mentorAssignment: MentorAssignment }>
         
         // Get unique track IDs from valid cohorts
-        const trackIds = Array.from(new Set(validAssignments.map(item => item.cohort.track).filter(Boolean)))
+        // Backend may return `cohort.track` as either an ID or a nested object;
+        // normalize to a string ID to avoid `[object Object]` URLs.
+        const trackIds = Array.from(
+          new Set(
+            validAssignments
+              .map(({ cohort }) => {
+                const rawTrack: any = (cohort as any).track
+                if (!rawTrack) return null
+                if (typeof rawTrack === 'string') return rawTrack
+                if (typeof rawTrack === 'object') {
+                  return rawTrack.id || rawTrack.uuid || String(rawTrack)
+                }
+                return null
+              })
+              .filter((id): id is string => !!id)
+          )
+        )
         
         // Fetch track details dynamically
         const trackPromises = trackIds.map(async (trackId) => {
@@ -157,7 +173,14 @@ export default function MentorCohortsTracksPage() {
           if (track) {
             newTracksCache.set(trackId, track)
             if (track.program) {
-              programIds.add(track.program)
+              const rawProgram: any = track.program
+              const programId =
+                typeof rawProgram === 'string'
+                  ? rawProgram
+                  : rawProgram.id || rawProgram.uuid || String(rawProgram)
+              if (programId) {
+                programIds.add(programId)
+              }
             }
           }
         })
@@ -191,8 +214,20 @@ export default function MentorCohortsTracksPage() {
         const assignmentsWithDetails: AssignmentWithDetails[] = []
         
         for (const { cohort, mentorAssignment } of validAssignments) {
-          const track = cohort.track ? newTracksCache.get(String(cohort.track)) : null
-          const program = track?.program ? newProgramsCache.get(track.program) : null
+          const rawTrack: any = (cohort as any).track
+          const trackId =
+            typeof rawTrack === 'string'
+              ? rawTrack
+              : rawTrack?.id || rawTrack?.uuid || (rawTrack ? String(rawTrack) : null)
+          const track = trackId ? newTracksCache.get(trackId) : null
+          const program =
+            track?.program
+              ? newProgramsCache.get(
+                  typeof track.program === 'string'
+                    ? track.program
+                    : (track.program as any).id || (track.program as any).uuid || String(track.program)
+                )
+              : null
 
           assignmentsWithDetails.push({
             assignment: mentorAssignment,

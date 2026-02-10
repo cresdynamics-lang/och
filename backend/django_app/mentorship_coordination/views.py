@@ -597,7 +597,7 @@ def mentor_mentee_talentscope(request, mentor_id, mentee_id):
 
     # Missions completed (approved)
     for row in MissionSubmission.objects.filter(
-        user=mentee,
+        student=mentee,
         status='approved',
         created_at__date__gte=start,
         created_at__date__lte=today
@@ -654,9 +654,13 @@ def mentor_mentee_talentscope(request, mentor_id, mentee_id):
             behavior_type__in=['engagement_level', 'collaboration']
         ).count()
 
+    # Count mission submissions where a mentor/overall score exists.
+    # We intentionally avoid touching AI feedback tables here so this
+    # endpoint works even if those migrations haven't been applied yet.
     mission_scores = MissionSubmission.objects.filter(
-        user=mentee
-    ).filter(Q(ai_score__isnull=False) | Q(mentor_score__isnull=False)).count()
+        student=mentee,
+        score__isnull=False,
+    ).count()
 
     # Default advanced fields from snapshot when available
     core_readiness_score = float(latest_snapshot.core_readiness_score) if latest_snapshot else None
@@ -1339,7 +1343,7 @@ def mentor_mentees(request, mentor_id):
                 try:
                     from missions.models import MissionSubmission
                     missions_completed = MissionSubmission.objects.filter(
-                        user=mentee,
+                        student=mentee,
                         status='approved'
                     ).count()
                 except Exception as mission_err:
@@ -1541,7 +1545,7 @@ def mentee_cockpit(request, mentee_id):
     
     # Quick actions
     pending_missions = MissionSubmission.objects.filter(
-        user=mentee,
+        student=mentee,
         status__in=['submitted', 'ai_reviewed']
     ).order_by('-submitted_at')[:3]
     
@@ -3048,6 +3052,122 @@ def get_student_mentor(request, mentee_id):
         )
     except Exception as e:
         logger.error(f"Error fetching mentor for mentee {mentee_id}: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Internal server error'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_student_mentorship_assignments(request, mentee_id):
+    """
+    GET /api/v1/mentorship/mentees/{mentee_id}/assignments
+    Return ALL active mentorship assignments for a student, including
+    mentor and cohort details for each assignment.
+    """
+    try:
+        # Students can only view their own assignments
+        mentee_id_int = int(mentee_id)
+        user_id_int = int(request.user.id)
+
+        if user_id_int != mentee_id_int:
+            return Response(
+                {'error': 'You can only view your own mentorship assignments'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        results = []
+
+        try:
+            # Primary source of truth for "cohorts the student is in" is Enrollment
+            from programs.models import Enrollment, MentorAssignment
+
+            mentee = User.objects.get(id=mentee_id_int)
+
+            enrollments = Enrollment.objects.filter(
+                user_id=mentee_id_int,
+                status__in=['active', 'completed']
+            ).select_related('cohort')
+
+            # Track which (cohort, mentor) pairs we've already emitted to avoid duplicates
+            seen_pairs = set()
+
+            for enrollment in enrollments:
+                cohort = enrollment.cohort
+                if not cohort:
+                    continue
+
+                cohort_key = str(cohort.id)
+
+                # Find all active mentors for this cohort
+                mentor_assignments = MentorAssignment.objects.filter(
+                    cohort=cohort,
+                    active=True
+                ).select_related('mentor')
+
+                for mentor_assignment in mentor_assignments:
+                    mentor = mentor_assignment.mentor
+                    if not mentor:
+                        continue
+
+                    pair_key = (cohort_key, str(mentor.id))
+                    if pair_key in seen_pairs:
+                        continue
+                    seen_pairs.add(pair_key)
+
+                    # Ensure there is a MenteeMentorAssignment for this mentee+mentor pair
+                    assignment, created = MenteeMentorAssignment.objects.get_or_create(
+                        mentee=mentee,
+                        mentor=mentor,
+                        defaults={
+                            'status': 'active',
+                            'cohort_id': cohort_key,
+                        }
+                    )
+
+                    # Do not overwrite cohort_id on the assignment; a single dyad can span multiple cohorts.
+                    assigned_ts = assignment.assigned_at or mentor_assignment.assigned_at
+
+                    results.append({
+                        'id': str(assignment.id),
+                        'status': assignment.status,
+                        'assigned_at': assigned_ts.isoformat() if assigned_ts else None,
+                        'cohort_id': cohort_key,
+                        'cohort_name': cohort.name,
+                        'mentor_id': str(mentor.id),
+                        'mentor_name': mentor.get_full_name() or mentor.email,
+                    })
+
+        except Exception as e:
+            # If Enrollment / MentorAssignment lookup fails, fall back to raw MenteeMentorAssignment records
+            logger.warning(f"Falling back to direct MenteeMentorAssignment lookup for mentee {mentee_id_int}: {e}")
+            assignments = MenteeMentorAssignment.objects.filter(
+                mentee_id=mentee_id_int,
+                status__in=['active', 'pending']
+            ).select_related('mentor')
+
+            for assignment in assignments:
+                mentor = assignment.mentor
+                results.append({
+                    'id': str(assignment.id),
+                    'status': assignment.status,
+                    'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                    'cohort_id': assignment.cohort_id,
+                    'cohort_name': None,
+                    'mentor_id': str(mentor.id),
+                    'mentor_name': mentor.get_full_name() or mentor.email,
+                })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+    except (ValueError, AttributeError):
+        return Response(
+            {'error': 'Invalid request parameters'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Error fetching mentorship assignments for mentee {mentee_id}: {e}", exc_info=True)
         return Response(
             {'error': 'Internal server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

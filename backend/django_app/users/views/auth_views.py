@@ -117,6 +117,12 @@ def _assign_user_role(user, role_name='student'):
         defaults={'is_active': True}
     )
 
+    # Keep is_mentor flag in sync for mentor role so that mentor-only
+    # queries (e.g. cohort mentor assignment, auto-match) work correctly.
+    if mapped_role == 'mentor' and not getattr(user, 'is_mentor', False):
+        user.is_mentor = True
+        user.save(update_fields=['is_mentor'])
+
     print(f'Assigned role {role.name} to user {user.email}')
 
 # Backward compatibility

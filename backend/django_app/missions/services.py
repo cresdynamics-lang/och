@@ -1,10 +1,35 @@
 """
-Missions Engine services for difficulty mapping and mission assignment.
+Missions Engine services for difficulty mapping, mission assignment, and
+secure artifact upload handling.
 """
 import logging
 from typing import Optional
 
+from django.core.files.storage import default_storage
+from django.utils.crypto import get_random_string
+
 logger = logging.getLogger(__name__)
+
+# 10MB max file size (mirrors global upload settings and mentorship modules)
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+
+# Disallowed file extensions / content types for security
+DISALLOWED_EXTENSIONS = {
+    ".exe",
+    ".bat",
+    ".cmd",
+    ".sh",
+    ".ps1",
+    ".msi",
+    ".js",
+}
+
+DISALLOWED_CONTENT_TYPES = {
+    "application/x-msdownload",
+    "application/x-msdos-program",
+    "application/x-dosexec",
+    "application/x-executable",
+}
 
 
 def map_profiler_difficulty_to_mission_difficulty(profiler_difficulty: str) -> int:
@@ -92,42 +117,87 @@ def get_max_mission_difficulty_for_user(user) -> int:
     return 1
 
 
-def upload_file_to_storage(file, file_name: str, content_type: str = None) -> str:
+def validate_file_type(file) -> None:
     """
-    Upload file to storage (S3 or local storage).
-    
+    Validate that the uploaded file type is allowed.
+
+    Raises:
+        ValueError: if the file type is not permitted.
+    """
+    name = (getattr(file, "name", "") or "").lower()
+    content_type = (getattr(file, "content_type", "") or "").lower()
+
+    # Block known dangerous extensions
+    for ext in DISALLOWED_EXTENSIONS:
+        if name.endswith(ext):
+            raise ValueError(f"File type not allowed: {ext}")
+
+    # Block known dangerous content types
+    if content_type in DISALLOWED_CONTENT_TYPES:
+        raise ValueError(f"File content type not allowed: {content_type}")
+
+
+def upload_file_to_storage(file, submission_id: str, content_type: str = None) -> str:
+    """
+    Upload a mission artifact to the configured storage backend.
+
+    This function enforces:
+      - 10MB max file size
+      - basic file-type restrictions (no executables, scripts, etc.)
+
     Args:
-        file: File object to upload
-        file_name: Name for the file
-        content_type: MIME type of the file
-        
+        file: Django UploadedFile (or file-like) object.
+        submission_id: ID of the MissionSubmission, used to namespace uploads.
+        content_type: Optional MIME type override.
+
     Returns:
-        URL to the uploaded file
+        Public or storage-relative URL to the uploaded file.
+
+    Raises:
+        ValueError: if size or type validation fails.
     """
-    # TODO: Implement actual file upload to S3 or storage backend
-    # For now, return a placeholder URL
-    logger.warning("upload_file_to_storage not fully implemented, returning placeholder URL")
-    return f"https://storage.example.com/uploads/{file_name}"
+    # Size validation
+    file_size = getattr(file, "size", None)
+    if file_size is not None and file_size > MAX_FILE_SIZE_BYTES:
+        raise ValueError("File exceeds 10MB limit")
+
+    # Type validation
+    validate_file_type(file)
+
+    # Build a safe storage path: missions/<submission_id>/<random>-<original_name>
+    original_name = getattr(file, "name", "upload.bin")
+    random_suffix = get_random_string(8)
+    path = f"missions/{submission_id}/{random_suffix}-{original_name}"
+
+    # Use Django's default storage (can be local, S3, etc.)
+    saved_path = default_storage.save(path, file)
+    try:
+        url = default_storage.url(saved_path)
+    except Exception:
+        # Some storage backends may not support .url; fall back to path
+        url = saved_path
+
+    logger.info(f"Uploaded mission artifact for submission {submission_id} to {saved_path}")
+    return url
 
 
 def generate_presigned_upload_url(file_name: str, content_type: str = None) -> dict:
     """
     Generate a presigned URL for direct file upload.
-    
-    Args:
-        file_name: Name for the file
-        content_type: MIME type of the file
-        
-    Returns:
-        Dictionary with upload URL and fields
+
+    This is a placeholder that can be wired to S3 or another
+    object store in production. For now it returns a simple
+    structure suitable for frontend integration without
+    breaking the API.
     """
-    # TODO: Implement actual presigned URL generation for S3
-    # For now, return a placeholder
-    logger.warning("generate_presigned_upload_url not fully implemented, returning placeholder")
+    logger.warning(
+        "generate_presigned_upload_url is using a placeholder implementation; "
+        "wire this to your object store for production use."
+    )
     return {
         "url": "https://storage.example.com/upload",
         "fields": {
             "key": file_name,
-            "Content-Type": content_type or "application/octet-stream"
-        }
+            "Content-Type": content_type or "application/octet-stream",
+        },
     }

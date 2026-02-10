@@ -134,9 +134,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
     },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+    # CommonPasswordValidator has been disabled to allow common passwords.
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },

@@ -25,6 +25,7 @@ export default function MentorshipMatchingPage() {
   const mentors = useMemo(() => mentorsFromApi || [], [mentorsFromApi])
 
   const [selectedCohortIds, setSelectedCohortIds] = useState<string[]>([])
+  const [cohortSearch, setCohortSearch] = useState('')
   const [assignmentsByCohort, setAssignmentsByCohort] = useState<Record<string, MentorAssignment[]>>({})
   const [mentorCohortNames, setMentorCohortNames] = useState<Record<string, string[]>>({})
   const [loadingAssignments, setLoadingAssignments] = useState(false)
@@ -42,6 +43,17 @@ export default function MentorshipMatchingPage() {
     const c = selectedCohorts[0]
     return c ? tracks.find((t) => String(t.id) === String(c.track)) : null
   }, [selectedCohorts, tracks])
+
+  const filteredCohorts = useMemo(() => {
+    const term = cohortSearch.trim().toLowerCase()
+    if (!term) return cohorts
+    return cohorts.filter((c) => {
+      const name = c.name?.toLowerCase() || ''
+      const trackName = (c.track_name || '').toLowerCase()
+      const status = c.status?.toLowerCase() || ''
+      return name.includes(term) || trackName.includes(term) || status.includes(term)
+    })
+  }, [cohorts, cohortSearch])
 
   const loadAssignmentsForCohorts = useCallback(async (cohortIds: string[]) => {
     if (cohortIds.length === 0) {
@@ -179,39 +191,101 @@ export default function MentorshipMatchingPage() {
           </div>
 
           <Card className="p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Cohorts</h2>
+                <p className="text-och-steel text-xs">
+                  Select one or more cohorts to assign mentors.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCohortIds(filteredCohorts.map((c) => String(c.id)))}
+                  disabled={filteredCohorts.length === 0}
+                >
+                  Select All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCohortIds([])}
+                  disabled={selectedCohortIds.length === 0}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-4">
-              <label className="block text-sm font-medium text-och-steel">Cohorts (select one or more)</label>
-              <select
-                multiple
-                value={selectedCohortIds}
-                onChange={(e) => {
-                  const opts = Array.from(e.target.selectedOptions, (o) => o.value)
-                  setSelectedCohortIds(opts)
-                }}
-                className="w-full max-w-md min-h-[120px] px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-              >
-                {cohorts.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-och-steel text-xs">Hold Ctrl/Cmd to select multiple.</p>
-              {cohortsLoading && <p className="text-och-steel text-sm">Loading cohorts…</p>}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={cohortSearch}
+                  onChange={(e) => setCohortSearch(e.target.value)}
+                  placeholder="Search by cohort name, track, or status…"
+                  className="w-full px-3 py-2 rounded-lg bg-och-midnight/60 border border-och-steel/30 text-white text-sm placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-mint"
+                />
+              </div>
+
+              {cohortsLoading ? (
+                <p className="text-och-steel text-sm">Loading cohorts…</p>
+              ) : filteredCohorts.length === 0 ? (
+                <p className="text-och-steel text-sm">No cohorts match your search.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-y-auto pr-1">
+                  {filteredCohorts.map((c) => {
+                    const id = String(c.id)
+                    const selected = selectedCohortIds.includes(id)
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCohortIds((prev) =>
+                            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                          )
+                        }}
+                        className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                          selected
+                            ? 'border-och-mint bg-och-mint/10'
+                            : 'border-och-steel/30 bg-och-midnight/60 hover:border-och-mint/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-sm font-semibold text-white truncate">
+                            {c.name}
+                          </span>
+                          <Badge
+                            variant={
+                              c.status === 'active' || c.status === 'running' ? 'mint' : 'steel'
+                            }
+                            className="text-[10px] uppercase"
+                          >
+                            {c.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-och-steel">
+                          <span className="truncate">
+                            {c.track_name ? `Track: ${c.track_name}` : 'No track assigned'}
+                          </span>
+                          <span>
+                            {new Date(c.start_date).toLocaleDateString()} –{' '}
+                            {new Date(c.end_date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </Card>
 
           {selectedCohortIds.length > 0 ? (
             <Card className="p-6 mb-6">
               <div className="flex flex-wrap items-center gap-3 mb-4">
-                <Button
-                  variant="defender"
-                  size="sm"
-                  onClick={handleAutoMatch}
-                  disabled={autoMatching}
-                >
-                  {autoMatching ? 'Matching…' : 'Auto-match'}
-                </Button>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={selectedMentorId}

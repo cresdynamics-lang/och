@@ -24,6 +24,7 @@ from .views import (
     mentor_reviews_list,
     mentor_feedback_summary,
     get_student_mentor,
+    get_student_mentorship_assignments,
     get_mentorship_assignment,
     get_mentor_assignments,
     mentor_assignments_list,
@@ -70,8 +71,11 @@ urlpatterns = [
     path('mentor/missions/<uuid:submission_id>/review', review_mission, name='review-mission'),
     # Keep old endpoint for backward compatibility
     path('mentor/flags', create_flag, name='create-flag-legacy'),
-    # Student mentor endpoint
+    # Student mentor endpoints
     path('mentorship/mentees/<int:mentee_id>/mentor', get_student_mentor, name='get-student-mentor'),
+    # Support both with and without trailing slash for assignments
+    path('mentorship/mentees/<int:mentee_id>/assignments', get_student_mentorship_assignments, name='get-student-assignments'),
+    path('mentorship/mentees/<int:mentee_id>/assignments/', get_student_mentorship_assignments, name='get-student-assignments-slash'),
     # Get mentorship assignment
     path('mentorship/assignment', get_mentorship_assignment, name='get-mentorship-assignment'),
     # Get all assignments for a mentor
