@@ -1,6 +1,7 @@
 """
 URL configuration for Profiler Engine.
 """
+from django.http import JsonResponse
 from django.urls import path
 from .views import (
     start_profiler,
@@ -29,12 +30,37 @@ from .views import (
     accept_profiler_result,
     get_value_statement,
 )
-from .analytics_views import (
-    get_track_acceptance_analytics,
-    get_role_mapping_accuracy,
-)
 
-app_name = 'profiler'
+# Try to import analytics views from dedicated module.
+# If unavailable (e.g. missing file in some environments),
+# fall back to lightweight placeholder views so URL loading
+# never breaks the Django server.
+try:
+    from .analytics_views import (
+        get_track_acceptance_analytics,
+        get_role_mapping_accuracy,
+    )
+except Exception:  # pragma: no cover - defensive fallback
+    def get_track_acceptance_analytics(request, *args, **kwargs):
+        return JsonResponse(
+            {
+                "status": "disabled",
+                "reason": "profiler.analytics_views module is not available in this environment.",
+            },
+            status=501,
+        )
+
+    def get_role_mapping_accuracy(request, *args, **kwargs):
+        return JsonResponse(
+            {
+                "status": "placeholder",
+                "reason": "Role-mapping accuracy analytics is not yet implemented in this environment.",
+            },
+            status=501,
+        )
+
+
+app_name = "profiler"
 
 urlpatterns = [
     path('profiler/tier0-status', check_tier0_completion, name='tier0-status'),

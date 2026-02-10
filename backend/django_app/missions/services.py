@@ -90,3 +90,44 @@ def get_max_mission_difficulty_for_user(user) -> int:
     
     # Default to beginner if no profiler data
     return 1
+
+
+def upload_file_to_storage(file, file_name: str, content_type: str = None) -> str:
+    """
+    Upload file to storage (S3 or local storage).
+    
+    Args:
+        file: File object to upload
+        file_name: Name for the file
+        content_type: MIME type of the file
+        
+    Returns:
+        URL to the uploaded file
+    """
+    # TODO: Implement actual file upload to S3 or storage backend
+    # For now, return a placeholder URL
+    logger.warning("upload_file_to_storage not fully implemented, returning placeholder URL")
+    return f"https://storage.example.com/uploads/{file_name}"
+
+
+def generate_presigned_upload_url(file_name: str, content_type: str = None) -> dict:
+    """
+    Generate a presigned URL for direct file upload.
+    
+    Args:
+        file_name: Name for the file
+        content_type: MIME type of the file
+        
+    Returns:
+        Dictionary with upload URL and fields
+    """
+    # TODO: Implement actual presigned URL generation for S3
+    # For now, return a placeholder
+    logger.warning("generate_presigned_upload_url not fully implemented, returning placeholder")
+    return {
+        "url": "https://storage.example.com/upload",
+        "fields": {
+            "key": file_name,
+            "Content-Type": content_type or "application/octet-stream"
+        }
+    }
