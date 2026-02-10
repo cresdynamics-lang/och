@@ -83,6 +83,18 @@ export interface Track {
   updated_at?: string
 }
 
+export interface CohortMissionAssignment {
+  id: string
+  title: string
+  description?: string
+  difficulty: number
+  mission_type: string
+  estimated_duration_min: number
+  is_active: boolean
+  assignment_id: string
+  assignment_status: string
+}
+
 export interface Cohort {
   id: string
   track: string
@@ -98,6 +110,7 @@ export interface Cohort {
   seat_utilization?: number
   completion_rate?: number
   enrolled_count?: number
+  enrollment_count?: number
   seat_pool?: {
     paid?: number
     scholarship?: number
@@ -438,7 +451,11 @@ class ProgramsClient {
   // Tracks (backend: /api/v1/tracks/ from programs router)
   async getTracks(programId?: string): Promise<Track[]> {
     const path = programId ? `/tracks/?program_id=${programId}` : '/tracks/'
-    return apiGateway.get(path)
+    const raw = await apiGateway.get<Track[] | { results?: Track[]; data?: Track[] }>(path)
+    if (Array.isArray(raw)) return raw
+    if (Array.isArray((raw as { results?: Track[] })?.results)) return (raw as { results: Track[] }).results
+    if (Array.isArray((raw as { data?: Track[] })?.data)) return (raw as { data: Track[] }).data
+    return []
   }
 
   async getTrack(id: string): Promise<Track> {
@@ -481,7 +498,11 @@ class ProgramsClient {
   }
 
   async getCohort(id: string): Promise<Cohort> {
-    return apiGateway.get(`/cohorts/${id}/`)
+    const raw = await apiGateway.get<Cohort | { data?: Cohort; success?: boolean }>(`/cohorts/${id}/`)
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'data' in raw && (raw as { data?: Cohort }).data) {
+      return (raw as { data: Cohort }).data
+    }
+    return raw as Cohort
   }
 
   async createCohort(data: Partial<Cohort>): Promise<Cohort> {
@@ -489,7 +510,11 @@ class ProgramsClient {
   }
 
   async updateCohort(id: string, data: Partial<Cohort>): Promise<Cohort> {
-    return apiGateway.patch(`/cohorts/${id}/`, data)
+    const raw = await apiGateway.patch<Cohort | { data?: Cohort }>(`/cohorts/${id}/`, data)
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'data' in raw && (raw as { data?: Cohort }).data) {
+      return (raw as { data: Cohort }).data
+    }
+    return raw as Cohort
   }
 
   async updateCohortDirector(id: string, data: Partial<Cohort>): Promise<Cohort> {
@@ -508,6 +533,12 @@ class ProgramsClient {
 
   async getCohortDashboard(cohortId: string): Promise<CohortDashboard> {
     return apiGateway.get(`/cohorts/${cohortId}/dashboard/`)
+  }
+
+  /** Missions assigned to this cohort */
+  async getCohortMissions(cohortId: string): Promise<CohortMissionAssignment[]> {
+    const raw = await apiGateway.get<CohortMissionAssignment[]>(`/cohorts/${cohortId}/missions/`)
+    return Array.isArray(raw) ? raw : []
   }
 
   // Calendar Events
@@ -529,7 +560,11 @@ class ProgramsClient {
 
   // Enrollments
   async getCohortEnrollments(cohortId: string): Promise<Enrollment[]> {
-    return apiGateway.get(`/cohorts/${cohortId}/enrollments/`) as Promise<Enrollment[]>
+    const raw = await apiGateway.get<Enrollment[] | { results?: Enrollment[]; data?: Enrollment[] }>(`/cohorts/${cohortId}/enrollments/`) as Promise<Enrollment[]>
+    if (Array.isArray(raw)) return raw
+    if (Array.isArray((raw as { results?: Enrollment[] })?.results)) return (raw as { results: Enrollment[] }).results
+    if (Array.isArray((raw as { data?: Enrollment[] })?.data)) return (raw as { data: Enrollment[] }).data
+    return []
   }
 
   async createEnrollment(cohortId: string, data: Partial<Enrollment>): Promise<Enrollment> {

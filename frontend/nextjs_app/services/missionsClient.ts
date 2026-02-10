@@ -246,4 +246,16 @@ export const missionsClient = {
   async startMission(menteeId: string, missionId: string): Promise<Mission> {
     return apiGateway.post(`/missions/mentees/${menteeId}/missions/${missionId}/start`, {})
   },
+
+  /**
+   * Assign mission to a cohort (director).
+   * POST /api/v1/missions/{id}/assignments/
+   */
+  async assignMissionToCohort(missionId: string, cohortId: string, dueDate?: string): Promise<any> {
+    return apiGateway.post(`/missions/${missionId}/assignments/`, {
+      assignment_type: 'cohort',
+      cohort_id: cohortId,
+      ...(dueDate && { due_date: dueDate }),
+    })
+  },
 }

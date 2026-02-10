@@ -7,11 +7,14 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useCohort, useCohortDashboard, useTracks, useUpdateCohort, useTrack } from '@/hooks/usePrograms'
-import { programsClient, type CalendarEvent, type Enrollment, type MentorAssignment, type Track } from '@/services/programsClient'
+import { programsClient, type CalendarEvent, type Enrollment, type MentorAssignment, type Track, type CohortMissionAssignment } from '@/services/programsClient'
+import { missionsClient, type MissionTemplate } from '@/services/missionsClient'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import { Target } from 'lucide-react'
 
 export default function CohortDetailPage() {
   const params = useParams()
@@ -21,8 +24,13 @@ export default function CohortDetailPage() {
   const { dashboard, isLoading: loadingDashboard } = useCohortDashboard(cohortId)
   const { tracks, isLoading: tracksLoading } = useTracks()
   const { updateCohort, isLoading: isUpdatingTrack } = useUpdateCohort()
-  // Fetch the specific track assigned to this cohort
-  const { track: fetchedTrack, isLoading: loadingTrack, reload: reloadTrack } = useTrack(cohort?.track || '')
+  // Fetch the specific track assigned to this cohort (cohort.track may be object from API)
+  const trackId = cohort?.track != null
+    ? (typeof cohort.track === 'object' && cohort.track && 'id' in cohort.track
+        ? String((cohort.track as { id: string }).id)
+        : String(cohort.track))
+    : ''
+  const { track: fetchedTrack, isLoading: loadingTrack, reload: reloadTrack } = useTrack(trackId)
   
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
@@ -32,6 +40,13 @@ export default function CohortDetailPage() {
   const [selectedTrackId, setSelectedTrackId] = useState<string>('')
   const [trackAssignmentError, setTrackAssignmentError] = useState<string | null>(null)
   const [trackAssignmentSuccess, setTrackAssignmentSuccess] = useState<string | null>(null)
+  const [showAddMissionsModal, setShowAddMissionsModal] = useState(false)
+  const [missions, setMissions] = useState<MissionTemplate[]>([])
+  const [selectedMissionIds, setSelectedMissionIds] = useState<Set<string>>(new Set())
+  const [addMissionsLoading, setAddMissionsLoading] = useState(false)
+  const [addMissionsError, setAddMissionsError] = useState<string | null>(null)
+  const [addMissionsSuccess, setAddMissionsSuccess] = useState<string | null>(null)
+  const [cohortMissions, setCohortMissions] = useState<CohortMissionAssignment[]>([])
 
   // Calculate derived values - moved before early returns to satisfy Rules of Hooks
   const activeEnrollments = enrollments.filter(e => e.status === 'active')
@@ -119,14 +134,16 @@ export default function CohortDetailPage() {
       if (!cohortId) return
       setIsLoading(true)
       try {
-        const [events, enrolls, mentorAssignments] = await Promise.all([
+        const [events, enrolls, mentorAssignments, missions] = await Promise.all([
           programsClient.getCohortCalendar(cohortId),
           programsClient.getCohortEnrollments(cohortId),
           programsClient.getCohortMentors(cohortId),
+          programsClient.getCohortMissions(cohortId),
         ])
         setCalendarEvents(events)
         setEnrollments(enrolls)
         setMentors(mentorAssignments)
+        setCohortMissions(missions)
       } catch (err) {
         console.error('Failed to load cohort data:', err)
       } finally {
@@ -190,16 +207,62 @@ export default function CohortDetailPage() {
 
   // Get current track details - prefer fetched track, fallback to tracks array
   const currentTrack = useMemo(() => {
-    if (!cohort?.track) return null
-    // Use the specifically fetched track if available (has full details including key)
+    if (!trackId) return null
     if (fetchedTrack) return fetchedTrack
-    // Fallback to finding in tracks array
     if (tracks.length) {
-      const foundTrack = tracks.find(t => String(t.id) === String(cohort.track))
+      const foundTrack = tracks.find(t => String(t.id) === trackId)
       if (foundTrack) return foundTrack
     }
     return null
-  }, [cohort?.track, fetchedTrack, tracks])
+  }, [trackId, fetchedTrack, tracks])
+
+  const openAddMissionsModal = async () => {
+    setSelectedMissionIds(new Set())
+    setAddMissionsError(null)
+    setAddMissionsSuccess(null)
+    setShowAddMissionsModal(true)
+    try {
+      const { results } = await missionsClient.getAllMissionsAdmin()
+      setMissions(results)
+    } catch (err) {
+      console.error('Failed to load missions:', err)
+      setAddMissionsError('Failed to load missions.')
+    }
+  }
+
+  const toggleMission = (missionId: string) => {
+    setSelectedMissionIds(prev => {
+      const next = new Set(prev)
+      if (next.has(missionId)) next.delete(missionId)
+      else next.add(missionId)
+      return next
+    })
+  }
+
+  const handleAddMissions = async () => {
+    if (!cohortId || selectedMissionIds.size === 0) {
+      setAddMissionsError('Select at least one mission.')
+      return
+    }
+    setAddMissionsError(null)
+    setAddMissionsLoading(true)
+    try {
+      await Promise.all(
+        Array.from(selectedMissionIds).map(missionId =>
+          missionsClient.assignMissionToCohort(missionId, cohortId)
+        )
+      )
+      setAddMissionsSuccess(`Added ${selectedMissionIds.size} mission(s) to this cohort.`)
+      setShowAddMissionsModal(false)
+      setSelectedMissionIds(new Set())
+      const updated = await programsClient.getCohortMissions(cohortId)
+      setCohortMissions(updated)
+    } catch (err: unknown) {
+      setAddMissionsError(err instanceof Error ? err.message : 'Failed to add missions to cohort.')
+    } finally {
+      setAddMissionsLoading(false)
+    }
+  }
 
   if (loadingCohort || isLoading) {
     return (
@@ -243,7 +306,14 @@ export default function CohortDetailPage() {
                 <h1 className="text-4xl font-bold mb-2 text-och-defender">{cohort.name}</h1>
                 <div className="flex items-center gap-3">
                   <Badge variant="defender">{cohort.status}</Badge>
-                  <span className="text-och-steel">{cohort.track_name}</span>
+                  <span className="text-och-steel">
+                    {cohort.track_name ||
+                      (cohort.track && typeof cohort.track === 'object' && 'name' in cohort.track
+                        ? (cohort.track as { name: string }).name
+                        : null) ||
+                      currentTrack?.name ||
+                      'N/A'}
+                  </span>
                   {cohort.start_date && (
                     <span className="text-och-steel">
                       {new Date(cohort.start_date).toLocaleDateString()} - {cohort.end_date ? new Date(cohort.end_date).toLocaleDateString() : 'Ongoing'}
@@ -252,6 +322,15 @@ export default function CohortDetailPage() {
                 </div>
               </div>
               <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={openAddMissionsModal}
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  Add Missions
+                </Button>
                 <Link href={`/dashboard/director/cohorts/${cohortId}/edit`}>
                   <Button variant="defender" size="sm">
                     Edit Cohort
@@ -318,12 +397,12 @@ export default function CohortDetailPage() {
                       size="sm"
                       onClick={() => {
                         setShowTrackAssignmentModal(true)
-                        setSelectedTrackId(cohort.track || '')
+                        setSelectedTrackId(trackId || '')
                         setTrackAssignmentError(null)
                         setTrackAssignmentSuccess(null)
                       }}
                     >
-                      {cohort.track ? 'Change Track' : 'Assign Track'}
+                      {trackId ? 'Change Track' : 'Assign Track'}
                     </Button>
                   </div>
                   <div className="space-y-3">
@@ -337,14 +416,14 @@ export default function CohortDetailPage() {
                               {currentTrack.track_type}
                             </Badge>
                           </>
-                        ) : cohort.track_name ? (
-                          <span className="text-white">{cohort.track_name}</span>
+                        ) : (cohort.track_name || (cohort.track && typeof cohort.track === 'object' && 'name' in cohort.track ? (cohort.track as { name: string }).name : null)) ? (
+                          <span className="text-white">{cohort.track_name || (cohort.track && typeof cohort.track === 'object' && 'name' in cohort.track ? (cohort.track as { name: string }).name : null)}</span>
                         ) : (
                           <span className="text-och-steel italic">No track assigned</span>
                         )}
                       </div>
                     </div>
-                    {cohort.track && (
+                    {trackId && (
                       <div className="flex justify-between items-center">
                         <span className="text-och-steel">Track Key</span>
                         {currentTrack?.key ? (
@@ -377,6 +456,53 @@ export default function CohortDetailPage() {
                       <span className="text-white">1:{Math.round(1 / (cohort.mentor_ratio || 0.1))}</span>
                     </div>
                   </div>
+                </div>
+              </Card>
+
+              {/* Missions assigned to this cohort */}
+              <Card>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-white">Missions assigned to this cohort</h2>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      onClick={openAddMissionsModal}
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                      Add Missions
+                    </Button>
+                  </div>
+                  {cohortMissions.length === 0 ? (
+                    <p className="text-och-steel text-sm">No missions assigned yet. Use &quot;Add Missions&quot; to assign missions to this cohort.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {cohortMissions.map((m) => (
+                        <li key={m.id} className="flex items-center justify-between gap-3 py-2 border-b border-och-steel/20 last:border-0">
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/dashboard/director/missions/${m.id}`}
+                              className="text-white font-medium hover:text-och-defender truncate block"
+                            >
+                              {m.title}
+                            </Link>
+                            <div className="flex items-center gap-2 text-xs text-och-steel mt-0.5">
+                              <span>{m.mission_type}</span>
+                              <span>·</span>
+                              <span>{m.estimated_duration_min} min</span>
+                              <span className="capitalize">· {m.assignment_status}</span>
+                            </div>
+                          </div>
+                          <Link href={`/dashboard/director/missions/${m.id}`}>
+                            <Button variant="outline" size="sm">
+                              View details
+                            </Button>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </Card>
 
@@ -620,7 +746,7 @@ export default function CohortDetailPage() {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-bold text-white">
-                    {cohort.track ? 'Change Track Assignment' : 'Assign Track to Cohort'}
+                    {trackId ? 'Change Track Assignment' : 'Assign Track to Cohort'}
                   </h2>
                   <Button
                     variant="outline"
@@ -716,7 +842,7 @@ export default function CohortDetailPage() {
                         onClick={handleAssignTrack}
                         disabled={!selectedTrackId || isUpdatingTrack}
                       >
-                        {isUpdatingTrack ? 'Assigning...' : cohort.track ? 'Update Track' : 'Assign Track'}
+                        {isUpdatingTrack ? 'Assigning...' : trackId ? 'Update Track' : 'Assign Track'}
                       </Button>
                       <Button
                         variant="outline"
@@ -737,6 +863,58 @@ export default function CohortDetailPage() {
             </Card>
           </div>
         )}
+
+        {/* Add Missions Modal */}
+        <Dialog open={showAddMissionsModal} onOpenChange={setShowAddMissionsModal}>
+          <DialogContent className="max-w-md border-och-steel/20 bg-och-midnight">
+            <DialogHeader>
+              <DialogTitle className="text-white">Add missions to cohort</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {addMissionsError && (
+                <p className="text-sm text-red-400" role="alert">{addMissionsError}</p>
+              )}
+              {addMissionsSuccess && (
+                <p className="text-sm text-och-mint" role="status">{addMissionsSuccess}</p>
+              )}
+              <p className="text-sm text-och-steel">Select one or more missions to assign to this cohort:</p>
+              <div className="max-h-48 overflow-y-auto space-y-2 border border-och-steel/20 rounded-lg p-2">
+                {missions.length === 0 && !addMissionsError && (
+                  <p className="text-sm text-och-steel">Loading missions…</p>
+                )}
+                {missions.map((m) => (
+                  <label
+                    key={m.id ?? ''}
+                    className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-och-steel/10"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMissionIds.has(m.id ?? '')}
+                      onChange={() => toggleMission(m.id ?? '')}
+                      className="rounded border-och-steel/40 text-och-defender focus:ring-och-defender"
+                    />
+                    <span className="text-sm text-white">{m.title ?? m.code ?? 'Untitled'}</span>
+                    {m.difficulty && (
+                      <span className="text-xs text-och-steel capitalize">{m.difficulty}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setShowAddMissionsModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="defender"
+                onClick={handleAddMissions}
+                disabled={addMissionsLoading || selectedMissionIds.size === 0}
+              >
+                {addMissionsLoading ? 'Adding…' : 'Add Missions'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DirectorLayout>
     </RouteGuard>
   )

@@ -93,10 +93,36 @@ class MarketplaceTalentListView(generics.ListAPIView):
             tier__in=['starter', 'professional'],  # free tier never visible
         )
 
-        # Filter: only Professional tier are directly contactable
+        # Filter: only Professional tier are directly contactable (for base visible set)
         contactable_only = self.request.query_params.get('contactable_only')
         if contactable_only and contactable_only.lower() == 'true':
             qs = qs.filter(tier='professional')
+
+        # Include profiles the employer has engaged with (contacted, favorited, shortlisted)
+        # or who have applied to the employer's jobs - even if they no longer meet visibility.
+        # This ensures contacted/placed students always appear in the talent list.
+        employer = get_employer_for_user(self.request.user)
+        if employer:
+            interest_profile_ids = EmployerInterestLog.objects.filter(
+                employer=employer
+            ).values_list('profile_id', flat=True).distinct()
+            # applicant_id is VARCHAR in DB; convert to int for mentee_id (BIGINT) comparison
+            applicant_ids_raw = JobApplication.objects.filter(
+                job_posting__employer=employer
+            ).values_list('applicant_id', flat=True).distinct()
+            applicant_ids = [
+                int(aid) for aid in applicant_ids_raw
+                if aid is not None and str(aid).strip().isdigit()
+            ]
+            engaged_profile_ids = list(interest_profile_ids) + list(
+                MarketplaceProfile.objects.filter(
+                    mentee_id__in=applicant_ids
+                ).values_list('id', flat=True)
+            ) if applicant_ids else list(interest_profile_ids)
+            engaged_profile_ids = list(set(engaged_profile_ids))
+            if engaged_profile_ids:
+                engaged_qs = MarketplaceProfile.objects.filter(id__in=engaged_profile_ids)
+                qs = (qs | engaged_qs).distinct()
 
         # Filter by profile status
         status_param = self.request.query_params.get('status')

@@ -62,7 +62,7 @@ interface StudentProfile {
 
 export default function MissionsClient() {
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
 
   // State management
   const [missions, setMissions] = useState<Mission[]>([])
@@ -196,18 +196,7 @@ export default function MissionsClient() {
     router.push(`/dashboard/student/missions/${missionId}`)
   }
 
-  // Render loading state
-  if (profileLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-och-mint" />
-      </div>
-    )
-  }
-
-  const { isLoading: authLoading } = useAuth();
-  
-  // Wait for auth to load before checking authentication
+  // Wait for auth or profile to load before checking authentication
   if (authLoading || profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">

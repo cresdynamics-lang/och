@@ -403,7 +403,19 @@ export function useCohort(id: string) {
       const data = await programsClient.getCohort(id)
       setCohort(data)
     } catch (err: any) {
-      setError(err.message || 'Failed to load cohort')
+      const msg = err?.message || 'Failed to load cohort'
+      setError(msg)
+      try {
+        const list = await programsClient.getCohorts({ page: 1, pageSize: 500 })
+        const results = (list && typeof list === 'object' && 'results' in list) ? (list as { results: Cohort[] }).results : Array.isArray(list) ? list : []
+        const found = results.find((c: Cohort) => String(c.id) === String(id))
+        if (found) {
+          setCohort(found)
+          setError(null)
+        }
+      } catch {
+        // keep error and null cohort
+      }
     } finally {
       setIsLoading(false)
     }

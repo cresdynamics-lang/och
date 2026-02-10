@@ -459,7 +459,7 @@ class UserRole(models.Model):
         ('track', 'Track'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_roles')
     role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='user_roles')
     
     # Scope for ABAC (per specification)
@@ -530,7 +530,7 @@ class ConsentScope(models.Model):
         ('employer_share', 'Employer Share'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consent_scopes', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='consent_scopes')
     scope_type = models.CharField(max_length=50, choices=SCOPE_TYPES)
     granted = models.BooleanField(default=False)
     granted_at = models.DateTimeField(null=True, blank=True)
@@ -555,7 +555,7 @@ class Entitlement(models.Model):
     """
     Entitlements for feature access control.
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='entitlements', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='entitlements')
     feature = models.CharField(max_length=100, db_index=True)
     granted = models.BooleanField(default=True)
     granted_at = models.DateTimeField(auto_now_add=True)
