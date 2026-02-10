@@ -441,7 +441,7 @@ export default function ProfilingResultsPage() {
     {
       id: 'profiling',
       title: 'AI Profiling',
-      description: 'Tier 0 - Assessment Complete',
+      description: 'Foundations - Assessment Complete',
       icon: Brain,
       tier: 0,
       status: 'completed',
@@ -454,7 +454,7 @@ export default function ProfilingResultsPage() {
     {
       id: 'foundations',
       title: 'Foundations',
-      description: 'Tier 1 - Orientation & Preparation',
+      description: 'Beginner Level - Orientation & Preparation',
       icon: GraduationCap,
       tier: 1,
       status: user?.foundations_complete 
@@ -472,7 +472,7 @@ export default function ProfilingResultsPage() {
     {
       id: 'curriculum',
       title: 'Curriculum',
-      description: 'Tier 2+ - Structured Learning',
+      description: 'Intermediate Level Track - Structured Learning',
       icon: BookOpen,
       tier: 2,
       status: curriculumProgress 

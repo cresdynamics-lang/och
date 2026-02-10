@@ -197,7 +197,7 @@ export default function ProfileSettingsPage() {
       const status = await djangoClient.profiler.checkTier0Status()
       setTier0Status(status)
     } catch (err: any) {
-      console.error('Error loading Tier 0 status:', err)
+      console.error('Error loading Foundations status:', err)
 
       // Check if it's an authentication error (401)
       const isAuthError = err?.status === 401 ||
@@ -304,8 +304,8 @@ export default function ProfileSettingsPage() {
       },
       {
         id: 'tier0_profiler',
-        label: 'Tier 0 - Profiler & Foundations',
-        description: 'Complete AI profiler assessment AND foundations orientation to unlock Tier 1',
+        label: 'Foundations - Profiler & Foundations',
+        description: 'Complete AI profiler assessment AND foundations orientation to unlock Beginner level',
         completed: tier0Status?.tier0_complete || false,
         required: true,
         actionUrl: tier0Status?.profiler_complete 
@@ -478,7 +478,7 @@ export default function ProfileSettingsPage() {
                   </div>
                   <p className="text-xs text-och-steel">{item.description}</p>
                   
-                  {/* Show detailed breakdown for Tier 0 */}
+                  {/* Show detailed breakdown for Foundations */}
                   {item.id === 'tier0_profiler' && tier0Status && (
                     <div className="mt-3 flex gap-3">
                       <div className={clsx(

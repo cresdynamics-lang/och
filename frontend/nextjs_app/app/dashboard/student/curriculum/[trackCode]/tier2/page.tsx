@@ -1,7 +1,7 @@
 /**
- * Tier 2 (Beginner Tracks) Track Page
+ * Beginner Tracks Track Page
  * 
- * Comprehensive Tier 2 implementation following beginner-tier-2.md guidelines.
+ * Comprehensive Beginner Tracks implementation.
  * Provides track dashboard, module viewer, quizzes, reflections, mini-missions, and completion flow.
  */
 'use client'
@@ -34,6 +34,8 @@ import {
   Trophy,
   Users,
   Zap,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -42,7 +44,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import Link from 'next/link'
 import type { CurriculumModuleDetail, Lesson, ModuleMission } from '@/services/types/curriculum'
 
-type Tier2View = 'dashboard' | 'module-viewer' | 'quiz' | 'reflection' | 'mini-mission-preview' | 'mini-mission-submit' | 'completion'
+type Tier2View = 'dashboard' | 'module-viewer' | 'quiz' | 'reflection' | 'mini-mission-preview' | 'mini-mission-submit' | 'completion' | 'resources' | 'sample-report' | 'mentor-feedback'
 
 export default function Tier2TrackPage() {
   const params = useParams()
@@ -78,14 +80,14 @@ export default function Tier2TrackPage() {
     try {
       setLoading(true)
       
-      // Check if track is Tier 2
+      // Check if track is Beginner level
       if (track && track.tier !== 2) {
-        setError('This page is only for Tier 2 (Beginner) tracks')
+        setError('This page is only for Beginner level tracks')
         setLoading(false)
         return
       }
 
-      // Load Tier 2 status
+      // Load Beginner level status
       const status = await curriculumClient.getTier2Status(trackCode)
       setTier2Status(status)
 
@@ -96,7 +98,7 @@ export default function Tier2TrackPage() {
 
       setLoading(false)
     } catch (err: any) {
-      setError(err.message || 'Failed to load Tier 2 track data')
+      setError(err.message || 'Failed to load track data')
       setLoading(false)
     }
   }
@@ -137,7 +139,7 @@ export default function Tier2TrackPage() {
         answers,
       })
 
-      // Reload Tier 2 status
+      // Reload Beginner level status
       await loadTier2Data()
 
       // If complete, show completion
@@ -161,7 +163,7 @@ export default function Tier2TrackPage() {
         reflection_text: reflectionText,
       })
 
-      // Reload Tier 2 status
+      // Reload Beginner level status
       await loadTier2Data()
 
       // Return to dashboard
@@ -185,7 +187,7 @@ export default function Tier2TrackPage() {
         submission_data: submissionData,
       })
 
-      // Reload Tier 2 status
+      // Reload Beginner level status
       await loadTier2Data()
 
       // If complete, show completion
@@ -207,7 +209,7 @@ export default function Tier2TrackPage() {
       // Redirect to curriculum page with success message
       router.push(`/dashboard/student/curriculum?tier2_complete=${trackCode}`)
     } catch (err: any) {
-      setError(err.message || 'Failed to complete Tier 2')
+      setError(err.message || 'Failed to complete track')
     }
   }
 
@@ -218,7 +220,7 @@ export default function Tier2TrackPage() {
           <Card className="p-12">
             <div className="text-center space-y-4">
               <Loader2 className="w-12 h-12 text-och-orange animate-spin mx-auto" />
-              <div className="text-white text-lg">Loading Tier 2 Track...</div>
+              <div className="text-white text-lg">Loading track...</div>
             </div>
           </Card>
         </div>
@@ -254,6 +256,7 @@ export default function Tier2TrackPage() {
     return (
       <Tier2Dashboard
         track={track}
+        trackCode={trackCode}
         tier2Status={tier2Status}
         modules={modules}
         progress={progress}
@@ -265,6 +268,41 @@ export default function Tier2TrackPage() {
           setCurrentView('reflection')
         }}
         onComplete={handleCompleteTier2}
+        onOpenResources={() => setCurrentView('resources')}
+        onOpenSampleReport={() => setCurrentView('sample-report')}
+        onOpenMentorFeedback={() => setCurrentView('mentor-feedback')}
+      />
+    )
+  }
+
+  // Mentor Feedback (learner view: comments from mentor on tasks)
+  if (currentView === 'mentor-feedback') {
+    return (
+      <Tier2MentorFeedbackScreen
+        trackCode={trackCode}
+        trackName={track?.name}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    )
+  }
+
+  // Resources / Glossary / What to expect next
+  if (currentView === 'resources') {
+    return (
+      <Tier2ResourcesScreen
+        trackCode={trackCode}
+        trackName={track?.name}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    )
+  }
+
+  // Sample mission report (modal-style or full view)
+  if (currentView === 'sample-report') {
+    return (
+      <Tier2SampleReportScreen
+        trackCode={trackCode}
+        onBack={() => setCurrentView('dashboard')}
       />
     )
   }
@@ -273,6 +311,7 @@ export default function Tier2TrackPage() {
   if (currentView === 'module-viewer' && currentModule) {
     return (
       <Tier2ModuleViewer
+        trackCode={trackCode}
         module={currentModule}
         currentLesson={currentLesson}
         onBack={() => {
@@ -356,9 +395,10 @@ export default function Tier2TrackPage() {
   return null
 }
 
-// Tier 2 Dashboard Component
+// Beginner Tracks Dashboard Component (with persistent sidebar)
 function Tier2Dashboard({
   track,
+  trackCode,
   tier2Status,
   modules,
   progress,
@@ -367,8 +407,11 @@ function Tier2Dashboard({
   onMiniMissionClick,
   onReflectionClick,
   onComplete,
+  onOpenResources,
+  onOpenSampleReport,
 }: {
   track: any
+  trackCode: string
   tier2Status: Tier2Status
   modules: any[]
   progress: any
@@ -377,29 +420,93 @@ function Tier2Dashboard({
   onMiniMissionClick: (mission: ModuleMission) => void
   onReflectionClick: (module: any) => void
   onComplete: () => void
+  onOpenResources: () => void
+  onOpenSampleReport: () => void
+  onOpenMentorFeedback: () => void
 }) {
   const completionPct = tier2Status.completion_percentage
   const req = tier2Status.requirements
+  const isFlexible = tier2Status.progression_mode === 'flexible'
 
   return (
     <RouteGuard>
-      <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson px-4 py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
+      <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson flex">
+        {/* Persistent sidebar - track modules + nav */}
+        <aside className="w-64 shrink-0 border-r border-och-steel/30 bg-och-midnight/80 hidden lg:block">
+          <div className="sticky top-4 p-4 space-y-4">
+            <Link href="/dashboard/student/curriculum">
+              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white w-full justify-start">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Curriculum
+              </Button>
+            </Link>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Track modules</div>
+            <nav className="space-y-1">
+              {modules.map((module, index) => {
+                const locked = !isFlexible && module.order_index > 0 && (modules[index - 1]?.completion_percentage ?? 0) < 100
+                const done = module.completion_percentage === 100
+                return (
+                  <button
+                    key={module.id}
+                    type="button"
+                    onClick={() => !locked && onModuleClick(module.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 ${
+                      locked ? 'text-gray-500 cursor-not-allowed' : 'text-gray-300 hover:bg-white/10'
+                    } ${done ? 'text-och-mint' : ''}`}
+                  >
+                    {done ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <BookOpen className="w-4 h-4 shrink-0" />}
+                    <span className="truncate">{module.title}</span>
+                  </button>
+                )
+              })}
+            </nav>
+            <div className="border-t border-och-steel/30 pt-4 space-y-1">
+              <button
+                type="button"
+                onClick={onOpenResources}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/10 flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4 shrink-0" />
+                Resources &amp; Glossary
+              </button>
+              <button
+                type="button"
+                onClick={onOpenSampleReport}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/10 flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4 shrink-0" />
+                View sample report
+              </button>
+              <button
+                type="button"
+                onClick={onOpenMentorFeedback}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-white/10 flex items-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4 shrink-0" />
+                Mentor feedback
+              </button>
+            </div>
+          </div>
+        </aside>
+        <div className="flex-1 px-4 py-8 overflow-auto">
+        <div className="max-w-4xl mx-auto">
+          {/* Header - mobile back button (sidebar has back on lg) */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <Link href="/dashboard/student/curriculum">
-              <Button variant="outline" className="mb-4">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Curriculum
-              </Button>
-            </Link>
+            <div className="lg:hidden mb-4">
+              <Link href="/dashboard/student/curriculum">
+                <Button variant="outline">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Curriculum
+                </Button>
+              </Link>
+            </div>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <Badge variant="gold" className="mb-2">Tier 2 - Beginner Track</Badge>
+                <Badge variant="gold" className="mb-2">Intermediate Level Track</Badge>
                 <h1 className="text-4xl md:text-5xl font-black text-white mb-2">
                   {track.name}
                 </h1>
@@ -474,10 +581,10 @@ function Tier2Dashboard({
                 {req.mini_missions_completed} / {req.mini_missions_total}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {req.mini_missions_completed >= 1 ? (
+                {(req.mini_missions_required ?? 1) <= req.mini_missions_completed ? (
                   <span className="text-och-mint">✓ Minimum Met</span>
                 ) : (
-                  <span>At least 1 required</span>
+                  <span>At least {req.mini_missions_required ?? 1} required</span>
                 )}
               </div>
             </Card>
@@ -496,6 +603,56 @@ function Tier2Dashboard({
             </Card>
           </motion.div>
 
+          {/* Optional: Milestone badges */}
+          {(req.mandatory_modules_completed >= 1 || req.quizzes_passed >= 1 || req.mini_missions_completed >= 1 || req.reflections_submitted >= 1) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="flex flex-wrap gap-2 mb-6"
+            >
+              {req.mandatory_modules_completed >= 1 && (
+                <Badge variant="gold" className="text-xs">First module completed</Badge>
+              )}
+              {req.quizzes_passed >= 1 && (
+                <Badge variant="mint" className="text-xs">First quiz passed</Badge>
+              )}
+              {req.mini_missions_completed >= 1 && (
+                <Badge variant="orange" className="text-xs">Mini-mission done</Badge>
+              )}
+              {req.reflections_submitted >= 1 && (
+                <Badge variant="defender" className="text-xs">Reflection submitted</Badge>
+              )}
+            </motion.div>
+          )}
+
+          {/* Mentor notes (when any module has notes) */}
+          {modules.some((m) => m.mentor_notes?.trim()) && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mb-8"
+            >
+              <Card className="p-6 bg-och-midnight/60 border border-och-steel/20">
+                <h3 className="text-white font-bold mb-3 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-och-mint" />
+                  Mentor notes
+                </h3>
+                <div className="space-y-3">
+                  {modules
+                    .filter((m) => m.mentor_notes?.trim())
+                    .map((m) => (
+                      <div key={m.id} className="border-l-2 border-och-mint/50 pl-4">
+                        <div className="text-och-mint text-sm font-medium mb-1">{m.title}</div>
+                        <p className="text-gray-300 text-sm whitespace-pre-wrap">{m.mentor_notes}</p>
+                      </div>
+                    ))}
+                </div>
+              </Card>
+            </motion.div>
+          )}
+
           {/* Missing Requirements Alert */}
           {tier2Status.missing_requirements.length > 0 && (
             <motion.div
@@ -508,7 +665,7 @@ function Tier2Dashboard({
                 <div className="flex items-start gap-4">
                   <AlertCircle className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="text-white font-bold mb-2">Complete These Requirements to Finish Tier 2:</h3>
+                    <h3 className="text-white font-bold mb-2">Complete These Requirements to Finish This Track:</h3>
                     <ul className="space-y-1">
                       {tier2Status.missing_requirements.map((req, idx) => (
                         <li key={idx} className="text-gray-300 text-sm flex items-center gap-2">
@@ -531,10 +688,10 @@ function Tier2Dashboard({
             </h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {modules.map((module, index) => {
-                const isLocked = module.isLocked || (
-                  module.order_index > 0 && 
-                  modules[index - 1]?.completion_percentage < 100
-                )
+                const isLocked = !isFlexible && (module.isLocked || (
+                  module.order_index > 0 &&
+                  (modules[index - 1]?.completion_percentage ?? 0) < 100
+                ))
                 const isCompleted = module.completion_percentage === 100
 
                 return (
@@ -617,24 +774,195 @@ function Tier2Dashboard({
                 glow
               >
                 <Rocket className="w-5 h-5 mr-2" />
-                Complete Tier 2 & Unlock Tier 3
+                Complete & Unlock Next Level
               </Button>
             </div>
           )}
+        </div>
         </div>
       </div>
     </RouteGuard>
   )
 }
 
-// Tier 2 Module Viewer Component
+// Beginner Tracks Mentor Feedback Screen (learner view: list feedback by task)
+function Tier2MentorFeedbackScreen({
+  trackCode,
+  trackName,
+  onBack,
+}: {
+  trackCode: string
+  trackName?: string
+  onBack: () => void
+}) {
+  const [feedback, setFeedback] = useState<Array<{
+    id: number
+    comment_text: string
+    lesson_title: string | null
+    module_title: string | null
+    created_at: string
+  }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    curriculumClient.getTier2Feedback(trackCode).then((r) => setFeedback(r.feedback || [])).catch(() => setFeedback([])).finally(() => setLoading(false))
+  }, [trackCode])
+
+  return (
+    <RouteGuard>
+      <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson px-4 py-8">
+        <div className="max-w-3xl mx-auto">
+          <Button onClick={onBack} variant="outline" className="mb-6">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Track
+          </Button>
+          <Card className="p-8 bg-och-midnight/90 border border-och-steel/20">
+            <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+              <MessageSquare className="w-6 h-6 text-och-mint" />
+              Mentor feedback
+            </h1>
+            <p className="text-gray-400 text-sm mb-6">
+              {trackName ? `Feedback from your mentor for ${trackName}` : 'Comments and notes from your mentor on your work.'}
+            </p>
+            {loading && <p className="text-gray-400">Loading feedback…</p>}
+            {!loading && feedback.length === 0 && (
+              <p className="text-gray-400">No mentor feedback yet. Complete lessons and mini-missions to receive feedback.</p>
+            )}
+            {!loading && feedback.length > 0 && (
+              <ul className="space-y-4">
+                {feedback.map((f) => (
+                  <li key={f.id} className="border border-och-steel/20 rounded-lg p-4 bg-och-midnight/50">
+                    <div className="flex items-center gap-2 text-och-mint text-sm mb-2">
+                      {(f.module_title || f.lesson_title) && (
+                        <span>{[f.module_title, f.lesson_title].filter(Boolean).join(' — ')}</span>
+                      )}
+                      <span className="text-gray-500 text-xs">
+                        {new Date(f.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{f.comment_text}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      </div>
+    </RouteGuard>
+  )
+}
+
+// Beginner Tracks Resources / Glossary / What to expect next
+function Tier2ResourcesScreen({
+  trackCode,
+  trackName,
+  onBack,
+}: {
+  trackCode: string
+  trackName?: string
+  onBack: () => void
+}) {
+  return (
+    <RouteGuard>
+      <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson px-4 py-8">
+        <div className="max-w-3xl mx-auto">
+          <Button onClick={onBack} variant="outline" className="mb-6">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Track
+          </Button>
+          <Card className="p-8 bg-och-midnight/90 border border-och-steel/20">
+            <h1 className="text-2xl font-bold text-white mb-2">Resources &amp; Glossary</h1>
+            <p className="text-gray-400 text-sm mb-6">
+              {trackName ? `Supporting materials for ${trackName}` : 'Key terms and resources for this track.'}
+            </p>
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold text-och-mint mb-3">Glossary</h2>
+              <p className="text-gray-300 text-sm mb-4">
+                Key terms are introduced in each module. Use this space as a quick reference for definitions and concepts as you progress.
+              </p>
+              <ul className="text-gray-300 text-sm space-y-2 list-disc list-inside">
+                <li>Core concepts are defined in the module viewer</li>
+                <li>Quizzes reinforce terminology</li>
+                <li>Bookmark lessons for later review</li>
+              </ul>
+            </section>
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold text-och-mint mb-3">Downloadable cheat sheets</h2>
+              <p className="text-gray-300 text-sm">
+                Cheat sheets will be available per module as you complete content. Check back after finishing each module.
+              </p>
+            </section>
+            <section>
+              <h2 className="text-lg font-semibold text-och-mint mb-3">What to expect next</h2>
+              <p className="text-gray-300 text-sm mb-2">
+                After completing this Beginner track you will:
+              </p>
+              <ul className="text-gray-300 text-sm space-y-1 list-disc list-inside">
+                <li>Unlock the next level</li>
+                <li>See preview of upcoming Intermediate missions</li>
+                <li>Access the required recipes list for your next level</li>
+                <li>Continue building portfolio artifacts</li>
+              </ul>
+            </section>
+          </Card>
+        </div>
+      </div>
+    </RouteGuard>
+  )
+}
+
+// Beginner Tracks Sample mission report view
+function Tier2SampleReportScreen({ trackCode, onBack }: { trackCode: string; onBack: () => void }) {
+  const [report, setReport] = useState<{ title: string; description: string; sections: Array<{ heading: string; content: string }>; tip: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    curriculumClient.getTier2SampleReport(trackCode).then(setReport).catch(() => setReport(null)).finally(() => setLoading(false))
+  }, [trackCode])
+
+  return (
+    <RouteGuard>
+      <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson px-4 py-8">
+        <div className="max-w-3xl mx-auto">
+          <Button onClick={onBack} variant="outline" className="mb-6">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Track
+          </Button>
+          <Card className="p-8 bg-och-midnight/90 border border-och-steel/20">
+            {loading && <p className="text-gray-400">Loading sample report…</p>}
+            {!loading && report && (
+              <>
+                <h1 className="text-2xl font-bold text-white mb-2">{report.title}</h1>
+                <p className="text-gray-400 text-sm mb-6">{report.description}</p>
+                <div className="space-y-4 mb-6">
+                  {report.sections.map((s, i) => (
+                    <div key={i}>
+                      <h3 className="text-och-mint font-semibold mb-1">{s.heading}</h3>
+                      <p className="text-gray-300 text-sm">{s.content}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-och-gold text-sm border-l-2 border-och-gold/50 pl-4">{report.tip}</p>
+              </>
+            )}
+            {!loading && !report && <p className="text-gray-400">Could not load sample report.</p>}
+          </Card>
+        </div>
+      </div>
+    </RouteGuard>
+  )
+}
+
+// Beginner Tracks Module Viewer Component
 function Tier2ModuleViewer({
+  trackCode,
   module,
   currentLesson,
   onBack,
   onLessonClick,
   onComplete,
 }: {
+  trackCode: string
   module: CurriculumModuleDetail
   currentLesson?: Lesson | null
   onBack: () => void
@@ -642,6 +970,25 @@ function Tier2ModuleViewer({
   onComplete: () => void
 }) {
   const [watchPercentage, setWatchPercentage] = useState(0)
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    curriculumClient.getBookmarks(trackCode).then((r) => setBookmarkedIds(new Set(r.bookmarks.map((b) => b.lesson_id)))).catch(() => {})
+  }, [trackCode])
+
+  const toggleBookmark = async (e: React.MouseEvent, lessonId: string) => {
+    e.stopPropagation()
+    const isBookmarked = bookmarkedIds.has(lessonId)
+    try {
+      if (isBookmarked) {
+        await curriculumClient.removeLessonBookmark(lessonId)
+        setBookmarkedIds((prev) => { const s = new Set(prev); s.delete(lessonId); return s })
+      } else {
+        await curriculumClient.addLessonBookmark(lessonId)
+        setBookmarkedIds((prev) => new Set(prev).add(lessonId))
+      }
+    } catch (_) {}
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-och-midnight via-och-space to-och-crimson px-4 py-8">
@@ -660,26 +1007,37 @@ function Tier2ModuleViewer({
             <h2 className="text-xl font-bold text-white mb-4">Lessons</h2>
             <div className="space-y-3">
               {module.lessons?.map((lesson) => (
-                <button
+                <div
                   key={lesson.id}
-                  onClick={() => onLessonClick(lesson)}
-                  className="w-full p-4 bg-white/5 rounded-lg border border-och-steel/20 hover:bg-white/10 transition-all text-left"
+                  className="flex items-center gap-2 w-full p-4 bg-white/5 rounded-lg border border-och-steel/20 hover:bg-white/10 transition-all"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {lesson.lesson_type === 'video' && <PlayCircle className="w-5 h-5 text-och-orange" />}
-                      {lesson.lesson_type === 'quiz' && <Brain className="w-5 h-5 text-och-mint" />}
-                      {lesson.lesson_type === 'guide' && <FileText className="w-5 h-5 text-och-gold" />}
-                      <div>
-                        <div className="text-white font-semibold">{lesson.title}</div>
-                        <div className="text-gray-400 text-sm">{lesson.description}</div>
+                  <button
+                    type="button"
+                    onClick={() => onLessonClick(lesson)}
+                    className="flex-1 text-left flex items-center justify-between min-w-0"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {lesson.lesson_type === 'video' && <PlayCircle className="w-5 h-5 text-och-orange shrink-0" />}
+                      {lesson.lesson_type === 'quiz' && <Brain className="w-5 h-5 text-och-mint shrink-0" />}
+                      {lesson.lesson_type === 'guide' && <FileText className="w-5 h-5 text-och-gold shrink-0" />}
+                      <div className="min-w-0">
+                        <div className="text-white font-semibold truncate">{lesson.title}</div>
+                        <div className="text-gray-400 text-sm truncate">{lesson.description}</div>
                       </div>
                     </div>
                     {lesson.is_completed && (
-                      <CheckCircle2 className="w-5 h-5 text-och-mint shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-och-mint shrink-0 ml-2" />
                     )}
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => toggleBookmark(e, lesson.id)}
+                    className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-och-gold shrink-0"
+                    title={bookmarkedIds.has(lesson.id) ? 'Remove bookmark' : 'Save for later'}
+                  >
+                    {bookmarkedIds.has(lesson.id) ? <BookmarkCheck className="w-5 h-5 text-och-gold" /> : <Bookmark className="w-5 h-5" />}
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -713,6 +1071,30 @@ function Tier2ModuleViewer({
                   />
                 </div>
               )}
+
+              {/* Summary (lesson description) */}
+              {currentLesson.description?.trim() && (
+                <section className="mt-6 p-4 rounded-lg bg-white/5 border border-och-steel/20">
+                  <h3 className="text-och-mint font-semibold mb-2">Summary</h3>
+                  <p className="text-gray-300 text-sm whitespace-pre-wrap">{currentLesson.description}</p>
+                </section>
+              )}
+
+              {/* Resources (module recipes / supporting materials) */}
+              {(module.recipe_recommendations?.length ?? 0) > 0 && (
+                <section className="mt-6 p-4 rounded-lg bg-white/5 border border-och-steel/20">
+                  <h3 className="text-och-mint font-semibold mb-2">Resources</h3>
+                  <p className="text-gray-400 text-sm mb-3">Supporting materials and recipes for this module:</p>
+                  <ul className="space-y-2">
+                    {module.recipe_recommendations?.map((r: { id: string; recipe_title?: string; recipe_description?: string }) => (
+                      <li key={r.id} className="text-gray-300 text-sm flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-och-gold shrink-0" />
+                        <span>{r.recipe_title ?? r.recipe_description ?? 'Recipe'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </div>
           )}
 
@@ -733,7 +1115,7 @@ function Tier2ModuleViewer({
   )
 }
 
-// Tier 2 Quiz Screen Component
+// Beginner Tracks Quiz Screen Component
 function Tier2QuizScreen({
   lesson,
   onBack,
@@ -745,18 +1127,68 @@ function Tier2QuizScreen({
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [score, setScore] = useState<number | null>(null)
+  const [passed, setPassed] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // For now, simplified quiz - in production, load questions from lesson content
-  const questions = [
-    { id: 'q1', question: 'What is the main concept covered in this lesson?', options: ['A', 'B', 'C', 'D'] },
-  ]
+  // Load questions from lesson content_url or use default structure
+  // TODO: In production, load actual quiz questions from lesson.content_url or quiz API
+  const questions = lesson.content_url 
+    ? [] // Will be loaded from content_url
+    : [
+        { 
+          id: 'q1', 
+          question: 'What is the main concept covered in this lesson?', 
+          options: [
+            { id: 'a', label: 'Option A' },
+            { id: 'b', label: 'Option B' },
+            { id: 'c', label: 'Option C' },
+            { id: 'd', label: 'Option D' }
+          ],
+          correct_answer: 'a'
+        },
+      ]
 
-  const handleSubmit = () => {
-    // Calculate score (simplified)
-    const score = 85
+  const handleSubmit = async () => {
+    if (Object.keys(answers).length !== questions.length) {
+      setError('Please answer all questions before submitting.')
+      return
+    }
+
     setSubmitting(true)
-    onSubmit(score, answers)
-    setSubmitting(false)
+    setError(null)
+    
+    try {
+      // Calculate score based on correct answers
+      let correctCount = 0
+      questions.forEach((q: any) => {
+        if (answers[q.id] === q.correct_answer) {
+          correctCount++
+        }
+      })
+      const calculatedScore = Math.round((correctCount / questions.length) * 100)
+      const isPassed = calculatedScore >= 70
+      
+      setScore(calculatedScore)
+      setPassed(isPassed)
+      setSubmitted(true)
+      
+      // Call onSubmit callback
+      await onSubmit(calculatedScore, answers)
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit quiz. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleRetry = () => {
+    setAnswers({})
+    setSubmitted(false)
+    setScore(null)
+    setPassed(false)
+    setError(null)
   }
 
   return (
@@ -770,46 +1202,151 @@ function Tier2QuizScreen({
           <h1 className="text-3xl font-black text-white mb-6">Knowledge Check Quiz</h1>
           <p className="text-gray-400 mb-8">{lesson.title}</p>
           
-          <div className="space-y-6 mb-8">
-            {questions.map((q) => (
-              <div key={q.id}>
-                <p className="text-white font-semibold mb-3">{q.question}</p>
-                <div className="space-y-2">
-                  {q.options.map((opt) => (
-                    <label
-                      key={opt}
-                      className="flex items-center gap-3 p-4 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 border border-och-steel/20"
-                    >
-                      <input
-                        type="radio"
-                        name={q.id}
-                        value={opt}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                        className="accent-och-orange"
-                      />
-                      <span className="text-gray-300">Option {opt}</span>
-                    </label>
-                  ))}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
+
+          {submitted && score !== null ? (
+            <div className="space-y-6 mb-8">
+              <div className={`p-6 rounded-lg border-2 ${
+                passed 
+                  ? 'bg-green-500/10 border-green-500/30' 
+                  : 'bg-red-500/10 border-red-500/30'
+              }`}>
+                <div className="text-center">
+                  <h2 className={`text-3xl font-bold mb-2 ${
+                    passed ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {passed ? '✓ Passed!' : '✗ Not Passed'}
+                  </h2>
+                  <p className="text-white text-2xl font-semibold mb-2">Score: {score}%</p>
+                  <p className="text-gray-300 text-sm">
+                    {passed 
+                      ? 'Congratulations! You passed the quiz. You can continue to the next lesson.'
+                      : `You scored ${score}%. You need 70% to pass. Review the material and try again.`
+                    }
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
+              
+              {!passed && (
+                <div className="space-y-4">
+                  <h3 className="text-white font-semibold">Review Your Answers:</h3>
+                  {questions.map((q: any) => {
+                    const userAnswer = answers[q.id]
+                    const isCorrect = userAnswer === q.correct_answer
+                    return (
+                      <div key={q.id} className={`p-4 rounded-lg border ${
+                        isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
+                      }`}>
+                        <p className="text-white font-medium mb-2">{q.question}</p>
+                        <p className={`text-sm ${isCorrect ? 'text-green-300' : 'text-red-300'}`}>
+                          Your answer: {q.options.find((o: any) => o.id === userAnswer)?.label || 'Not answered'}
+                          {!isCorrect && (
+                            <span className="block mt-1 text-green-300">
+                              Correct answer: {q.options.find((o: any) => o.id === q.correct_answer)?.label}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-6 mb-8">
+                {questions.length > 0 ? (
+                  questions.map((q: any) => (
+                    <div key={q.id}>
+                      <p className="text-white font-semibold mb-3">{q.question}</p>
+                      <div className="space-y-2">
+                        {q.options.map((opt: any) => {
+                          const optionId = typeof opt === 'string' ? opt : opt.id
+                          const optionLabel = typeof opt === 'string' ? `Option ${opt}` : opt.label
+                          return (
+                            <label
+                              key={optionId}
+                              className={`flex items-center gap-3 p-4 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 border transition-all ${
+                                answers[q.id] === optionId 
+                                  ? 'border-och-orange bg-och-orange/10' 
+                                  : 'border-och-steel/20'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={q.id}
+                                value={optionId}
+                                checked={answers[q.id] === optionId}
+                                onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                                className="accent-och-orange"
+                                disabled={submitting}
+                              />
+                              <span className="text-gray-300">{optionLabel}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p className="text-yellow-300 text-sm">
+                      Quiz questions are loading from lesson content. If questions don't appear, please check back later.
+                    </p>
+                  </div>
+                )}
+              </div>
 
-          <Button
-            onClick={handleSubmit}
-            variant="mint"
-            className="w-full"
-            disabled={submitting || Object.keys(answers).length !== questions.length}
-          >
-            {submitting ? 'Submitting...' : 'Submit Quiz'}
-          </Button>
+              <div className="flex gap-4">
+                <Button
+                  onClick={onBack}
+                  variant="outline"
+                  className="flex-1"
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  variant="mint"
+                  className="flex-1"
+                  disabled={submitting || Object.keys(answers).length !== questions.length || questions.length === 0}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Quiz'
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {submitted && !passed && (
+            <div className="mt-6">
+              <Button
+                onClick={handleRetry}
+                variant="outline"
+                className="w-full"
+              >
+                Retry Quiz
+              </Button>
+            </div>
+          )}
         </Card>
       </div>
     </div>
   )
 }
 
-// Tier 2 Reflection Screen Component
+// Beginner Tracks Reflection Screen Component
 function Tier2ReflectionScreen({
   module,
   onBack,
@@ -870,7 +1407,7 @@ function Tier2ReflectionScreen({
   )
 }
 
-// Tier 2 Mini-Mission Preview Component
+// Beginner Tracks Mini-Mission Preview Component
 function Tier2MiniMissionPreview({
   mission,
   onBack,
@@ -896,9 +1433,15 @@ function Tier2MiniMissionPreview({
 
           <div className="space-y-6 mb-8">
             <div>
-              <h3 className="text-white font-bold mb-2">Objective</h3>
+              <h3 className="text-white font-bold mb-2">Context</h3>
               <p className="text-gray-300">
-                This is a beginner-level mini-mission designed to build confidence and apply core concepts.
+                This is a beginner-level mini-mission designed to build confidence and apply core concepts from the module.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-white font-bold mb-2">Expected output</h3>
+              <p className="text-gray-300">
+                Submit a short description of what you did and, if possible, a link to evidence (e.g. GitHub repo, screenshot, or report). Your mentor may review and leave feedback.
               </p>
             </div>
 
@@ -931,7 +1474,7 @@ function Tier2MiniMissionPreview({
   )
 }
 
-// Tier 2 Mini-Mission Submit Component
+// Beginner Tracks Mini-Mission Submit Component
 function Tier2MiniMissionSubmit({
   mission,
   onBack,
@@ -968,13 +1511,13 @@ function Tier2MiniMissionSubmit({
           <div className="space-y-6 mb-8">
             <div>
               <label className="block text-white font-semibold mb-2">
-                Description of Your Work
+                Description of your work <span className="text-och-crimson">*</span>
               </label>
               <textarea
                 value={submissionData.description}
                 onChange={(e) => setSubmissionData({ ...submissionData, description: e.target.value })}
                 className="w-full h-32 bg-och-midnight border border-och-steel/30 rounded-lg p-4 text-white"
-                placeholder="Describe what you accomplished..."
+                placeholder="Describe what you accomplished (required)..."
               />
             </div>
 
@@ -1018,7 +1561,7 @@ function Tier2MiniMissionSubmit({
   )
 }
 
-// Tier 2 Completion Screen Component
+// Beginner Tracks Completion Screen Component
 function Tier2CompletionScreen({
   track,
   tier2Status,
@@ -1047,10 +1590,13 @@ function Tier2CompletionScreen({
             <Trophy className="w-12 h-12 text-white" />
           </motion.div>
           <h1 className="text-4xl md:text-5xl font-black text-white mb-4">
-            Tier 2 Complete!
+            Track complete!
           </h1>
-          <p className="text-xl text-gray-300 mb-8">
-            Congratulations! You've completed the {track.name} Beginner Track.
+          <p className="text-xl text-gray-300 mb-2">
+            Congratulations! You've completed the {track.name} Beginner Level track.
+          </p>
+          <p className="text-lg font-semibold text-och-mint mb-8">
+            You're Ready for the Next Level.
           </p>
 
           <div className="bg-white/5 rounded-lg p-6 mb-8">
@@ -1086,10 +1632,10 @@ function Tier2CompletionScreen({
           <div className="bg-och-gold/10 border border-och-gold/30 rounded-lg p-6 mb-8">
             <h3 className="text-white font-bold mb-2 flex items-center gap-2 justify-center">
               <Rocket className="w-5 h-5 text-och-gold" />
-              Ready for Tier 3
+              You're Ready for the Next Level
             </h3>
             <p className="text-gray-300">
-              You're now ready to progress to Tier 3 (Intermediate Tracks) where you'll apply concepts using real tools and multi-step workflows.
+              You're now ready to progress to the next level where you'll apply concepts using real tools and multi-step workflows.
             </p>
           </div>
 
@@ -1099,7 +1645,7 @@ function Tier2CompletionScreen({
             </Button>
             <Button onClick={onComplete} variant="mint" size="lg" className="flex-1 font-black uppercase tracking-widest" glow>
               <Rocket className="w-5 h-5 mr-2" />
-              Complete & Unlock Tier 3
+              Complete & Unlock Next Level
             </Button>
           </div>
         </Card>

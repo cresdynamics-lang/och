@@ -26,6 +26,11 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { curriculumClient } from '@/services/curriculumClient';
 import Link from 'next/link';
+import {
+  BEGINNER_TRACKS_OVERVIEW,
+  BEGINNER_TRACK_CATEGORIES,
+  BEGINNER_TRACK_PLATFORM_OUTCOMES,
+} from '@/lib/beginnerTracksSpec';
 
 interface CurriculumTrack {
   id: string;
@@ -352,6 +357,41 @@ export default function CurriculumHubPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        {/* Intermediate Level Tracks — spec-aligned intro */}
+        <Card className="p-6 bg-gradient-to-br from-indigo-500/10 via-slate-900/50 to-purple-500/10 border border-indigo-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <BookOpen className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-lg font-bold text-white">Intermediate Level Tracks</h2>
+            <Badge className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs">
+              First pathway after Foundations
+            </Badge>
+          </div>
+          <p className="text-sm text-slate-300 mb-2">
+            {BEGINNER_TRACKS_OVERVIEW.firstPathwayAfterFoundations}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.movement}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.introduces}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.designPrinciples}
+          </p>
+          <p className="text-slate-400 text-xs mb-3">
+            {BEGINNER_TRACKS_OVERVIEW.purpose}
+          </p>
+          <blockquote className="border-l-2 border-indigo-500/50 pl-4 py-1 mb-4 text-indigo-200 font-medium text-sm">
+            &ldquo;{BEGINNER_TRACKS_OVERVIEW.tagline}&rdquo;
+          </blockquote>
+          <p className="text-xs text-slate-400 mb-3 font-medium">Five Beginner categories:</p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-slate-300 mb-4">
+            {BEGINNER_TRACK_CATEGORIES.map((cat) => (
+              <li key={cat.key} className="flex gap-2">
+                <span className="text-indigo-400 shrink-0">•</span>
+                <span><strong className="text-slate-200">{cat.name}</strong> — {cat.description}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-500">
+            Platform outcomes: {BEGINNER_TRACK_PLATFORM_OUTCOMES.join(' ')}
+          </p>
+        </Card>
 
         {/* Active Tracks */}
         {enrolledTracks.length > 0 && (

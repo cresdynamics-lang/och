@@ -356,6 +356,33 @@ def save_subtask_progress(request, progress_id):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_subtask_unlockable(request, progress_id, subtask_id):
+    """
+    GET /api/v1/mission-progress/{progress_id}/subtasks/{subtask_id}/unlockable
+    Check if a subtask can be unlocked based on dependencies.
+    """
+    user = request.user
+    
+    try:
+        progress = MissionProgress.objects.get(id=progress_id, user=user)
+    except MissionProgress.DoesNotExist:
+        return Response({'error': 'Progress not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check unlockability
+    result = progress.check_subtask_unlockable(subtask_id)
+    
+    return Response({
+        'subtask_id': subtask_id,
+        'unlockable': result['unlockable'],
+        'reason': result.get('reason'),
+        'dependencies': result.get('dependencies', []),
+        'current_subtask': progress.current_subtask,
+        'subtasks_progress': progress.subtasks_progress,
+    }, status=status.HTTP_200_OK)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])

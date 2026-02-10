@@ -29,9 +29,9 @@ export default function CurriculumLearnPage() {
   const [modules, setModules] = useState<any[]>([]);
 
   const levelNames = {
-    beginner: 'Beginner Level (Tier 2)',
-    intermediate: 'Intermediate Level (Tier 3)',
-    advanced: 'Advanced Level (Tier 4)'
+    beginner: 'Beginner Level Track',
+    intermediate: 'Intermediate Level',
+    advanced: 'Advanced Level'
   };
 
   const levelMap = {

@@ -227,7 +227,7 @@ export default function EditCohortPage() {
                     <span className="text-och-steel">Track:</span>
                     <span className="ml-2 text-white">
                     {cohort.track_name ||
-                      (cohort.track && typeof cohort.track === 'object' && 'name' in cohort.track
+                      (cohort.track && typeof cohort.track === 'object' && cohort.track !== null && 'name' in cohort.track
                         ? (cohort.track as { name: string }).name
                         : null) ||
                       track?.name ||

@@ -629,7 +629,7 @@ export function StudentDashboardHub() {
                 <div className="flex items-center gap-2">
                   <GraduationCap className={`w-4 h-4 ${getTrackColorClasses('text')}`} />
                   <div>
-                    <h3 className="text-sm font-black text-white">Tier 1 - Foundations</h3>
+                    <h3 className="text-sm font-black text-white">Beginner Level - Foundations</h3>
                     <p className="text-xs text-och-steel">
                       {foundationsStatus.is_complete 
                         ? 'Complete'

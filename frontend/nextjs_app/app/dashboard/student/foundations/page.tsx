@@ -284,7 +284,7 @@ export default function FoundationsPage() {
       hasLoadedRef.current = false
       isCompletingRef.current = false
       
-      // Per spec: Foundations completion → transitions to Tier 2 (Beginner Track / Curriculum)
+      // Per spec: Foundations completion → transitions to Beginner Level (Beginner Track / Curriculum)
       // "You're Ready. Begin Your Track." → takes user to their curriculum track
       window.location.href = '/dashboard/student/curriculum'
     } catch (err: any) {
@@ -521,7 +521,7 @@ function FoundationsLanding({
               Your Journey Starts Here
             </h1>
             <p className="text-xl text-gray-300 mb-6">
-              Welcome to Tier 1: Foundations
+              Welcome to Beginner Level: Foundations
             </p>
             {profilerResult?.primary_track && (
               <Badge variant="gold" className="text-lg px-4 py-2 mb-4">

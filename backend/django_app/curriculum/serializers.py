@@ -334,7 +334,7 @@ class CurriculumModuleListSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'track_key', 'order_index',
             'level', 'entitlement_tier', 'is_core', 'is_required',
             'estimated_time_minutes', 'lesson_count', 'mission_count',
-            'completion_percentage', 'is_locked'
+            'completion_percentage', 'is_locked', 'mentor_notes'
         ]
         read_only_fields = ['id']
     
