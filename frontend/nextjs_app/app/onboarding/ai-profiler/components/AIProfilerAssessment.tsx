@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface ProfilingQuestion {
   id: string
@@ -41,12 +41,36 @@ export default function AIProfilerAssessment({
   const [selectedAnswer, setSelectedAnswer] = useState<string>(previousAnswer || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Auto-save answer selection to localStorage immediately
+  useEffect(() => {
+    if (selectedAnswer && selectedAnswer !== previousAnswer) {
+      // Save to localStorage for immediate persistence
+      const saveKey = `profiling_answer_${question.id}`
+      localStorage.setItem(saveKey, selectedAnswer)
+      console.log('[AIProfilerAssessment] Answer saved locally:', { questionId: question.id, answer: selectedAnswer })
+    }
+  }, [selectedAnswer, question.id, previousAnswer])
+
   const handleSubmit = async () => {
     if (!selectedAnswer || isSubmitting) return
 
+    let answerToSubmit = selectedAnswer
+
+    // NOTE: Backend expects A, B, C, D, E as option values - this is correct!
+    // Ensure uppercase for consistency
+    if (selectedAnswer.length === 1 && /^[A-E]$/i.test(selectedAnswer)) {
+      answerToSubmit = selectedAnswer.toUpperCase()
+      console.log('[AIProfilerAssessment] Answer is A-E (valid):', answerToSubmit)
+    }
+
     setIsSubmitting(true)
     try {
-      await onAnswer(question.id, selectedAnswer)
+      console.log('[AIProfilerAssessment] Submitting answer:', {
+        questionId: question.id,
+        answer: answerToSubmit,
+        answerLength: answerToSubmit.length
+      })
+      await onAnswer(question.id, answerToSubmit)
     } finally {
       setIsSubmitting(false)
     }
@@ -64,6 +88,19 @@ export default function AIProfilerAssessment({
 
   const categoryInfo = getCategoryInfo(question.category)
   const progressPercentage = Math.round(progress.progress_percentage)
+
+  // Listen for answer selection events (for tracking)
+  useEffect(() => {
+    const handleAnswerSelected = (event: CustomEvent) => {
+      console.log('[AIProfilerAssessment] Answer selection event received:', event.detail)
+      // This event is already handled in onChange, but can be used for additional tracking
+    }
+
+    window.addEventListener('profiling-answer-selected', handleAnswerSelected as EventListener)
+    return () => {
+      window.removeEventListener('profiling-answer-selected', handleAnswerSelected as EventListener)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-8">
@@ -100,8 +137,11 @@ export default function AIProfilerAssessment({
           </div>
 
           <div className="text-center mt-2">
-            <span className="text-gray-300 text-sm">{progressPercentage}% Complete</span>
+            <span className="text-gray-300 text-sm font-semibold">{progressPercentage}% Complete</span>
           </div>
+          <p className="text-xs text-gray-500 mt-2 text-center">
+            💾 Your progress is automatically saved. You can return anytime to continue.
+          </p>
         </motion.div>
 
         {/* Question Card */}
@@ -136,29 +176,76 @@ export default function AIProfilerAssessment({
             transition={{ duration: 0.6, delay: 0.8 }}
             className="space-y-4"
           >
-            {question.options.map((option, index) => (
-              <motion.label
-                key={option.value}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
-                className={`block p-6 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
-                  selectedAnswer === option.value
-                    ? 'border-och-orange bg-och-orange/20 text-white'
-                    : 'border-white/20 bg-white/5 text-gray-300 hover:border-white/40 hover:bg-white/10'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={option.value}
-                  checked={selectedAnswer === option.value}
-                  onChange={(e) => setSelectedAnswer(e.target.value)}
-                  className="mr-4 accent-och-orange"
-                />
-                <span className="text-lg">{option.text}</span>
-              </motion.label>
-            ))}
+            {question.options.map((option, index) => {
+              // Ensure option has valid value and text
+              let optionValue = option.value || option.text || `option_${index}`
+              const optionText = option.text || option.value || optionValue
+              
+              // NOTE: Backend uses A, B, C, D, E as option values - this is correct!
+              // Normalize A-E values to uppercase for consistency
+              if (optionValue.length === 1 && /^[A-E]$/i.test(optionValue)) {
+                optionValue = optionValue.toUpperCase()
+                console.log('[AIProfilerAssessment] Option value is A-E (normalized to uppercase):', {
+                  questionId: question.id,
+                  value: optionValue,
+                  index: index,
+                  text: optionText
+                })
+              }
+              
+              return (
+                <motion.label
+                  key={optionValue}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
+                  className={`block p-6 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                    selectedAnswer === optionValue
+                      ? 'border-och-orange bg-och-orange/20 text-white'
+                      : 'border-white/20 bg-white/5 text-gray-300 hover:border-white/40 hover:bg-white/10'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={`question-${question.id}`}
+                    value={optionValue}
+                    checked={selectedAnswer === optionValue}
+                    onChange={(e) => {
+                      const selectedValue = e.target.value
+                      // NOTE: Backend uses A, B, C, D, E as option values - this is correct!
+                      // Ensure uppercase for consistency
+                      const normalizedValue = selectedValue.length === 1 && /^[A-E]$/i.test(selectedValue)
+                        ? selectedValue.toUpperCase()
+                        : selectedValue
+                      
+                      console.log('[AIProfilerAssessment] Option selected and recorded:', { 
+                        selectedValue: normalizedValue, 
+                        optionValue, 
+                        optionText,
+                        questionId: question.id,
+                        match: normalizedValue === optionValue,
+                        timestamp: new Date().toISOString()
+                      })
+                      setSelectedAnswer(normalizedValue)
+                      
+                      // Dispatch custom event for answer selection (for analytics/tracking)
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('profiling-answer-selected', {
+                          detail: {
+                            questionId: question.id,
+                            answer: normalizedValue,
+                            questionNumber: questionNumber,
+                            timestamp: new Date().toISOString()
+                          }
+                        }))
+                      }
+                    }}
+                    className="mr-4 accent-och-orange"
+                  />
+                  <span className="text-lg">{optionText}</span>
+                </motion.label>
+              )
+            })}
           </motion.div>
         </motion.div>
 

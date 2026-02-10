@@ -2081,9 +2081,16 @@ class CurriculumTracksView(APIView):
     def get(self, request):
         from .serializers import CurriculumTrackSerializer
 
-        tracks = CurriculumTrack.objects.filter(is_active=True).prefetch_related('levels')
-        serializer = CurriculumTrackSerializer(tracks, many=True, context={'request': request})
-        return Response(serializer.data)
+        try:
+            tracks = CurriculumTrack.objects.filter(is_active=True).prefetch_related('levels')
+            serializer = CurriculumTrackSerializer(tracks, many=True, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error in CurriculumTracksView: {e}', exc_info=True)
+            # Return empty array instead of 500 error if there's a serialization issue
+            return Response([], status=status.HTTP_200_OK)
 
 
 class CurriculumTrackDetailView(APIView):

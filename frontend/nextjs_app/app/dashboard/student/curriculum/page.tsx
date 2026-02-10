@@ -253,7 +253,21 @@ export default function CurriculumHubPage() {
 
       } catch (err: any) {
         console.error('Failed to load tracks:', err);
-        setError('Failed to load curriculum tracks. Please try again.');
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to load curriculum tracks. Please try again.';
+        
+        if (err?.status === 404) {
+          errorMessage = 'Curriculum tracks endpoint not found. Please contact support.';
+        } else if (err?.status === 401 || err?.status === 403) {
+          errorMessage = 'Authentication required. Please log in again.';
+        } else if (err?.status === 0 || err?.message?.includes('fetch failed') || err?.message?.includes('Network')) {
+          errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
+        } else if (err?.message) {
+          errorMessage = `Error: ${err.message}`;
+        }
+        
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -312,9 +326,23 @@ export default function CurriculumHubPage() {
           </div>
           <h2 className="text-2xl font-bold mb-2 text-white">Error Loading Tracks</h2>
           <p className="text-slate-400 mb-6">{error}</p>
-          <Button onClick={() => window.location.reload()} variant="outline">
-            Retry
-          </Button>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Retry
+            </Button>
+            <Button 
+              onClick={() => {
+                // Try reloading user data and then retry
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('access_token');
+                  window.location.href = '/login/student';
+                }
+              }} 
+              variant="ghost"
+            >
+              Log In Again
+            </Button>
+          </div>
         </Card>
       </div>
     );

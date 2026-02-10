@@ -555,8 +555,8 @@ async def get_enhanced_profiling_questions(user_id: int = Depends(get_current_us
             "cyber_aptitude": "Cyber Aptitude (logic, patterns, reasoning)",
             "technical_exposure": "Technical Exposure (experience scoring)",
             "scenario_preference": "Scenario Preferences (choose-your-path)",
-            "work_style": "Work Style & Behavioral Profile",
-            "difficulty_selection": "Difficulty Level Self-Selection"
+            "work_style": "Work Style & Behavioral Profile"
+            # "difficulty_selection": "Difficulty Level Self-Selection" # Removed per user request
         },
         "questions": questions,
         "total_questions": sum(len(qs) for qs in questions.values())

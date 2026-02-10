@@ -372,8 +372,12 @@ export function StudentDashboardHub() {
       try {
         const status = await foundationsClient.getStatus();
         setFoundationsStatus(status);
-      } catch (error) {
-        console.error('Failed to fetch Foundations status:', error);
+      } catch (error: any) {
+        // Only log if it's a meaningful error (not 404 or empty error)
+        if (error?.status && error.status !== 404 && error.status !== 0) {
+          console.error('Failed to fetch Foundations status:', error);
+        }
+        // Silently handle 404s and connection errors - they're expected in some cases
       } finally {
         setLoadingFoundations(false);
       }

@@ -49,9 +49,12 @@ class EnhancedProfilingService:
             "technical_exposure": [],
             "scenario_preference": [],
             "work_style": [],
-            "difficulty_selection": [],
+            # "difficulty_selection": [], # Removed per user request - difficulty selection question no longer shown
         }
         for q in self.questions:
+            # Skip difficulty_selection questions
+            if q.category == "difficulty_selection" or q.id == "difficulty_selection":
+                continue
             if q.category in modules:
                 modules[q.category].append(q.id)
         return modules
@@ -115,8 +118,12 @@ class EnhancedProfilingService:
             user_id=user_id,
             responses=[],
             started_at=datetime.utcnow(),
+            completed_at=None,
             scores=None,
-            recommended_track=None
+            recommended_track=None,
+            telemetry={},  # Initialize telemetry as empty dict
+            difficulty_verification=None,
+            reflection_responses=None
         )
         return session
 
@@ -150,7 +157,7 @@ class EnhancedProfilingService:
             "technical_exposure": "Technical Exposure",
             "scenario_preference": "Scenario Preferences",
             "work_style": "Work Style",
-            "difficulty_selection": "Difficulty Selection",
+            # "difficulty_selection": "Difficulty Selection", # Removed per user request
         }
         return category_to_module.get(category, "General")
 
@@ -1053,7 +1060,7 @@ class EnhancedProfilingService:
         session.completed_at = datetime.utcnow()
         
         # Store telemetry data in session metadata
-        if not hasattr(session, 'telemetry'):
+        if session.telemetry is None:
             session.telemetry = {}
         
         # Calculate technical exposure score
@@ -1091,13 +1098,13 @@ class EnhancedProfilingService:
         ]
         session.telemetry['scenario_choices'] = scenario_responses
         
-        # Store difficulty selection
-        difficulty_responses = [
-            r for r in session.responses
-            if self.question_map.get(r.question_id, {}).category == "difficulty_selection"
-        ]
-        if difficulty_responses:
-            session.telemetry['difficulty_selection'] = difficulty_responses[0].selected_option
+        # Store difficulty selection (removed - difficulty_selection question no longer shown)
+        # difficulty_responses = [
+        #     r for r in session.responses
+        #     if self.question_map.get(r.question_id, {}).category == "difficulty_selection"
+        # ]
+        # if difficulty_responses:
+        #     session.telemetry['difficulty_selection'] = difficulty_responses[0].selected_option
         
         # Store track alignment percentages
         session.telemetry['track_alignment_percentages'] = scores

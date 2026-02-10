@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { fastapiClient } from '@/services/fastapiClient'
@@ -8,8 +8,9 @@ import AIProfilerWelcome from './components/AIProfilerWelcome'
 import AIProfilerInstructions from './components/AIProfilerInstructions'
 import AIProfilerAssessment from './components/AIProfilerAssessment'
 import AIProfilerResults from './components/AIProfilerResults'
+import TrackConfirmation from './components/TrackConfirmation'
 
-type ProfilingSection = 'welcome' | 'instructions' | 'assessment' | 'results'
+type ProfilingSection = 'welcome' | 'instructions' | 'assessment' | 'track-confirmation' | 'results'
 
 interface ProfilingQuestion {
   id: string
@@ -223,6 +224,9 @@ export default function AIProfilerPage() {
   const [blueprint, setBlueprint] = useState<OCHBlueprint | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [assessmentStarted, setAssessmentStarted] = useState(false)
+  const [progressPercentage, setProgressPercentage] = useState(0)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     console.log('[AIProfiler] Auth state:', { isAuthenticated, isLoading, user: user?.email })
@@ -252,6 +256,127 @@ export default function AIProfilerPage() {
     }
   }, [reloadUser])
 
+  // Listen for answer recording events (for analytics/tracking)
+  useEffect(() => {
+    const handleAnswerRecorded = (event: CustomEvent) => {
+      console.log('[AIProfiler] Answer recorded event:', event.detail)
+      // Can be used for analytics, telemetry, etc.
+    }
+
+    window.addEventListener('profiling-answer-recorded', handleAnswerRecorded as EventListener)
+    return () => {
+      window.removeEventListener('profiling-answer-recorded', handleAnswerRecorded as EventListener)
+    }
+  }, [])
+
+  // Auto-save progress to localStorage when assessment is active
+  useEffect(() => {
+    if (!assessmentStarted || !session) return
+
+    const saveProgress = () => {
+      const progressData = {
+        session_id: session.session_id,
+        currentQuestionIndex,
+        responses,
+        questions: questions.map(q => q.id),
+        progressPercentage,
+        lastSaved: new Date().toISOString(),
+        user_id: user?.id?.toString()
+      }
+      localStorage.setItem('profiling_progress', JSON.stringify(progressData))
+      console.log('[AIProfiler] Progress auto-saved:', {
+        questionIndex: currentQuestionIndex,
+        responsesCount: Object.keys(responses).length,
+        percentage: `${progressPercentage}%`,
+        timestamp: progressData.lastSaved
+      })
+    }
+
+    // Debounce saves to avoid excessive localStorage writes
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    
+    saveTimeoutRef.current = setTimeout(() => {
+      saveProgress()
+    }, 500) // Save 500ms after last change
+
+    // Also save on window beforeunload (immediate)
+    const handleBeforeUnload = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      saveProgress()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [assessmentStarted, session, currentQuestionIndex, responses, progressPercentage, questions, user])
+
+  // Load saved progress on mount (before questions load)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return
+
+    const loadSavedProgress = () => {
+      try {
+        const saved = localStorage.getItem('profiling_progress')
+        if (!saved) {
+          console.log('[AIProfiler] No saved progress found')
+          return
+        }
+
+        const progressData = JSON.parse(saved)
+        console.log('[AIProfiler] Found saved progress:', {
+          sessionId: progressData.session_id,
+          responsesCount: Object.keys(progressData.responses || {}).length,
+          currentIndex: progressData.currentQuestionIndex,
+          percentage: progressData.progressPercentage,
+          lastSaved: progressData.lastSaved
+        })
+
+        // Only load if it's for the same user
+        if (progressData.user_id && user?.id?.toString() !== progressData.user_id) {
+          console.log('[AIProfiler] Saved progress is for different user, clearing')
+          localStorage.removeItem('profiling_progress')
+          return
+        }
+
+        // Restore responses immediately
+        if (progressData.responses && Object.keys(progressData.responses).length > 0) {
+          setResponses(progressData.responses)
+          console.log('[AIProfiler] Restored', Object.keys(progressData.responses).length, 'saved responses')
+        }
+
+        // Restore progress percentage
+        if (progressData.progressPercentage !== undefined) {
+          setProgressPercentage(progressData.progressPercentage)
+        }
+      } catch (error) {
+        console.error('[AIProfiler] Failed to load saved progress:', error)
+        localStorage.removeItem('profiling_progress')
+      }
+    }
+
+    loadSavedProgress()
+  }, [user])
+
+  // Calculate progress percentage whenever responses change
+  useEffect(() => {
+    if (questions.length === 0) return
+
+    const answeredCount = Object.keys(responses).length
+    const percentage = questions.length > 0 
+      ? Math.round((answeredCount / questions.length) * 100) 
+      : 0
+    
+    setProgressPercentage(percentage)
+  }, [responses, questions])
+
   const checkProfilingStatus = async () => {
     let modProgress: any = null
     let status: any = null
@@ -259,6 +384,9 @@ export default function AIProfilerPage() {
     try {
       setLoading(true)
       console.log('[AIProfiler] Checking profiling status...')
+      console.log('[AIProfiler] FastAPI URL:', process.env.NEXT_PUBLIC_FASTAPI_API_URL || 'Not configured')
+      console.log('[AIProfiler] User authenticated:', !!user)
+      console.log('[AIProfiler] User ID:', user?.id)
 
       // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
       // This prevents redirect loops when admin resets profiling
@@ -324,13 +452,32 @@ export default function AIProfilerPage() {
         const enhanced = await fastapiClient.profiling.getEnhancedQuestions()
         const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
           .flat()
-          .map((q: any) => ({
-            id: q.id,
-            question: q.question,
-            category: q.category,
-            module: q.module,
-            options: q.options,
-          }))
+          .map((q: any) => {
+            // Normalize options to ensure they have value and text properties
+            const normalizedOptions = (q.options || []).map((opt: any, idx: number) => {
+              if (typeof opt === 'string') {
+                return { value: opt, text: opt }
+              } else if (opt && typeof opt === 'object') {
+                // Backend uses A, B, C, D, E as values - preserve them exactly
+                const value = opt.value || opt.text || `option_${idx}`
+                const text = opt.text || opt.value || value
+                // Ensure A-E values are uppercase for consistency
+                const normalizedValue = (value.length === 1 && /^[A-E]$/i.test(value))
+                  ? value.toUpperCase()
+                  : value
+                return { value: normalizedValue, text }
+              }
+              return { value: `option_${idx}`, text: String(opt) }
+            })
+            
+            return {
+              id: q.id,
+              question: q.question,
+              category: q.category,
+              module: q.module,
+              options: normalizedOptions,
+            }
+          })
         setQuestions(allQuestions)
 
         // Get module-level progress
@@ -343,7 +490,24 @@ export default function AIProfilerPage() {
           (sum: number, m: any) => sum + (m.answered || 0),
           0
         )
-        setCurrentQuestionIndex(Math.min(answeredCount as number, allQuestions.length - 1))
+        const resumeIndex = Math.min(answeredCount as number, allQuestions.length - 1)
+        setCurrentQuestionIndex(resumeIndex)
+        
+        // Activate assessment recording for resumed session
+        setAssessmentStarted(true)
+        
+        // Calculate and set progress percentage
+        const percentage = allQuestions.length > 0 
+          ? Math.round((answeredCount / allQuestions.length) * 100) 
+          : 0
+        setProgressPercentage(percentage)
+        
+        console.log('[AIProfiler] Resumed session:', {
+          sessionId: (status as any).session_id,
+          answeredCount,
+          resumeIndex,
+          percentage: `${percentage}%`
+        })
         
         setLoading(false)
         return
@@ -419,14 +583,92 @@ export default function AIProfilerPage() {
         enhanced = await fastapiClient.profiling.getEnhancedQuestions()
         const allQuestions: ProfilingQuestion[] = Object.values(enhanced.questions)
           .flat()
-          .map((q: any) => ({
-            id: q.id,
-            question: q.question,
-            category: q.category,
-            module: q.module,
-            options: q.options,
-          }))
+          .map((q: any) => {
+            // Normalize options to ensure they have value and text properties
+            const normalizedOptions = (q.options || []).map((opt: any, idx: number) => {
+              // Handle different option formats from API
+              let value: string
+              let text: string
+              
+              if (typeof opt === 'string') {
+                value = opt
+                text = opt
+              } else if (opt && typeof opt === 'object') {
+                // Ensure value exists - it's required for submission
+                value = opt.value || opt.text || `option_${idx}`
+                text = opt.text || opt.value || value
+              } else {
+                value = `option_${idx}`
+                text = String(opt)
+              }
+              
+              // NOTE: Backend uses A, B, C, D, E as option values - this is correct!
+              // Keep single letter values as-is (they're valid)
+              if (value.length === 1 && /^[A-E]$/i.test(value)) {
+                // This is correct - backend expects A-E values
+                console.log('[AIProfiler] Option value is A-E (correct):', {
+                  questionId: q.id,
+                  value: value,
+                  index: idx,
+                  text: text
+                })
+              }
+              
+              return { value, text }
+            })
+            
+            return {
+              id: q.id,
+              question: q.question,
+              category: q.category,
+              module: q.module,
+              options: normalizedOptions,
+            }
+          })
+          // Filter out difficulty_selection question (removed per user request)
+          .filter(q => q.id !== 'difficulty_selection' && q.category !== 'difficulty_selection')
+        console.log('[AIProfiler] Loaded questions:', allQuestions.length, 'questions (difficulty_selection filtered out)')
         setQuestions(allQuestions)
+        
+        // Try to restore saved progress after questions load
+        try {
+          const saved = localStorage.getItem('profiling_progress')
+          if (saved) {
+            const progressData = JSON.parse(saved)
+            // Only restore if session matches or no session yet
+            const currentSessionId = sessionResponse?.session_id || session?.session_id
+            if (!currentSessionId || progressData.session_id === currentSessionId || !progressData.session_id) {
+              if (progressData.responses && Object.keys(progressData.responses).length > 0) {
+                setResponses(progressData.responses)
+                const savedIndex = progressData.currentQuestionIndex || 0
+                const validIndex = Math.min(savedIndex, allQuestions.length - 1)
+                setCurrentQuestionIndex(validIndex)
+                
+                // Calculate percentage from restored responses
+                const restoredPercentage = allQuestions.length > 0
+                  ? Math.round((Object.keys(progressData.responses).length / allQuestions.length) * 100)
+                  : 0
+                setProgressPercentage(restoredPercentage)
+                
+                console.log('[AIProfiler] Restored progress from localStorage:', {
+                  responsesCount: Object.keys(progressData.responses).length,
+                  currentIndex: validIndex,
+                  percentage: `${restoredPercentage}%`
+                })
+                
+                // Auto-navigate to assessment if there's saved progress
+                if (Object.keys(progressData.responses).length > 0) {
+                  setCurrentSection('assessment')
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('[AIProfiler] Failed to restore saved progress:', error)
+        }
+        
+        // Activate assessment recording after questions are loaded and progress restored
+        setAssessmentStarted(true)
       } catch (questionsError: any) {
         // Handle FastAPI being unavailable for questions
         if (questionsError?.status === 404 || questionsError?.status === 0 || 
@@ -466,11 +708,36 @@ export default function AIProfilerPage() {
                             err?.message?.includes('fetch') || 
                             err?.message?.includes('ECONNREFUSED')
       
-      const errorMessage = isAuthError
-        ? 'Authentication required. Please log in to continue.'
-        : isNetworkError
-        ? 'Cannot connect to profiling service. Please ensure FastAPI is running on port 8001.'
-        : err?.message || 'Failed to initialize profiling'
+      // Provide more specific error messages
+      let errorMessage = 'Failed to initialize profiling'
+      
+      if (isAuthError) {
+        errorMessage = 'Authentication required. Please log in to continue.'
+      } else if (isNetworkError) {
+        // Check if it's a CORS error (browser blocks cross-origin request)
+        if (err?.message?.includes('CORS') || err?.message?.includes('cors')) {
+          errorMessage = 'CORS error: FastAPI may not be allowing requests from this origin. Check CORS configuration.'
+        } else if (err?.status === 0) {
+          // Status 0 usually means network error or CORS
+          errorMessage = 'Cannot connect to FastAPI backend. Please ensure:\n1. FastAPI is running on port 8001\n2. CORS is configured for your frontend origin\n3. No firewall is blocking the connection'
+        } else {
+          errorMessage = 'Cannot connect to profiling service. Please ensure FastAPI is running on port 8001.'
+        }
+      } else if (err?.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again and try the profiler.'
+      } else if (err?.status === 403) {
+        errorMessage = 'Access denied. Please check your permissions.'
+      } else if (err?.message) {
+        errorMessage = err.message
+      }
+      
+      console.error('[AIProfiler] Initialization error:', {
+        error: err,
+        status: err?.status,
+        message: err?.message,
+        isNetworkError,
+        url: err?.url
+      })
       
       setError(errorMessage)
       setLoading(false)
@@ -482,6 +749,34 @@ export default function AIProfilerPage() {
   }
 
   const handleContinue = () => {
+    // Activate assessment recording when user clicks "Start Assessment"
+    setAssessmentStarted(true)
+    console.log('[AIProfiler] Assessment recording activated')
+    
+    // Load any saved progress from localStorage
+    try {
+      const saved = localStorage.getItem('profiling_progress')
+      if (saved) {
+        const progressData = JSON.parse(saved)
+        if (progressData.responses && Object.keys(progressData.responses).length > 0) {
+          console.log('[AIProfiler] Restoring saved progress:', {
+            responsesCount: Object.keys(progressData.responses).length,
+            currentIndex: progressData.currentQuestionIndex,
+            percentage: progressData.progressPercentage
+          })
+          setResponses(progressData.responses)
+          if (progressData.currentQuestionIndex !== undefined && questions.length > 0) {
+            setCurrentQuestionIndex(Math.min(progressData.currentQuestionIndex, questions.length - 1))
+          }
+          if (progressData.progressPercentage !== undefined) {
+            setProgressPercentage(progressData.progressPercentage)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[AIProfiler] Failed to load saved progress:', error)
+    }
+    
     setCurrentSection('assessment')
   }
 
@@ -489,6 +784,24 @@ export default function AIProfilerPage() {
     if (!session) return
 
     try {
+      // Debug: Log the answer being sent
+      console.log('[AIProfiler] Submitting answer:', { 
+        questionId, 
+        answer, 
+        answerType: typeof answer,
+        currentQuestionIndex,
+        currentQuestion: questions[currentQuestionIndex]?.id,
+        questionOptions: questions[currentQuestionIndex]?.options?.map(opt => ({ value: opt.value, text: opt.text }))
+      })
+      
+      // NOTE: Backend expects A, B, C, D, E as option values - this is correct!
+      // Single letter answers are valid - no correction needed
+      if (answer && answer.length === 1 && /^[A-E]$/i.test(answer)) {
+        console.log('[AIProfiler] Answer is A-E (valid):', answer)
+        // Ensure uppercase for consistency
+        answer = answer.toUpperCase()
+      }
+      
       // Submit response to FastAPI backend
       const response = await fastapiClient.profiling.submitResponse(
         session.session_id,
@@ -504,8 +817,46 @@ export default function AIProfilerPage() {
         } : null)
       }
 
-      // Update local responses
-      setResponses(prev => ({ ...prev, [questionId]: answer }))
+      // Update local responses and auto-save
+      setResponses(prev => {
+        const updated = { ...prev, [questionId]: answer }
+        
+        // Calculate progress percentage
+        const answeredCount = Object.keys(updated).length
+        const percentage = questions.length > 0 
+          ? Math.round((answeredCount / questions.length) * 100) 
+          : 0
+        
+        // Update progress percentage state
+        setProgressPercentage(percentage)
+        
+        // Auto-save progress immediately (debounced in useEffect)
+        // The useEffect hook will handle the actual save
+        
+        // Dispatch event for answer recording
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('profiling-answer-recorded', {
+            detail: {
+              questionId,
+              answer,
+              answeredCount,
+              totalQuestions: questions.length,
+              percentage,
+              timestamp: new Date().toISOString()
+            }
+          }))
+        }
+        
+        console.log('[AIProfiler] Answer recorded:', {
+          questionId,
+          answer,
+          answeredCount,
+          totalQuestions: questions.length,
+          percentage: `${percentage}%`
+        })
+        
+        return updated
+      })
 
       // Move to next question or complete
       const nextIndex = currentQuestionIndex + 1
@@ -536,6 +887,10 @@ export default function AIProfilerPage() {
 
         if (nextIndex < questions.length) {
           setCurrentQuestionIndex(nextIndex)
+          
+          // Update progress percentage after moving to next question
+          const newPercentage = Math.round(((Object.keys(responses).length + 1) / questions.length) * 100)
+          setProgressPercentage(newPercentage)
         } else {
           // All questions answered -> complete profiling
           await completeProfiling()
@@ -618,12 +973,66 @@ export default function AIProfilerPage() {
         // User can still proceed, sync can happen later
       }
       
-      setCurrentSection('results')
+      // Show track confirmation screen instead of results directly
+      // Clear saved progress on completion
+      localStorage.removeItem('profiling_progress')
+      console.log('[AIProfiler] Profiling completed - cleared saved progress')
+      
+      setCurrentSection('track-confirmation')
       setLoading(false)
     } catch (err: any) {
       setError(err.message || 'Failed to complete profiling')
       setLoading(false)
     }
+  }
+
+  const handleTrackConfirm = async (trackKey: string) => {
+    try {
+      setLoading(true)
+      
+      // Update the result with confirmed track
+      if (result) {
+        // Update sync with confirmed track
+        try {
+          const { apiGateway } = await import('@/services/apiGateway')
+          const syncResponse = await apiGateway.post('/profiler/sync-fastapi', {
+            user_id: user?.id?.toString(),
+            session_id: result.session_id,
+            completed_at: result.completed_at,
+            primary_track: trackKey, // Use confirmed track
+            recommendations: result.recommendations.map(rec => ({
+              track_key: rec.track_key,
+              score: rec.score,
+              confidence_level: rec.confidence_level
+            }))
+          })
+          console.log('✅ Track confirmed and synced:', trackKey, syncResponse)
+        } catch (syncError: any) {
+          console.warn('⚠️ Failed to sync confirmed track:', syncError)
+          // Continue anyway - user can proceed
+        }
+      }
+      
+      // Refresh user state
+      if (reloadUser) {
+        await reloadUser()
+      }
+      
+      // Small delay to ensure sync completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Show results screen
+      setCurrentSection('results')
+      setLoading(false)
+    } catch (err: any) {
+      setError(err.message || 'Failed to confirm track')
+      setLoading(false)
+    }
+  }
+
+  const handleTrackDecline = () => {
+    // Already handled in TrackConfirmation component
+    // This allows user to select a different track
   }
 
   const handleComplete = async () => {
@@ -704,6 +1113,44 @@ export default function AIProfilerPage() {
           progress={progress}
           onAnswer={handleAnswer}
           previousAnswer={responses[currentQuestion.id]}
+        />
+      )}
+      {currentSection === 'track-confirmation' && result && (
+        <TrackConfirmation
+          recommendedTrack={{
+            key: result.primary_track.key,
+            name: result.primary_track.name,
+            description: result.primary_track.description
+          }}
+          allTracks={[
+            {
+              key: 'defender',
+              name: 'Defender',
+              description: 'Protect systems, detect threats, and respond to incidents'
+            },
+            {
+              key: 'offensive',
+              name: 'Offensive',
+              description: 'Ethical hacking, penetration testing, and security research'
+            },
+            {
+              key: 'grc',
+              name: 'GRC',
+              description: 'Governance, risk management, and compliance'
+            },
+            {
+              key: 'innovation',
+              name: 'Innovation',
+              description: 'Build security solutions, innovate, and create new technologies'
+            },
+            {
+              key: 'leadership',
+              name: 'Leadership',
+              description: 'Lead security teams, strategize, and drive organizational change'
+            }
+          ]}
+          onConfirm={handleTrackConfirm}
+          onDecline={handleTrackDecline}
         />
       )}
       {currentSection === 'results' && result && (

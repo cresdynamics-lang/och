@@ -54,7 +54,34 @@ export const curriculumClient = {
     if (params?.level) queryParams.append('level', params.level)
     
     const queryString = queryParams.toString()
-    return apiGateway.get(`/curriculum/tracks/${queryString ? `?${queryString}` : ''}`)
+    const url = `/curriculum/tracks/${queryString ? `?${queryString}` : ''}`
+    
+    try {
+      const response = await apiGateway.get(url)
+      // Handle both array and object responses
+      if (Array.isArray(response)) {
+        return response
+      }
+      // If response is an object with results or data property
+      if (response && typeof response === 'object') {
+        if (Array.isArray(response.results)) {
+          return response.results
+        }
+        if (Array.isArray(response.data)) {
+          return response.data
+        }
+        if (Array.isArray(response.tracks)) {
+          return response.tracks
+        }
+      }
+      // Fallback: return empty array if response format is unexpected
+      console.warn('Unexpected response format from /curriculum/tracks/', response)
+      return []
+    } catch (error: any) {
+      console.error('Error fetching curriculum tracks:', error)
+      // Re-throw to let the component handle it
+      throw error
+    }
   },
 
   /**

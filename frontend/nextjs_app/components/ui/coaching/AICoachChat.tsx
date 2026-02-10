@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useCoachingStore } from '@/lib/coaching/store'
+import { useAuth } from '@/hooks/useAuth'
 import type { AICoachMessage } from '@/lib/coaching/types'
 import clsx from 'clsx'
 
@@ -17,6 +18,7 @@ interface AICoachChatProps {
 
 export function AICoachChat({ className, isInline = false }: AICoachChatProps) {
   const { aiMessages, addAIMessage, metrics, habits, goals } = useCoachingStore()
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(isInline)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -39,14 +41,39 @@ export function AICoachChat({ className, isInline = false }: AICoachChatProps) {
                        (!habits || habits.length === 0) &&
                        (!goals || goals.length === 0)
 
+      // Get user track dynamically
+      const trackKey = (user?.track_key || user?.recommended_track || 'defender').toLowerCase();
+      const trackNames: Record<string, string> = {
+        'defender': 'Defender',
+        'offensive': 'Offensive',
+        'grc': 'GRC',
+        'innovation': 'Innovation',
+        'leadership': 'Leadership'
+      };
+      const trackName = trackNames[trackKey] || 'Defender';
+
       let welcomeContent: string
 
       if (isNewUser) {
-        welcomeContent = "🚀 Welcome to your Defender track! I'm your AI Coach, here to guide you through mastering cybersecurity defense. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of cybersecurity study daily\n2. **Practice Sessions** - Work through hands-on labs and CTF challenges\n3. **Weekly Goals** - Set achievable milestones like completing your first vulnerability assessment\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?"
+        const trackMessages: Record<string, string> = {
+          'defender': "🚀 Welcome to your Defender track! I'm your AI Coach, here to guide you through mastering cybersecurity defense. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of cybersecurity study daily\n2. **Practice Sessions** - Work through hands-on labs and CTF challenges\n3. **Weekly Goals** - Set achievable milestones like completing your first vulnerability assessment\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?",
+          'offensive': "🚀 Welcome to your Offensive Security track! I'm your AI Coach, here to guide you through mastering ethical hacking and penetration testing. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of offensive security practice daily\n2. **Practice Sessions** - Work through CTF challenges and lab environments\n3. **Weekly Goals** - Set achievable milestones like completing your first penetration test\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?",
+          'grc': "🚀 Welcome to your GRC track! I'm your AI Coach, here to guide you through mastering governance, risk, and compliance. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of GRC study daily\n2. **Practice Sessions** - Work through compliance frameworks and risk assessments\n3. **Weekly Goals** - Set achievable milestones like understanding a new compliance standard\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?",
+          'innovation': "🚀 Welcome to your Innovation track! I'm your AI Coach, here to guide you through mastering security innovation and development. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of security innovation practice daily\n2. **Practice Sessions** - Work on building security tools and solutions\n3. **Weekly Goals** - Set achievable milestones like creating your first security tool\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?",
+          'leadership': "🚀 Welcome to your Leadership track! I'm your AI Coach, here to guide you through mastering cybersecurity leadership and strategy. Let's start by building your foundation:\n\n1. **Daily Learning Habit** - Commit to 30 minutes of leadership development daily\n2. **Practice Sessions** - Work on strategic thinking and team management\n3. **Weekly Goals** - Set achievable milestones like developing your first security strategy\n\nClick 'Start with Habits' above to begin your journey. What's your first priority?"
+        };
+        welcomeContent = trackMessages[trackKey] || trackMessages['defender'];
       } else if (metrics?.totalStreakDays > 0) {
-        welcomeContent = `🔥 ${metrics.totalStreakDays}-day streak! You're crushing it on your Defender track. ${metrics.activeHabits > 0 ? `You have ${metrics.activeHabits} active habits keeping you on track.` : 'Ready to add some powerful habits?'} ${metrics.completedGoals > 0 ? `You've completed ${metrics.completedGoals} goals so far.` : 'Let\'s set some ambitious goals for your cybersecurity journey.'} What's on your mind today?`
+        welcomeContent = `🔥 ${metrics.totalStreakDays}-day streak! You're crushing it on your ${trackName} track. ${metrics.activeHabits > 0 ? `You have ${metrics.activeHabits} active habits keeping you on track.` : 'Ready to add some powerful habits?'} ${metrics.completedGoals > 0 ? `You've completed ${metrics.completedGoals} goals so far.` : 'Let\'s set some ambitious goals for your cybersecurity journey.'} What's on your mind today?`
       } else {
-        welcomeContent = "Welcome back to your Defender track! Ready to strengthen your cybersecurity defenses today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?"
+        const trackMessages: Record<string, string> = {
+          'defender': "Welcome back to your Defender track! Ready to strengthen your cybersecurity defenses today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?",
+          'offensive': "Welcome back to your Offensive Security track! Ready to sharpen your ethical hacking skills today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?",
+          'grc': "Welcome back to your GRC track! Ready to advance your governance and compliance expertise today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?",
+          'innovation': "Welcome back to your Innovation track! Ready to build something amazing today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?",
+          'leadership': "Welcome back to your Leadership track! Ready to develop your cybersecurity leadership skills today? Whether you need help with habits, goals, or just want to reflect on your progress, I'm here to help. What would you like to focus on?"
+        };
+        welcomeContent = trackMessages[trackKey] || trackMessages['defender'];
       }
 
       const welcomeMessage: AICoachMessage = {
@@ -58,7 +85,7 @@ export function AICoachChat({ className, isInline = false }: AICoachChatProps) {
       }
       addAIMessage(welcomeMessage)
     }
-  }, [aiMessages?.length, addAIMessage, metrics, habits, goals])
+  }, [aiMessages?.length, addAIMessage, metrics, habits, goals, user?.track_key, user?.recommended_track])
   
   const handleSend = async (text?: string) => {
     const messageText = text || input

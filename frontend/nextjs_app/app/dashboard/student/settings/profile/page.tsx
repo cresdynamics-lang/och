@@ -429,11 +429,25 @@ export default function ProfileSettingsPage() {
             <Badge variant="mint" className="text-xs font-black uppercase">
               {completeness}% Complete
             </Badge>
-            {profile?.role_specific_data?.student?.track_name && (
-              <Badge variant="defender" className="text-xs font-black uppercase">
-                {profile.role_specific_data.student.track_name}
-              </Badge>
-            )}
+            {(() => {
+              // Get track from user.track_key (source of truth) or fallback to profile data
+              const trackKey = authUser?.track_key || profile?.track_key || null;
+              const trackNameMap: Record<string, string> = {
+                'defender': 'Defender',
+                'offensive': 'Offensive',
+                'grc': 'GRC',
+                'innovation': 'Innovation',
+                'leadership': 'Leadership'
+              };
+              const displayTrackName = trackKey ? (trackNameMap[trackKey.toLowerCase()] || trackKey) : 
+                                       (profile?.role_specific_data?.student?.track_name || null);
+              
+              return displayTrackName && (
+                <Badge variant="defender" className="text-xs font-black uppercase">
+                  {displayTrackName}
+                </Badge>
+              );
+            })()}
           </div>
         </div>
 
@@ -965,21 +979,35 @@ export default function ProfileSettingsPage() {
               </div>
             </div>
 
-            {profile?.role_specific_data?.student?.track_name && (
-              <div className="p-4 bg-och-defender/5 border border-och-defender/20 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <Award className="w-5 h-5 text-och-defender" />
-                  <div>
-                    <p className="text-sm font-bold text-white">Career Track</p>
-                    <p className="text-xs text-och-steel">
-                      {profile.role_specific_data.student.track_name}
-                      {profile.role_specific_data.student.cohort_name && 
-                        ` • ${profile.role_specific_data.student.cohort_name}`}
-                    </p>
+            {(() => {
+              // Get track from user.track_key (source of truth) or fallback to profile data
+              const trackKey = authUser?.track_key || profile?.track_key || null;
+              const trackNameMap: Record<string, string> = {
+                'defender': 'Defender',
+                'offensive': 'Offensive',
+                'grc': 'GRC',
+                'innovation': 'Innovation',
+                'leadership': 'Leadership'
+              };
+              const displayTrackName = trackKey ? (trackNameMap[trackKey.toLowerCase()] || trackKey) : 
+                                       (profile?.role_specific_data?.student?.track_name || null);
+              
+              return displayTrackName && (
+                <div className="p-4 bg-och-defender/5 border border-och-defender/20 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <Award className="w-5 h-5 text-och-defender" />
+                    <div>
+                      <p className="text-sm font-bold text-white">Career Track</p>
+                      <p className="text-xs text-och-steel">
+                        {displayTrackName}
+                        {profile?.role_specific_data?.student?.cohort_name && 
+                          ` • ${profile.role_specific_data.student.cohort_name}`}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </Card>
       </div>
