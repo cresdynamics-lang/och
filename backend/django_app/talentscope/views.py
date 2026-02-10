@@ -1,5 +1,6 @@
 """
 API views for TalentScope analytics.
+Analyst role: read-only access; consent-gated for cross-user data; all access audited.
 """
 from datetime import datetime, timedelta
 from django.db.models import Avg, Count, Sum, Q, F, Max
@@ -10,6 +11,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from users.models import User
+from users.utils.consent_utils import check_consent
+from users.utils.audit_utils import log_analytics_access
 from .models import SkillSignal, BehaviorSignal, MentorInfluence, ReadinessSnapshot
 from .serializers import (
     ReadinessOverTimeSerializer,
@@ -19,6 +22,18 @@ from .serializers import (
     ReadinessWindowSerializer,
     ReadinessSnapshotSerializer,
 )
+
+
+def _can_access_mentee_analytics(request, mentee):
+    """RLS/consent: analyst/admin can access; others only self; cross-user requires analytics consent."""
+    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
+    is_analyst = 'analyst' in user_roles
+    is_admin = 'admin' in user_roles
+    if request.user.id == mentee.id:
+        return True
+    if is_analyst or is_admin:
+        return check_consent(mentee, 'analytics')
+    return False
 
 
 @api_view(['GET'])
@@ -36,17 +51,13 @@ def readiness_over_time(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions - user can only view their own data unless they're analyst/admin
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_readiness', str(mentee.id), {'mentee_id': str(mentee.id)})
+
     # Get filter parameters
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
@@ -101,17 +112,13 @@ def skills_heatmap(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_skills_heatmap', str(mentee.id), {'mentee_id': str(mentee.id)})
+
     # Get filter parameters
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
@@ -171,17 +178,13 @@ def skill_mastery(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_skill_mastery', str(mentee.id), {'mentee_id': str(mentee.id)})
+
     category = request.query_params.get('category')
     
     # Query skill signals
@@ -229,21 +232,17 @@ def behavioral_trends(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_behavioral_trends', str(mentee.id), {'mentee_id': str(mentee.id)})
+
     # Get filter parameters
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
-    
+
     # Query behavior signals
     behaviors = BehaviorSignal.objects.filter(mentee=mentee)
     
@@ -307,17 +306,13 @@ def readiness_window(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_readiness_window', str(mentee.id), {'mentee_id': str(mentee.id)})
+
     # Get latest readiness snapshot
     snapshot = ReadinessSnapshot.objects.filter(mentee=mentee).order_by('-snapshot_date').first()
     
@@ -370,17 +365,13 @@ def export_report(request, mentee_id):
             status=status.HTTP_404_NOT_FOUND
         )
     
-    # Check permissions
-    user_roles = [ur.role.name for ur in request.user.user_roles.filter(is_active=True)]
-    is_analyst = 'analyst' in user_roles
-    is_admin = 'admin' in user_roles
-    
-    if not (is_analyst or is_admin) and request.user.id != mentee.id:
+    if not _can_access_mentee_analytics(request, mentee):
         return Response(
-            {'error': 'Permission denied'},
+            {'error': 'Permission denied or analytics consent required'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+    log_analytics_access(request, request.user, 'talentscope_export', str(mentee.id), {'mentee_id': str(mentee.id), 'format': request.query_params.get('format', 'csv')})
+
     format_type = request.query_params.get('format', 'csv').lower()
     
     if format_type not in ['csv', 'pdf']:

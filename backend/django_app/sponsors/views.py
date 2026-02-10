@@ -21,6 +21,7 @@ from . import services as sponsor_services
 from .services.cohorts_service import SponsorCohortsService
 from .services.finance_service import FinanceDataService
 from .services.payment_service import PaymentService
+from users.models import UserRole
 from .permissions import IsSponsorUser, IsSponsorAdmin, check_sponsor_access, check_sponsor_admin_access
 from .export_service import SponsorExportService
 from .audit_service import SponsorAuditService
@@ -636,24 +637,36 @@ class SponsorFinanceOverviewView(APIView):
         return Response(finance_data)
 
 
+def _is_finance_only(user):
+    """True if user has finance/finance_admin but not sponsor_admin (for PII masking)."""
+    if not user or not user.is_authenticated:
+        return False
+    roles = set(UserRole.objects.filter(user=user, is_active=True).values_list('role__name', flat=True))
+    has_finance = bool(roles & {'finance', 'finance_admin'})
+    has_sponsor_admin = 'sponsor_admin' in roles
+    return has_finance and not has_sponsor_admin
+
+
 class SponsorCohortBillingView(APIView):
     """
     GET /api/sponsors/[slug]/cohorts/[cohortId]/billing
-    Get detailed billing information for a cohort
+    Get detailed billing information for a cohort. Finance role: no student PII beyond billing (masked).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSponsorUser]
 
     def get(self, request, slug, cohort_id):
-        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
+        sponsor = check_sponsor_access(request.user, slug)
         cohort = get_object_or_404(
             SponsorCohort,
             id=cohort_id,
             sponsor=sponsor
         )
-
-        # TODO: Add sponsor access control
         billing_data = FinanceDataService.get_cohort_billing_detail(cohort)
-
+        # Mask student names for Finance-only viewers (no student PII beyond billing)
+        if _is_finance_only(request.user) and 'revenue_share_details' in billing_data:
+            for item in billing_data['revenue_share_details']:
+                if 'student_name' in item:
+                    item['student_name'] = '[Masked]'
         return Response(billing_data)
 
 
@@ -682,10 +695,10 @@ class GenerateInvoiceView(APIView):
         try:
             invoice_data = FinanceDataService.generate_invoice(sponsor, cohort_id, billing_month)
 
-            # Log invoice generation
-            SponsorAuditService.log_cohort_action(
-                request.user, None, 'invoice_generated',
-                {'cohort_id': cohort_id, 'billing_month': billing_month_str}
+            SponsorAuditService.log_financial_action(
+                request.user, 'invoice_generated', 'invoice',
+                resource_id=invoice_data.get('billing_record_id', ''),
+                metadata={'cohort_id': cohort_id, 'billing_month': billing_month_str}
             )
 
             return Response(invoice_data, status=status.HTTP_201_CREATED)
@@ -699,14 +712,12 @@ class GenerateInvoiceView(APIView):
 class MarkPaymentView(APIView):
     """
     POST /api/sponsors/[slug]/payments
-    Mark a billing record as paid
+    Mark a billing record as paid (Sponsor admin or Finance).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSponsorAdmin]
 
     def post(self, request, slug):
-        sponsor = get_object_or_404(Sponsor, slug=slug, is_active=True)
-
-        # TODO: Add sponsor admin permission check
+        sponsor = check_sponsor_admin_access(request.user, slug)
 
         billing_record_id = request.data.get('billing_record_id')
         payment_date_str = request.data.get('payment_date')
@@ -728,10 +739,10 @@ class MarkPaymentView(APIView):
         try:
             payment_data = FinanceDataService.mark_payment(sponsor, billing_record_id, payment_date)
 
-            # Log payment
-            SponsorAuditService.log_cohort_action(
-                request.user, None, 'payment_marked',
-                {'billing_record_id': billing_record_id, 'amount': payment_data['amount_paid']}
+            SponsorAuditService.log_financial_action(
+                request.user, 'payment_marked', 'billing',
+                resource_id=billing_record_id,
+                metadata={'amount': payment_data['amount_paid']}
             )
 
             return Response(payment_data)

@@ -70,3 +70,18 @@ def log_audit_event(
         return None
 
 
+def log_analytics_access(request, user, resource_type: str, resource_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
+    """
+    Log analytics read/export for compliance (audit logs for all analytics queries).
+    Use for TalentScope, profiler analytics, and analyst dashboard access.
+    """
+    return log_audit_event(
+        request=request,
+        user=user,
+        action="read",
+        resource_type=resource_type,
+        resource_id=resource_id,
+        metadata={"analytics_access": True, **(metadata or {})},
+    )
+
+

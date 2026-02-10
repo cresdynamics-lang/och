@@ -427,11 +427,11 @@ class LoginView(APIView):
             trust_device(user, device_fingerprint, device_name, device_type, ip_address, user_agent, expires_days=365)
             device_trusted = True
         
-        # Check MFA requirement
+        # Check MFA requirement (mandatory for Finance/Finance Admin/Admin when MFA enabled)
         user_roles = UserRole.objects.filter(user=user, is_active=True)
         user_role_names = [ur.role.name for ur in user_roles]
-        primary_role = user_role_names[0] if user_role_names else None
-        
+        high_risk_roles = ['finance', 'finance_admin', 'admin']
+        primary_role = next((r for r in user_role_names if r in high_risk_roles), user_role_names[0] if user_role_names else None)
         mfa_required = requires_mfa(risk_score, primary_role, user) or user.mfa_enabled
         
         # If MFA required and not verified, return MFA challenge
