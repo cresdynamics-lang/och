@@ -12,9 +12,12 @@ Modules:
 7. Role Fit Reflection (open-ended, stored as portfolio entry)
 """
 import uuid
+import logging
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 from schemas.profiling import (
     ProfilingSession, ProfilingResponse, TrackRecommendation,
@@ -234,6 +237,64 @@ class EnhancedProfilingService:
         
         return " ".join(value_parts) if value_parts else "I am committed to advancing in cybersecurity."
 
+    def create_value_statement_portfolio_entry(self, session: ProfilingSession, result: ProfilingResult) -> bool:
+        """
+        Create the first portfolio entry (Value Statement) automatically after profiler completion.
+        This integrates with Django's portfolio system.
+        """
+        import requests
+        import os
+        
+        value_statement = self.extract_value_statement(session)
+        
+        # Get Django API URL from environment
+        django_api_url = os.getenv('DJANGO_API_URL', 'http://localhost:8000')
+        
+        # Get user's UUID (Django uses UUID for portfolio items)
+        try:
+            # Call Django API to get user UUID
+            user_response = requests.get(
+                f"{django_api_url}/api/v1/users/{session.user_id}/uuid",
+                timeout=5
+            )
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+                user_uuid = user_data.get('uuid_id') or user_data.get('uuid')
+            else:
+                # Fallback: try to create portfolio item directly with user_id
+                user_uuid = str(session.user_id)
+        except Exception as e:
+            logger.warning(f"Could not fetch user UUID: {e}")
+            user_uuid = str(session.user_id)
+        
+        # Create portfolio item via Django API
+        try:
+            portfolio_data = {
+                'title': 'My Value Statement',
+                'summary': value_statement,
+                'type': 'reflection',
+                'status': 'approved',  # Auto-approve value statement
+                'visibility': 'private',  # Start as private, user can change later
+                'skillTags': [],
+                'evidenceFiles': []
+            }
+            
+            # Note: This requires authentication token in production
+            # For now, we'll create it via Django signal or task
+            # The actual creation should happen in Django after profiler completion
+            logger.info(f"Value statement extracted for user {session.user_id}: {value_statement[:100]}...")
+            
+            # Store value statement in session for Django to pick up
+            if not hasattr(session, 'portfolio_metadata'):
+                session.portfolio_metadata = {}
+            session.portfolio_metadata['value_statement'] = value_statement
+            session.portfolio_metadata['ready_for_portfolio'] = True
+            
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create portfolio entry: {e}")
+            return False
+
     def verify_difficulty_selection(self, session: ProfilingSession, 
                                    selected_difficulty: str) -> Dict[str, Any]:
         """
@@ -348,11 +409,16 @@ class EnhancedProfilingService:
 
         return dict(normalized_scores)
 
-    def generate_recommendations(self, scores: Dict[str, float]) -> List[TrackRecommendation]:
-        """Generate track recommendations with strengths and optimal paths."""
+    def generate_recommendations(self, scores: Dict[str, float], session: Optional[ProfilingSession] = None) -> List[TrackRecommendation]:
+        """Generate track recommendations with strengths and optimal paths, enhanced with behavioral pattern analysis."""
+        # Extract behavioral patterns from session if available
+        behavioral_patterns = self._extract_behavioral_patterns(session) if session else {}
+        
+        # Apply behavioral pattern adjustments to scores
+        adjusted_scores = self._apply_behavioral_pattern_scoring(scores, behavioral_patterns)
+        
         recommendations = []
-
-        sorted_tracks = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        sorted_tracks = sorted(adjusted_scores.items(), key=lambda x: x[1], reverse=True)
 
         for i, (track_key, score) in enumerate(sorted_tracks):
             track_info = OCH_TRACKS[track_key]
@@ -367,8 +433,8 @@ class EnhancedProfilingService:
             else:
                 confidence_level = "low"
 
-            reasoning = self._generate_reasoning(track_key, score, i + 1, scores)
-            strengths_aligned = self._get_strengths_aligned(track_key, scores)
+            reasoning = self._generate_reasoning(track_key, score, i + 1, adjusted_scores, behavioral_patterns)
+            strengths_aligned = self._get_strengths_aligned(track_key, adjusted_scores)
             optimal_path = self._get_optimal_path(track_key)
 
             recommendation = TrackRecommendation(
@@ -385,9 +451,174 @@ class EnhancedProfilingService:
             recommendations.append(recommendation)
 
         return recommendations
+    
+    def _extract_behavioral_patterns(self, session: ProfilingSession) -> Dict[str, float]:
+        """Extract behavioral patterns from session responses for track alignment."""
+        patterns = {
+            'pattern_recognition': 0.0,
+            'stability': 0.0,
+            'risk_sensitivity': 0.0,
+            'curiosity': 0.0,
+            'exploration': 0.0,
+            'analytical_lateral_thinking': 0.0,
+            'documentation_clarity': 0.0,
+            'structured_thinking': 0.0,
+            'governance_alignment': 0.0,
+            'creativity': 0.0,
+            'automation_interest': 0.0,
+            'systems_thinking': 0.0,
+            'communication': 0.0,
+            'decision_clarity': 0.0,
+            'value_driven': 0.0,
+        }
+        
+        if not session or not session.responses:
+            return patterns
+        
+        # Analyze responses for behavioral indicators
+        for response in session.responses:
+            question = self.question_map.get(response.question_id)
+            if not question:
+                continue
+            
+            selected_option = response.selected_option
+            
+            # Pattern recognition indicators (Defender)
+            if 'pattern' in question.question.lower() or 'recognize' in question.question.lower():
+                if selected_option in ['A', 'B']:  # High pattern recognition
+                    patterns['pattern_recognition'] += 1.0
+            
+            # Stability indicators (Defender)
+            if 'stable' in question.question.lower() or 'consistent' in question.question.lower() or 'routine' in question.question.lower():
+                if selected_option in ['A', 'B']:
+                    patterns['stability'] += 1.0
+            
+            # Risk sensitivity indicators (Defender)
+            if 'risk' in question.question.lower() and ('assess' in question.question.lower() or 'evaluate' in question.question.lower()):
+                if selected_option in ['A', 'B']:
+                    patterns['risk_sensitivity'] += 1.0
+            
+            # Curiosity indicators (Offensive)
+            if 'curious' in question.question.lower() or 'explore' in question.question.lower() or 'discover' in question.question.lower():
+                if selected_option in ['B', 'C']:
+                    patterns['curiosity'] += 1.0
+                    patterns['exploration'] += 1.0
+            
+            # Analytical lateral thinking (Offensive)
+            if 'think' in question.question.lower() and ('different' in question.question.lower() or 'creative' in question.question.lower()):
+                if selected_option in ['B', 'C']:
+                    patterns['analytical_lateral_thinking'] += 1.0
+            
+            # Documentation clarity (GRC)
+            if 'document' in question.question.lower() or 'report' in question.question.lower() or 'compliance' in question.question.lower():
+                if selected_option in ['A', 'B']:
+                    patterns['documentation_clarity'] += 1.0
+            
+            # Structured thinking (GRC)
+            if 'structure' in question.question.lower() or 'organize' in question.question.lower() or 'framework' in question.question.lower():
+                if selected_option in ['A', 'B']:
+                    patterns['structured_thinking'] += 1.0
+            
+            # Governance alignment (GRC)
+            if 'governance' in question.question.lower() or 'compliance' in question.question.lower() or 'regulation' in question.question.lower():
+                if selected_option in ['A', 'B']:
+                    patterns['governance_alignment'] += 1.0
+            
+            # Creativity (Innovation)
+            if 'creative' in question.question.lower() or 'innovate' in question.question.lower() or 'design' in question.question.lower():
+                if selected_option in ['B', 'C']:
+                    patterns['creativity'] += 1.0
+            
+            # Automation interest (Innovation)
+            if 'automate' in question.question.lower() or 'tool' in question.question.lower() or 'script' in question.question.lower():
+                if selected_option in ['B', 'C']:
+                    patterns['automation_interest'] += 1.0
+            
+            # Systems thinking (Innovation)
+            if 'system' in question.question.lower() or 'architecture' in question.question.lower() or 'design' in question.question.lower():
+                if selected_option in ['B', 'C']:
+                    patterns['systems_thinking'] += 1.0
+            
+            # Communication (Leadership)
+            if 'communicate' in question.question.lower() or 'explain' in question.question.lower() or 'present' in question.question.lower():
+                if selected_option in ['C', 'D']:
+                    patterns['communication'] += 1.0
+            
+            # Decision clarity (Leadership)
+            if 'decide' in question.question.lower() or 'decision' in question.question.lower() or 'choose' in question.question.lower():
+                if selected_option in ['C', 'D']:
+                    patterns['decision_clarity'] += 1.0
+            
+            # Value-driven (Leadership)
+            if 'value' in question.question.lower() or 'business' in question.question.lower() or 'objective' in question.question.lower():
+                if selected_option in ['C', 'D']:
+                    patterns['value_driven'] += 1.0
+        
+        # Normalize patterns to 0-1 scale based on response count
+        response_count = len(session.responses)
+        if response_count > 0:
+            for key in patterns:
+                patterns[key] = min(1.0, patterns[key] / max(1, response_count / 10))
+        
+        return patterns
+    
+    def _apply_behavioral_pattern_scoring(self, base_scores: Dict[str, float], patterns: Dict[str, float]) -> Dict[str, float]:
+        """Apply behavioral pattern adjustments to track scores."""
+        adjusted_scores = base_scores.copy()
+        
+        # Defender: High pattern-recognition + high stability + risk sensitivity
+        defender_boost = (
+            patterns.get('pattern_recognition', 0) * 0.4 +
+            patterns.get('stability', 0) * 0.3 +
+            patterns.get('risk_sensitivity', 0) * 0.3
+        )
+        if 'defender' in adjusted_scores:
+            adjusted_scores['defender'] += defender_boost * 15  # Boost up to 15 points
+        
+        # Offensive: High curiosity + high exploration + analytical lateral thinking
+        offensive_boost = (
+            patterns.get('curiosity', 0) * 0.35 +
+            patterns.get('exploration', 0) * 0.35 +
+            patterns.get('analytical_lateral_thinking', 0) * 0.3
+        )
+        if 'offensive' in adjusted_scores:
+            adjusted_scores['offensive'] += offensive_boost * 15
+        
+        # GRC: High documentation clarity + structured thinking + governance alignment
+        grc_boost = (
+            patterns.get('documentation_clarity', 0) * 0.35 +
+            patterns.get('structured_thinking', 0) * 0.35 +
+            patterns.get('governance_alignment', 0) * 0.3
+        )
+        if 'grc' in adjusted_scores:
+            adjusted_scores['grc'] += grc_boost * 15
+        
+        # Innovation: High creativity + automation interest + systems thinking
+        innovation_boost = (
+            patterns.get('creativity', 0) * 0.35 +
+            patterns.get('automation_interest', 0) * 0.35 +
+            patterns.get('systems_thinking', 0) * 0.3
+        )
+        if 'innovation' in adjusted_scores:
+            adjusted_scores['innovation'] += innovation_boost * 15
+        
+        # Leadership: High communication + decision clarity + value-driven responses
+        leadership_boost = (
+            patterns.get('communication', 0) * 0.35 +
+            patterns.get('decision_clarity', 0) * 0.35 +
+            patterns.get('value_driven', 0) * 0.3
+        )
+        if 'leadership' in adjusted_scores:
+            adjusted_scores['leadership'] += leadership_boost * 15
+        
+        # Cap all scores at 100
+        for key in adjusted_scores:
+            adjusted_scores[key] = min(100.0, max(0.0, adjusted_scores[key]))
+        
+        return adjusted_scores
 
-    def _generate_reasoning(self, track_key: str, score: float, rank: int, all_scores: Dict[str, float]) -> List[str]:
-        """Generate reasoning text for a track recommendation."""
+    def _generate_reasoning(self, track_key: str, score: float, rank: int, all_scores: Dict[str, float], behavioral_patterns: Dict[str, float] = None) -> List[str]:
+        """Generate reasoning text for a track recommendation with behavioral pattern insights."""
         track_info = OCH_TRACKS[track_key]
         reasoning = []
 
@@ -398,16 +629,58 @@ class EnhancedProfilingService:
         else:
             reasoning.append(f"You show some alignment with {track_info.name} characteristics ({score:.1f}% match).")
 
-        # Track-specific reasoning
-        track_reasoning_map = {
-            "defender": "You excel at protecting systems, monitoring threats, and responding to security incidents. Your approach focuses on defense-in-depth and proactive security operations.",
-            "offensive": "You thrive in offensive security, penetration testing, and thinking like an attacker. Your skills align with ethical hacking and red team operations.",
-            "innovation": "You have a strong passion for security research, developing new tools, and pushing the boundaries of security technology. Innovation and R&D are your strengths.",
-            "leadership": "You excel at leading security teams, making strategic decisions, and aligning security with business objectives. Management and strategy are your core competencies.",
-            "grc": "You are well-suited for governance, risk management, and compliance roles. Your strengths lie in understanding frameworks, regulations, and ensuring organizational compliance."
-        }
-
-        reasoning.append(track_reasoning_map.get(track_key, "Your responses align with this track's characteristics."))
+        # Track-specific reasoning with behavioral pattern insights
+        if behavioral_patterns:
+            if track_key == "defender":
+                if behavioral_patterns.get('pattern_recognition', 0) > 0.6:
+                    reasoning.append("Your high pattern-recognition ability makes you excellent at identifying threats and anomalies.")
+                if behavioral_patterns.get('stability', 0) > 0.6:
+                    reasoning.append("Your preference for stability aligns with defensive security operations.")
+                if behavioral_patterns.get('risk_sensitivity', 0) > 0.6:
+                    reasoning.append("Your risk sensitivity helps you prioritize and respond to security incidents effectively.")
+            
+            elif track_key == "offensive":
+                if behavioral_patterns.get('curiosity', 0) > 0.6:
+                    reasoning.append("Your high curiosity drives you to explore vulnerabilities and attack vectors.")
+                if behavioral_patterns.get('exploration', 0) > 0.6:
+                    reasoning.append("Your exploration mindset aligns with penetration testing and ethical hacking.")
+                if behavioral_patterns.get('analytical_lateral_thinking', 0) > 0.6:
+                    reasoning.append("Your analytical lateral thinking helps you find creative exploitation paths.")
+            
+            elif track_key == "grc":
+                if behavioral_patterns.get('documentation_clarity', 0) > 0.6:
+                    reasoning.append("Your documentation clarity is essential for compliance and audit requirements.")
+                if behavioral_patterns.get('structured_thinking', 0) > 0.6:
+                    reasoning.append("Your structured thinking aligns with governance frameworks and standards.")
+                if behavioral_patterns.get('governance_alignment', 0) > 0.6:
+                    reasoning.append("Your governance alignment helps ensure organizational compliance.")
+            
+            elif track_key == "innovation":
+                if behavioral_patterns.get('creativity', 0) > 0.6:
+                    reasoning.append("Your creativity drives innovation in security research and tool development.")
+                if behavioral_patterns.get('automation_interest', 0) > 0.6:
+                    reasoning.append("Your automation interest aligns with building security tools and solutions.")
+                if behavioral_patterns.get('systems_thinking', 0) > 0.6:
+                    reasoning.append("Your systems thinking helps you design comprehensive security solutions.")
+            
+            elif track_key == "leadership":
+                if behavioral_patterns.get('communication', 0) > 0.6:
+                    reasoning.append("Your strong communication skills are essential for leading security teams.")
+                if behavioral_patterns.get('decision_clarity', 0) > 0.6:
+                    reasoning.append("Your decision clarity helps you make strategic security decisions.")
+                if behavioral_patterns.get('value_driven', 0) > 0.6:
+                    reasoning.append("Your value-driven approach aligns security with business objectives.")
+        
+        # Fallback to generic reasoning if no behavioral patterns
+        if not behavioral_patterns or len(reasoning) == 1:
+            track_reasoning_map = {
+                "defender": "You excel at protecting systems, monitoring threats, and responding to security incidents. Your approach focuses on defense-in-depth and proactive security operations.",
+                "offensive": "You thrive in offensive security, penetration testing, and thinking like an attacker. Your skills align with ethical hacking and red team operations.",
+                "innovation": "You have a strong passion for security research, developing new tools, and pushing the boundaries of security technology. Innovation and R&D are your strengths.",
+                "leadership": "You excel at leading security teams, making strategic decisions, and aligning security with business objectives. Management and strategy are your core competencies.",
+                "grc": "You are well-suited for governance, risk management, and compliance roles. Your strengths lie in understanding frameworks, regulations, and ensuring organizational compliance."
+            }
+            reasoning.append(track_reasoning_map.get(track_key, "Your responses align with this track's characteristics."))
 
         return reasoning
 
@@ -725,6 +998,37 @@ class EnhancedProfilingService:
             if len(patterns) > 0:
                 return "calculated" if len([p for p in patterns if p in ["A", "C"]]) > len(patterns) / 2 else "balanced"
         return "moderate"
+    
+    def _analyze_work_style_cluster(self, work_style_responses: List) -> str:
+        """Analyze work style cluster from responses."""
+        if not work_style_responses:
+            return "balanced"
+        
+        # Count response patterns
+        collaborative_count = 0
+        independent_count = 0
+        
+        for response in work_style_responses:
+            question = self.question_map.get(response.question_id)
+            if question:
+                selected_option = response.selected_option
+                # Options B, D, E typically indicate collaborative preferences
+                if selected_option in ['B', 'D', 'E']:
+                    collaborative_count += 1
+                elif selected_option in ['A', 'C']:
+                    independent_count += 1
+        
+        total = len(work_style_responses)
+        if total == 0:
+            return "balanced"
+        
+        collaborative_ratio = collaborative_count / total
+        if collaborative_ratio > 0.6:
+            return "collaborative"
+        elif collaborative_ratio < 0.4:
+            return "independent"
+        else:
+            return "balanced"
 
     def complete_session(self, session: ProfilingSession) -> ProfilingResult:
         """
@@ -737,8 +1041,8 @@ class EnhancedProfilingService:
         scores = self.calculate_scores(session)
         session.scores = scores
 
-        # Generate recommendations
-        recommendations = self.generate_recommendations(scores)
+        # Generate recommendations with behavioral pattern analysis
+        recommendations = self.generate_recommendations(scores, session)
 
         # Determine primary and secondary tracks
         primary_recommendation = recommendations[0]
@@ -747,6 +1051,59 @@ class EnhancedProfilingService:
         
         session.recommended_track = primary_recommendation.track_key
         session.completed_at = datetime.utcnow()
+        
+        # Store telemetry data in session metadata
+        if not hasattr(session, 'telemetry'):
+            session.telemetry = {}
+        
+        # Calculate technical exposure score
+        tech_exposure_responses = [
+            r for r in session.responses
+            if self.question_map.get(r.question_id, {}).category == "technical_exposure"
+        ]
+        tech_score = 0
+        for response in tech_exposure_responses:
+            question = self.question_map.get(response.question_id)
+            if question:
+                for option in question.options:
+                    if option.value == response.selected_option:
+                        max_score = max(option.scores.values(), default=0)
+                        tech_score += max_score
+        session.telemetry['technical_exposure_score'] = tech_score
+        
+        # Extract work style cluster
+        work_style_responses = [
+            r for r in session.responses
+            if self.question_map.get(r.question_id, {}).category == "work_style"
+        ]
+        work_style_cluster = self._analyze_work_style_cluster(work_style_responses)
+        session.telemetry['work_style_cluster'] = work_style_cluster
+        
+        # Store scenario choices
+        scenario_responses = [
+            {
+                'question_id': r.question_id,
+                'selected_option': r.selected_option,
+                'response_time_ms': r.response_time_ms
+            }
+            for r in session.responses
+            if self.question_map.get(r.question_id, {}).category == "scenario_preference"
+        ]
+        session.telemetry['scenario_choices'] = scenario_responses
+        
+        # Store difficulty selection
+        difficulty_responses = [
+            r for r in session.responses
+            if self.question_map.get(r.question_id, {}).category == "difficulty_selection"
+        ]
+        if difficulty_responses:
+            session.telemetry['difficulty_selection'] = difficulty_responses[0].selected_option
+        
+        # Store track alignment percentages
+        session.telemetry['track_alignment_percentages'] = scores
+        
+        # Store completion status
+        session.telemetry['completion_status'] = 'completed'
 
         # Generate deep insights
         deep_insights = self._generate_deep_insights(session, scores, recommendations)

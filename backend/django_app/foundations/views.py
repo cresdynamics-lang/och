@@ -2,6 +2,7 @@
 Tier 1 Foundations API views.
 Handles Foundations modules, progress tracking, and completion.
 """
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from django.db import transaction
 from .models import FoundationsModule, FoundationsProgress
 from .assessment_questions import FOUNDATIONS_ASSESSMENT_QUESTIONS, calculate_assessment_score
 from users.models import User
+
+logger = logging.getLogger(__name__)
 
 
 def _get_missing_requirements(progress):
@@ -76,6 +79,22 @@ def get_foundations_status(request):
     if created:
         progress.started_at = timezone.now()
         progress.save()
+        
+        # Track Profiler → Foundations transition timestamp
+        try:
+            from profiler.models import ProfilerSession
+            # Get the most recent completed profiler session
+            profiler_session = ProfilerSession.objects.filter(
+                user=user,
+                status__in=['finished', 'locked']
+            ).order_by('-completed_at').first()
+            
+            if profiler_session:
+                profiler_session.foundations_transition_at = timezone.now()
+                profiler_session.save()
+                logger.info(f"Tracked foundations transition for user {user.id}, session {profiler_session.id}")
+        except Exception as e:
+            logger.warning(f"Failed to track foundations transition: {e}")
     
     # Calculate completion
     progress.calculate_completion()
@@ -112,6 +131,8 @@ def get_foundations_status(request):
         'confirmed_track_key': progress.confirmed_track_key,
         'started_at': progress.started_at.isoformat() if progress.started_at else None,
         'completed_at': progress.completed_at.isoformat() if progress.completed_at else None,
+        'total_time_spent_minutes': progress.total_time_spent_minutes,
+        'interactions': progress.interactions or {},
     })
 
 
@@ -121,6 +142,7 @@ def complete_module(request, module_id):
     """
     POST /api/v1/foundations/modules/{module_id}/complete
     Mark a Foundations module as completed.
+    Also tracks interaction data and updates time spent.
     """
     user = request.user
     
@@ -145,6 +167,22 @@ def complete_module(request, module_id):
     module_data['completed'] = True
     module_data['watch_percentage'] = request.data.get('watch_percentage', 100)
     module_data['completed_at'] = timezone.now().isoformat()
+    
+    # Track interaction data if provided
+    interaction_data = request.data.get('interaction', None)
+    if interaction_data:
+        if not progress.interactions:
+            progress.interactions = {}
+        progress.interactions[interaction_data.get('type', 'unknown')] = {
+            'viewed': True,
+            'time_spent_seconds': interaction_data.get('timeSpent', 0),
+            'completed_at': timezone.now().isoformat()
+        }
+    
+    # Update time spent if provided
+    time_spent = request.data.get('time_spent_seconds', 0)
+    if time_spent > 0:
+        progress.total_time_spent_minutes += int(time_spent / 60)
     
     progress.modules_completed[str(module.id)] = module_data
     progress.last_accessed_module_id = module.id
@@ -172,7 +210,8 @@ def complete_module(request, module_id):
         'success': True,
         'completion_percentage': float(progress.completion_percentage),
         'is_complete': progress.is_complete(),
-        'status': progress.status
+        'status': progress.status,
+        'total_time_spent_minutes': progress.total_time_spent_minutes
     })
 
 
@@ -182,6 +221,7 @@ def update_module_progress(request, module_id):
     """
     POST /api/v1/foundations/modules/{module_id}/progress
     Update progress for a module (e.g., video watch percentage).
+    Also tracks interaction data and time spent.
     """
     user = request.user
     
@@ -200,13 +240,66 @@ def update_module_progress(request, module_id):
     watch_percentage = request.data.get('watch_percentage', 0)
     module_data['watch_percentage'] = min(100, max(0, watch_percentage))
     
+    # Track interaction data if provided
+    interaction_data = request.data.get('interaction', None)
+    if interaction_data:
+        if not progress.interactions:
+            progress.interactions = {}
+        progress.interactions[interaction_data.get('type', 'unknown')] = {
+            'viewed': True,
+            'time_spent_seconds': interaction_data.get('timeSpent', 0),
+            'last_viewed_at': timezone.now().isoformat()
+        }
+    
+    # Update time spent
+    time_spent = request.data.get('time_spent_seconds', 0)
+    if time_spent > 0:
+        progress.total_time_spent_minutes += int(time_spent / 60)
+    
     progress.modules_completed[str(module.id)] = module_data
     progress.last_accessed_module_id = module.id
     progress.save()
     
     return Response({
         'success': True,
-        'watch_percentage': module_data['watch_percentage']
+        'watch_percentage': module_data['watch_percentage'],
+        'total_time_spent_minutes': progress.total_time_spent_minutes
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def track_drop_off(request):
+    """
+    POST /api/v1/foundations/track-drop-off
+    Track when user drops off from Foundations (leaves without completing).
+    Used for analytics and onboarding optimization.
+    """
+    user = request.user
+    
+    if not user.profiling_complete:
+        return Response(
+            {'detail': 'Profiling must be completed first'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    progress, _ = FoundationsProgress.objects.get_or_create(user=user)
+    
+    module_id = request.data.get('module_id')
+    if module_id:
+        try:
+            module = FoundationsModule.objects.get(id=module_id, is_active=True)
+            progress.drop_off_module_id = module.id
+            progress.last_accessed_module_id = module.id
+            logger.info(f"Tracked drop-off for user {user.id} at module {module.title} (ID: {module.id})")
+        except FoundationsModule.DoesNotExist:
+            logger.warning(f"Drop-off tracking: Module {module_id} not found")
+    
+    progress.save()
+    
+    return Response({
+        'success': True,
+        'message': 'Drop-off tracked successfully'
     })
 
 
@@ -455,6 +548,43 @@ def complete_foundations(request):
         user.foundations_complete = True
         user.foundations_completed_at = timezone.now()
         user.save()
+        
+        # Create first portfolio entry from Foundations reflection
+        try:
+            from dashboard.models import PortfolioItem
+            import json
+            
+            # Combine value statement and goals reflection for portfolio entry
+            portfolio_summary_parts = []
+            if progress.value_statement:
+                portfolio_summary_parts.append(f"Value Statement: {progress.value_statement}")
+            if progress.goals_reflection:
+                portfolio_summary_parts.append(f"\n\nGoals & Reflection: {progress.goals_reflection}")
+            
+            portfolio_summary = "\n".join(portfolio_summary_parts) if portfolio_summary_parts else "Foundations orientation completed."
+            
+            # Check if portfolio entry already exists (avoid duplicates)
+            existing_entry = PortfolioItem.objects.filter(
+                user=user,
+                item_type='reflection',
+                title='Foundations: My Goals & Value Statement'
+            ).first()
+            
+            if not existing_entry:
+                PortfolioItem.objects.create(
+                    user=user,
+                    title='Foundations: My Goals & Value Statement',
+                    summary=portfolio_summary,
+                    item_type='reflection',
+                    status='approved',  # Auto-approve Foundations reflection
+                    visibility='private',  # Start as private, user can change later
+                    skill_tags=json.dumps([]),
+                    evidence_files=json.dumps([]),
+                )
+                logger.info(f"Created Foundations portfolio entry for user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to create portfolio entry for Foundations completion: {e}", exc_info=True)
+            # Don't fail the entire completion if portfolio creation fails
     
     return Response({
         'success': True,
@@ -462,3 +592,137 @@ def complete_foundations(request):
         'confirmed_track_key': progress.confirmed_track_key,
         'transitioned_at': progress.transitioned_to_tier2_at.isoformat()
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_feedback(request):
+    """
+    POST /api/v1/foundations/feedback
+    Submit user feedback after Foundations completion.
+    Used to track clarity about OCH's structure (>90% positive feedback metric).
+    """
+    user = request.user
+    
+    if not user.profiling_complete:
+        return Response(
+            {'detail': 'Profiling must be completed first'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    progress, _ = FoundationsProgress.objects.get_or_create(user=user)
+    
+    # Only allow feedback if Foundations is complete
+    if not progress.is_complete():
+        return Response(
+            {'detail': 'Foundations must be completed before submitting feedback'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    clarity_rating = request.data.get('clarity_rating')  # 1-5 scale
+    feedback_text = request.data.get('feedback_text', '')
+    would_recommend = request.data.get('would_recommend', None)  # boolean
+    
+    if not clarity_rating:
+        return Response(
+            {'detail': 'clarity_rating is required (1-5 scale)'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Store feedback in interactions JSON field
+    if not progress.interactions:
+        progress.interactions = {}
+    
+    progress.interactions['completion_feedback'] = {
+        'clarity_rating': int(clarity_rating),
+        'feedback_text': feedback_text,
+        'would_recommend': would_recommend,
+        'submitted_at': timezone.now().isoformat()
+    }
+    
+    progress.save()
+    
+    logger.info(f"Foundations feedback submitted by user {user.id}: clarity={clarity_rating}, recommend={would_recommend}")
+    
+    return Response({
+        'success': True,
+        'message': 'Feedback submitted successfully. Thank you!'
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_enterprise_readiness(request, cohort_id):
+    """
+    POST /api/v1/foundations/enterprise/{cohort_id}/foundations-readiness
+    Sync Foundations completion status for enterprise cohort members.
+    Used by Enterprise Dashboard to track onboarding readiness.
+    """
+    user = request.user
+    
+    # Check if user has permission to sync enterprise data
+    user_roles = [ur.role.name for ur in user.user_roles.filter(is_active=True)]
+    is_admin = 'admin' in user_roles or user.is_staff
+    is_director = False
+    
+    # Check if user is a director of a program that includes this cohort
+    try:
+        from programs.models import Cohort
+        cohort = Cohort.objects.get(id=cohort_id)
+        if cohort.track and cohort.track.director_id == user.uuid_id:
+            is_director = True
+    except Cohort.DoesNotExist:
+        return Response(
+            {'error': 'Cohort not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    if not (is_admin or is_director):
+        return Response(
+            {'error': 'Permission denied. Admin or director access required.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Get all enrollments in this cohort
+    try:
+        from programs.models import Enrollment
+        enrollments = Enrollment.objects.filter(
+            cohort_id=cohort_id,
+            status__in=['active', 'pending']
+        ).select_related('user')
+        
+        readiness_data = []
+        for enrollment in enrollments:
+            student = enrollment.user
+            progress = FoundationsProgress.objects.filter(user=student).first()
+            
+            readiness_data.append({
+                'user_id': str(student.id),
+                'email': student.email,
+                'name': f"{student.first_name} {student.last_name}".strip() or student.email,
+                'foundations_complete': progress.is_complete() if progress else False,
+                'foundations_status': progress.status if progress else 'not_started',
+                'completion_percentage': float(progress.completion_percentage) if progress else 0.0,
+                'started_at': progress.started_at.isoformat() if progress and progress.started_at else None,
+                'completed_at': progress.completed_at.isoformat() if progress and progress.completed_at else None,
+                'drop_off_module_id': str(progress.drop_off_module_id) if progress and progress.drop_off_module_id else None,
+                'last_accessed_module_id': str(progress.last_accessed_module_id) if progress and progress.last_accessed_module_id else None,
+            })
+        
+        logger.info(f"Synced Foundations readiness for cohort {cohort_id}: {len(readiness_data)} students")
+        
+        return Response({
+            'success': True,
+            'cohort_id': str(cohort_id),
+            'cohort_name': cohort.name,
+            'total_students': len(readiness_data),
+            'foundations_complete_count': sum(1 for r in readiness_data if r['foundations_complete']),
+            'readiness_data': readiness_data,
+            'synced_at': timezone.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Failed to sync Foundations readiness for cohort {cohort_id}: {e}", exc_info=True)
+        return Response(
+            {'error': f'Failed to sync readiness data: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

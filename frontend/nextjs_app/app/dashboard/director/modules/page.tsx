@@ -19,8 +19,8 @@ export default function ModulesPage() {
 
   const fetchModules = async () => {
     try {
-      const data = await apiGateway.get('/modules/')
-      setModules(data.results || data.data || data || [])
+      const data = await apiGateway.get('/modules/') as any
+      setModules(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch modules:', error)
     } finally {
@@ -30,7 +30,7 @@ export default function ModulesPage() {
 
   if (isLoading) {
     return (
-      <RouteGuard allowedRoles={['program_director', 'admin']}>
+      <RouteGuard requiredRoles={['program_director', 'admin']}>
         <DirectorLayout>
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-defender"></div>
@@ -41,7 +41,7 @@ export default function ModulesPage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -195,8 +195,8 @@ function CreateModuleForm({ onClose, onSuccess }: CreateModuleFormProps) {
 
   const fetchMilestones = async () => {
     try {
-      const data = await apiGateway.get('/milestones/')
-      setMilestones(data.results || data.data || data || [])
+      const data = await apiGateway.get('/milestones/') as any
+      setMilestones(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch milestones:', error)
     }

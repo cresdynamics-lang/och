@@ -560,7 +560,7 @@ class ProgramsClient {
 
   // Enrollments
   async getCohortEnrollments(cohortId: string): Promise<Enrollment[]> {
-    const raw = await apiGateway.get<Enrollment[] | { results?: Enrollment[]; data?: Enrollment[] }>(`/cohorts/${cohortId}/enrollments/`)
+    const raw = await apiGateway.get<Enrollment[] | { results?: Enrollment[]; data?: Enrollment[] }>(`/cohorts/${cohortId}/enrollments/`) as Promise<Enrollment[]>
     if (Array.isArray(raw)) return raw
     if (Array.isArray((raw as { results?: Enrollment[] })?.results)) return (raw as { results: Enrollment[] }).results
     if (Array.isArray((raw as { data?: Enrollment[] })?.data)) return (raw as { data: Enrollment[] }).data

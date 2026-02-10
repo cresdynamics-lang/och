@@ -143,7 +143,7 @@ export default function SeatAllocationPage() {
     setLoadingStudents(true)
     try {
       const data = await programsClient.getCohortEnrollments(cohort.id)
-      setEnrolledStudents(Array.isArray(data) ? data : (data?.results || []))
+      setEnrolledStudents(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to load enrolled students:', err)
       setEnrolledStudents([])

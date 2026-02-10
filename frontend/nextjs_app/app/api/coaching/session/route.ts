@@ -140,14 +140,16 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
       trackProgressResponse,
       missionProgressResponse,
       communityResponse,
-      mentorshipResponse
+      mentorshipResponse,
+      profilerResponse
     ] = await Promise.all([
       fetch(`${djangoApiUrl}/api/v1/coaching/student-analytics`, { headers: authHeaders }),
       fetch(`${djangoApiUrl}/api/v1/coaching/recipe-progress`, { headers: authHeaders }),
       fetch(`${djangoApiUrl}/api/v1/coaching/track-progress`, { headers: authHeaders }),
       fetch(`${djangoApiUrl}/api/v1/coaching/mission-progress`, { headers: authHeaders }),
       fetch(`${djangoApiUrl}/api/v1/coaching/community-activity`, { headers: authHeaders }),
-      fetch(`${djangoApiUrl}/api/v1/coaching/mentorship-sessions`, { headers: authHeaders })
+      fetch(`${djangoApiUrl}/api/v1/coaching/mentorship-sessions`, { headers: authHeaders }),
+      fetch(`${djangoApiUrl}/api/v1/profiler/mentees/${userId}/results`, { headers: authHeaders }).catch(() => ({ ok: false }))
     ]);
 
     // Parse responses (handle 404s gracefully)
@@ -155,8 +157,13 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
     const recipeData = recipeProgressResponse.ok ? await recipeProgressResponse.json() : [];
     const trackData = trackProgressResponse.ok ? await trackProgressResponse.json() : null;
     const missionData = missionProgressResponse.ok ? await missionProgressResponse.json() : [];
-    const communityData = communityResponse.ok ? await communityResponse.json() : null;
-    const mentorshipData = mentorshipResponse.ok ? await mentorshipResponse.json() : [];
+    const communityData = communityResponse.ok ? await (communityResponse as Response).json() : null;
+    const mentorshipData = mentorshipResponse.ok ? await (mentorshipResponse as Response).json() : [];
+    const profilerData = profilerResponse && profilerResponse.ok ? await (profilerResponse as Response).json() : null;
+    
+    // Extract profiler data from analytics if available (coaching OS includes it)
+    // Note: profiler data is used for track_code determination but not stored in StudentState
+    const profilerFromAnalytics = analyticsData?.profiler || null;
 
     // Calculate recipe coverage
     const completedRecipes = recipeData.filter((r: any) => r.status === 'completed').length;
@@ -208,7 +215,7 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
         helpful_votes_received: 0
       },
       mentorship_status: mentorshipData || [],
-      track_code: trackData?.track_code || 'SOCDEFENSE',
+      track_code: trackData?.track_code || profilerData?.recommended_track?.track_id || 'SOCDEFENSE',
       circle_level: trackData?.circle_level || 1,
       complexity: complexity
     };

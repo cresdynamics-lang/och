@@ -2,15 +2,18 @@
 Recipe Engine views - API endpoints for recipes and user progress.
 """
 from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Prefetch, Q, Subquery, OuterRef, Avg
 from django.utils import timezone
 from django.utils.text import slugify
 
 from .models import Recipe, UserRecipeProgress, RecipeContextLink, UserRecipeBookmark, RecipeSource, RecipeLLMJob
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from .serializers import (
     RecipeListSerializer, RecipeDetailSerializer,
     UserRecipeProgressSerializer, RecipeContextLinkSerializer,
@@ -398,10 +401,269 @@ class RecipeViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 return Response({'error': f'Failed to create recipe: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_profiler_based_recipes(request):
+    """
+    GET /api/v1/recipes/profiler-recommendations
+    Get recipe recommendations based on profiler gap analysis.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from recipes.services import analyze_gaps_from_profiler, verify_profiler_accessibility
+        
+        user = request.user
+        
+        # Verify profiler accessibility
+        profiler_status = verify_profiler_accessibility(user)
+        if not profiler_status['accessible']:
+            logger.info(f"User {user.id} requested profiler-based recipes but profiler not accessible: {profiler_status['message']}")
+            return Response({
+                'gaps_analysis': {'gaps': [], 'recommended_recipe_skills': []},
+                'recommended_recipes': [],
+                'total_gaps': 0,
+                'total_skills': 0,
+                'profiler_status': profiler_status,
+                'message': 'Complete profiler to get personalized recipe recommendations'
+            }, status=status.HTTP_200_OK)
+        
+        gaps_analysis = analyze_gaps_from_profiler(user)
+        
+        # Get recipes matching recommended skills
+        skill_codes = gaps_analysis.get('recommended_recipe_skills', [])
+        recipes = []
+        
+        if skill_codes:
+            try:
+                recipes = Recipe.objects.filter(
+                    skill_codes__overlap=skill_codes,
+                    is_active=True
+                ).order_by('-usage_count', '-avg_rating')[:10]
+                logger.debug(f"Found {len(recipes)} recipes for user {user.id} based on {len(skill_codes)} skill codes")
+            except Exception as e:
+                logger.error(f"Failed to query recipes for user {user.id}: {e}", exc_info=True)
+        
         return Response({
-            'message': f'Successfully imported {len(created_recipes)} recipes',
-            'recipes': created_recipes
-        }, status=status.HTTP_201_CREATED)
+            'gaps_analysis': gaps_analysis,
+            'recommended_recipes': RecipeListSerializer(recipes, many=True, context={'request': request}).data,
+            'total_gaps': len(gaps_analysis.get('gaps', [])),
+            'total_skills': len(skill_codes),
+            'profiler_status': profiler_status
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Failed to get profiler-based recipes for user {request.user.id}: {e}", exc_info=True)
+        return Response({
+            'error': 'Failed to get recipe recommendations',
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_mission_stage_recipes(request, mission_id):
+    """
+    GET /api/v1/recipes/mission/{mission_id}/recommendations
+    Get recipe recommendations based on current mission stage/subtask.
+    Considers:
+    - Current subtask requirements
+    - User's progress in mission
+    - Required skills for next subtask
+    - Mission's recipe_recommendations field
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from missions.models import Mission, MissionProgress
+        
+        user = request.user
+        
+        # Get mission
+        try:
+            mission = Mission.objects.get(id=mission_id, is_active=True)
+        except Mission.DoesNotExist:
+            return Response({'error': 'Mission not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get user's progress
+        progress = MissionProgress.objects.filter(user=user, mission=mission).first()
+        current_subtask = progress.current_subtask if progress else 1
+        
+        # Get current subtask details
+        subtasks = mission.subtasks or []
+        current_subtask_data = None
+        if subtasks and len(subtasks) >= current_subtask:
+            current_subtask_data = subtasks[current_subtask - 1]
+        
+        # Get next subtask (if exists)
+        next_subtask_data = None
+        if subtasks and len(subtasks) > current_subtask:
+            next_subtask_data = subtasks[current_subtask]
+        
+        # Collect skill codes from:
+        # 1. Mission's recipe_recommendations (explicit recommendations)
+        # 2. Current subtask requirements
+        # 3. Next subtask requirements
+        # 4. Mission's skills_tags
+        
+        skill_codes = set()
+        
+        # Mission's explicit recipe recommendations
+        if mission.recipe_recommendations:
+            # These might be recipe slugs/IDs, handle accordingly
+            recommended_recipe_ids = [r for r in mission.recipe_recommendations if isinstance(r, str)]
+        
+        # Mission's skill tags
+        if mission.skills_tags:
+            skill_codes.update(mission.skills_tags)
+        
+        # Current subtask skills (if available in subtask data)
+        if current_subtask_data and isinstance(current_subtask_data, dict):
+            subtask_skills = current_subtask_data.get('required_skills', [])
+            if subtask_skills:
+                skill_codes.update(subtask_skills)
+        
+        # Next subtask skills
+        if next_subtask_data and isinstance(next_subtask_data, dict):
+            next_skills = next_subtask_data.get('required_skills', [])
+            if next_skills:
+                skill_codes.update(next_skills)
+        
+        # Query recipes
+        recipes = []
+        if skill_codes:
+            try:
+                recipes = Recipe.objects.filter(
+                    skill_codes__overlap=list(skill_codes),
+                    is_active=True
+                ).order_by('-usage_count', '-avg_rating')[:10]
+                
+                logger.debug(f"Found {len(recipes)} recipes for mission {mission_id}, subtask {current_subtask}, skills: {list(skill_codes)[:5]}")
+            except Exception as e:
+                logger.error(f"Failed to query recipes for mission {mission_id}: {e}", exc_info=True)
+        
+        # Also check mission's explicit recipe recommendations
+        mission_recommended_recipes = []
+        if mission.recipe_recommendations:
+            for recipe_ref in mission.recipe_recommendations:
+                try:
+                    # Try by slug first
+                    recipe = Recipe.objects.filter(slug=recipe_ref, is_active=True).first()
+                    if not recipe:
+                        # Try by ID
+                        recipe = Recipe.objects.filter(id=recipe_ref, is_active=True).first()
+                    if recipe:
+                        mission_recommended_recipes.append(recipe)
+                except Exception:
+                    continue
+        
+        # Combine and deduplicate
+        all_recipes = {str(r.id): r for r in recipes + mission_recommended_recipes}
+        
+        return Response({
+            'mission_id': str(mission_id),
+            'mission_title': mission.title,
+            'current_subtask': current_subtask,
+            'total_subtasks': len(subtasks),
+            'recommended_recipes': RecipeListSerializer(list(all_recipes.values()), many=True, context={'request': request}).data,
+            'skill_codes_matched': list(skill_codes),
+            'recommendation_reason': f'Based on current subtask {current_subtask} and mission requirements'
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Failed to get mission stage recipes for mission {mission_id}: {e}", exc_info=True)
+        return Response({
+            'error': 'Failed to get mission stage recipe recommendations',
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def recipe_effectiveness_analytics(request):
+    """
+    GET /api/v1/recipes/analytics/effectiveness
+    Recipe effectiveness metrics for admin.
+    Tracks recipe usage, completion rates, correlation with mission success.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    user = request.user
+    
+    # Check if user is admin
+    user_roles = [ur.role.name for ur in user.user_roles.filter(is_active=True)]
+    is_admin = 'admin' in user_roles or user.is_staff
+    
+    if not is_admin:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    
+    from django.db.models import Avg, Count, Q
+    from django.utils import timezone
+    
+    # Recipe usage statistics
+    total_recipes = Recipe.objects.filter(is_active=True).count()
+    recipes_with_progress = UserRecipeProgress.objects.values('recipe').distinct().count()
+    
+    # Most used recipes
+    most_used = Recipe.objects.filter(is_active=True).order_by('-usage_count')[:20]
+    
+    # Recipe completion rates
+    recipe_completion_stats = UserRecipeProgress.objects.values('recipe__title', 'recipe__slug').annotate(
+        total_attempts=Count('id'),
+        completed=Count('id', filter=Q(status='completed')),
+        avg_rating=Avg('rating')
+    ).order_by('-total_attempts')[:50]
+    
+    # Recipe effectiveness (correlation with mission success)
+    # Join with mission progress to find recipes used by successful mission completions
+    from missions.models_mxp import MissionProgress
+    
+    # Get recipes used by users who completed missions successfully
+    successful_mission_users = MissionProgress.objects.filter(
+        status='approved',
+        final_status='pass'
+    ).values_list('user_id', flat=True).distinct()
+    
+    # Get recipe progress for these successful users
+    recipe_success_correlation = UserRecipeProgress.objects.filter(
+        user_id__in=successful_mission_users,
+        status='completed'
+    ).values('recipe__title', 'recipe__slug', 'recipe__id').annotate(
+        completion_count=Count('id'),
+        avg_time_spent=Avg('time_spent_minutes'),
+        avg_rating=Avg('rating')
+    ).order_by('-completion_count')[:20]
+    
+    # Recipe usage in mission context
+    recipe_mission_links = RecipeContextLink.objects.filter(
+        context_type='mission'
+    ).values('recipe__title', 'recipe__slug').annotate(
+        mission_count=Count('id')
+    ).order_by('-mission_count')[:20]
+    
+    # Recipe ratings
+    top_rated = Recipe.objects.filter(
+        is_active=True,
+        avg_rating__gt=0
+    ).order_by('-avg_rating')[:20]
+    
+    return Response({
+        'overall_stats': {
+            'total_recipes': total_recipes,
+            'recipes_with_user_progress': recipes_with_progress,
+            'usage_coverage': round((recipes_with_progress / total_recipes * 100) if total_recipes > 0 else 0, 2)
+        },
+        'most_used_recipes': RecipeListSerializer(most_used, many=True, context={'request': request}).data,
+        'completion_stats': list(recipe_completion_stats),
+        'mission_linked_recipes': list(recipe_mission_links),
+        'recipe_success_correlation': list(recipe_success_correlation),
+        'top_rated_recipes': RecipeListSerializer(top_rated, many=True, context={'request': request}).data,
+        'generated_at': timezone.now().isoformat()
+    }, status=status.HTTP_200_OK)
 
     def _ensure_unique_slug(self, base_slug):
         """Ensure slug uniqueness."""
@@ -703,3 +965,44 @@ class RecipeGenerateView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sample_recipe(request):
+    """
+    GET /api/v1/recipes/sample
+    Get a sample recipe for Foundations preview.
+    Returns a beginner-friendly recipe without starting it.
+    """
+    try:
+        # Get a beginner-friendly sample recipe
+        sample_recipe = Recipe.objects.filter(
+            difficulty='beginner',
+            is_active=True
+        ).order_by('?').first()
+        
+        # If no beginner recipe, try any active recipe
+        if not sample_recipe:
+            sample_recipe = Recipe.objects.filter(
+                is_active=True
+            ).order_by('?').first()
+        
+        if not sample_recipe:
+            return Response(
+                {'error': 'No sample recipe available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Return recipe data (preview only, don't start it)
+        serializer = RecipeDetailSerializer(sample_recipe)
+        return Response({
+            **serializer.data,
+            'preview_only': True,
+            'message': 'This is a preview. You will access recipes after completing Foundations.'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to fetch sample recipe: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
