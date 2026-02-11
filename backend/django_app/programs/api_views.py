@@ -1,45 +1,47 @@
 """
 API Views for Cohorts, Modules, Milestones, and Specializations.
 """
+import uuid as uuid_module
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Q
-from .models import Cohort, Module, Milestone, Specialization, CalendarTemplate
+from django.db.models import Q, Count
+from django.contrib.auth import get_user_model
+from .models import Cohort, Module, Milestone, Specialization, CalendarTemplate, MentorAssignment, Enrollment, CalendarEvent
+from .serializers import MentorAssignmentSerializer, EnrollmentSerializer, CalendarEventSerializer
 from .api_serializers import (
     CohortSerializer, CreateCohortSerializer,
     ModuleSerializer, CreateModuleSerializer,
     MilestoneSerializer, CreateMilestoneSerializer,
     SpecializationSerializer, CreateSpecializationSerializer
 )
-from .permissions import IsDirectorOrAdmin
+from .permissions import IsDirectorOrAdmin, IsDirectorOrAdminOrMentorCohortsReadOnly
 
 
 class CohortViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing cohorts."""
-    permission_classes = [IsAuthenticated, IsDirectorOrAdmin]
+    """ViewSet for managing cohorts. Directors/admins see all; mentors see only assigned cohorts (read-only)."""
+    permission_classes = [IsAuthenticated, IsDirectorOrAdminOrMentorCohortsReadOnly]
     
     def get_queryset(self):
+        from .permissions import _is_director_or_admin
         queryset = Cohort.objects.select_related(
             'track__program', 'coordinator'
         ).prefetch_related('enrollments')
-        
-        # Filter by track if provided
+        if not _is_director_or_admin(self.request.user):
+            queryset = queryset.filter(
+                mentor_assignments__mentor=self.request.user,
+                mentor_assignments__active=True
+            ).distinct()
         track_id = self.request.query_params.get('track')
         if track_id:
             queryset = queryset.filter(track_id=track_id)
-        
-        # Filter by program if provided
         program_id = self.request.query_params.get('program')
         if program_id:
             queryset = queryset.filter(track__program_id=program_id)
-        
-        # Filter by status if provided
         status_filter = self.request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        
         return queryset.order_by('-start_date')
     
     def get_serializer_class(self):
@@ -62,11 +64,211 @@ class CohortViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
+        data = serializer.data
         return Response({
             'success': True,
-            'data': serializer.data,
-            'count': len(serializer.data)
+            'data': data,
+            'results': data,
+            'count': len(data)
         })
+    
+    @action(detail=True, methods=['get'], url_path='enrollments')
+    def enrollments(self, request, pk=None):
+        """Get enrollments for this cohort."""
+        cohort = self.get_object()
+        enrollments_qs = Enrollment.objects.filter(cohort=cohort).select_related('user')
+        serializer = EnrollmentSerializer(enrollments_qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='missions')
+    def missions(self, request, pk=None):
+        """Get missions assigned to this cohort."""
+        cohort = self.get_object()
+        from missions.models import MissionAssignment
+        assignments = MissionAssignment.objects.filter(
+            cohort_id=cohort.id, assignment_type='cohort'
+        ).select_related('mission')
+        data = [
+            {
+                'id': str(a.mission.id),
+                'title': a.mission.title,
+                'description': getattr(a.mission, 'description', '') or '',
+                'difficulty': a.mission.difficulty,
+                'mission_type': a.mission.mission_type,
+                'estimated_duration_min': getattr(a.mission, 'estimated_duration_min', 0) or 0,
+                'is_active': a.mission.is_active,
+                'assignment_id': str(a.id),
+                'assignment_status': a.status,
+            }
+            for a in assignments
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='dashboard')
+    def dashboard(self, request, pk=None):
+        """Get cohort dashboard summary (enrollments, mentors, readiness)."""
+        cohort = self.get_object()
+        enrollments_count = Enrollment.objects.filter(cohort=cohort, status='active').count()
+        mentor_count = MentorAssignment.objects.filter(cohort=cohort, active=True).count()
+        seat_cap = cohort.seat_cap or 1
+        seat_utilization = (enrollments_count / seat_cap * 100) if seat_cap else 0.0
+        track_name = cohort.track.name if cohort.track else ''
+        data = {
+            'cohort_id': str(cohort.id),
+            'cohort_name': cohort.name,
+            'track_name': track_name,
+            'enrollments_count': enrollments_count,
+            'seat_utilization': seat_utilization,
+            'mentor_assignments_count': mentor_count,
+            'readiness_delta': min(100.0, seat_utilization),
+            'completion_percentage': getattr(cohort, 'completion_rate', 0) or 0,
+            'payments_complete': 0,
+            'payments_pending': 0,
+        }
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='calendar')
+    def calendar(self, request, pk=None):
+        """Get calendar events for this cohort."""
+        cohort = self.get_object()
+        events_qs = CalendarEvent.objects.filter(cohort=cohort).order_by('start_ts')
+        serializer = CalendarEventSerializer(events_qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='mentors')
+    def mentors(self, request, pk=None):
+        """Get or assign mentors for this cohort. POST: directors/admins only."""
+        cohort = self.get_object()
+        if request.method == 'GET':
+            assignments = MentorAssignment.objects.filter(cohort=cohort, active=True).select_related('mentor')
+            serializer = MentorAssignmentSerializer(assignments, many=True)
+            return Response(serializer.data)
+        from .permissions import _is_director_or_admin
+        if not _is_director_or_admin(request.user):
+            return Response(
+                {'detail': 'Only directors or admins can assign mentors to a cohort.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        mentor_id = request.data.get('mentor') or request.data.get('mentor_id')
+        role = request.data.get('role', 'support')
+        if role not in dict(MentorAssignment.ROLE_CHOICES):
+            role = 'support'
+        if not mentor_id:
+            return Response(
+                {'mentor': ['This field is required.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        User = get_user_model()
+        try:
+            # Step 1: Resolve the user either by integer ID or UUID string,
+            # WITHOUT assuming they are already flagged as a mentor.
+            mentor_user = None
+            mentor_pk = None
+            try:
+                mentor_pk = int(mentor_id)
+            except (ValueError, TypeError):
+                mentor_pk = None
+
+            if mentor_pk is not None:
+                mentor_user = User.objects.get(id=mentor_pk)
+            else:
+                # Fallback to UUID-based lookup
+                try:
+                    mentor_uuid = uuid_module.UUID(str(mentor_id))
+                except (ValueError, TypeError):
+                    return Response(
+                        {'mentor': ['Invalid mentor identifier. Expected numeric ID or UUID.']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                mentor_user = User.objects.get(uuid_id=mentor_uuid)
+
+            # Step 2: Verify that this user is actually a mentor
+            # We consider them a mentor if either:
+            # - user.is_mentor is True, OR
+            # - they have an active UserRole with role.name == 'mentor'
+            is_mentor_flag = getattr(mentor_user, 'is_mentor', False)
+
+            if not is_mentor_flag:
+                from users.models import UserRole
+                has_mentor_role = UserRole.objects.filter(
+                    user=mentor_user,
+                    role__name='mentor',
+                    is_active=True,
+                ).exists()
+                if not has_mentor_role:
+                    return Response(
+                        {'mentor': ['User exists but is not marked as a mentor. Assign the mentor role first.']},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+        except User.DoesNotExist:
+            return Response(
+                {'mentor': ['Mentor not found.']},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        if MentorAssignment.objects.filter(cohort=cohort, mentor=mentor_user, active=True).exists():
+            return Response(
+                {'non_field_errors': ['This mentor is already assigned to this cohort.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        assignment = MentorAssignment.objects.create(
+            cohort=cohort,
+            mentor=mentor_user,
+            role=role
+        )
+        serializer = MentorAssignmentSerializer(assignment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'], url_path='mentors/auto-match')
+    def auto_match_mentors(self, request, pk=None):
+        """Auto-assign available mentors to this cohort. Directors/admins only."""
+        from .permissions import _is_director_or_admin
+        if not _is_director_or_admin(request.user):
+            return Response(
+                {'detail': 'Only directors or admins can run auto-match.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        cohort = self.get_object()
+        role = request.data.get('role', 'support')
+        if role not in dict(MentorAssignment.ROLE_CHOICES):
+            role = 'support'
+        track_id = request.data.get('track_id')
+        User = get_user_model()
+        track_key = None
+        if track_id:
+            try:
+                from .models import Track
+                track = Track.objects.get(pk=track_id)
+                track_key = track.key
+            except Exception:
+                pass
+        if not track_key and cohort.track_id:
+            try:
+                track_key = cohort.track.key if cohort.track else None
+            except Exception:
+                pass
+        assigned_mentor_ids = set(
+            MentorAssignment.objects.filter(cohort=cohort, active=True).values_list('mentor_id', flat=True)
+        )
+        available = (
+            User.objects.filter(is_mentor=True, is_active=True)
+            .exclude(id__in=assigned_mentor_ids)
+            .annotate(cohort_count=Count('cohort_mentor_assignments', filter=Q(cohort_mentor_assignments__active=True), distinct=True))
+        )
+        if track_key:
+            available = available.filter(track_key=track_key)
+        available = available.order_by('cohort_count', 'email')[:20]
+        created = []
+        for mentor in available:
+            assignment, created_flag = MentorAssignment.objects.get_or_create(
+                cohort=cohort,
+                mentor=mentor,
+                defaults={'role': role, 'active': True}
+            )
+            if created_flag:
+                created.append(assignment)
+        serializer = MentorAssignmentSerializer(created, many=True)
+        return Response({'assignments': serializer.data, 'count': len(created)}, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):

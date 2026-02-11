@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { RouteGuard } from '@/components/auth/RouteGuard'
+import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -22,6 +24,7 @@ interface AuditLog {
 
 export default function DirectorSettingsPage() {
   const { user, reloadUser, logout } = useAuth()
+  const [profile, setProfile] = useState<User | null>(null)
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -47,35 +50,33 @@ export default function DirectorSettingsPage() {
     confirm_password: '',
   })
 
-  // Track if we should update form data from user (after save)
-  const [shouldUpdateForm, setShouldUpdateForm] = useState(false)
-
+  // Full profile from GET /profile/ (auth/me only returns id, email, name)
   useEffect(() => {
-    if (user) {
-      const newFormData = {
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
-        email: user.email || '',
-        bio: user.bio || '',
-        phone_number: user.phone_number || '',
-        country: user.country || '',
-        timezone: user.timezone || 'UTC',
-        language: user.language || 'en',
-      }
-      
-      // Update form data if:
-      // 1. We just saved (shouldUpdateForm is true) - to show updated values
-      // 2. Form is empty/initial (first load) - to populate form
-      // Always update after save to show the latest values
-      if (shouldUpdateForm || !formData.first_name) {
-        setFormData(newFormData)
-        if (shouldUpdateForm) {
-          setShouldUpdateForm(false)
-        }
-      }
+    if (!user?.id) return
+    let cancelled = false
+    apiGateway
+      .get<User>('/profile/')
+      .then((data) => {
+        if (cancelled) return
+        setProfile(data)
+        setFormData({
+          first_name: data.first_name ?? '',
+          last_name: data.last_name ?? '',
+          email: data.email ?? '',
+          bio: data.bio ?? '',
+          phone_number: data.phone_number ?? '',
+          country: data.country ?? '',
+          timezone: data.timezone ?? 'UTC',
+          language: data.language ?? 'en',
+        })
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('Failed to load profile:', err)
+      })
+    return () => {
+      cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, shouldUpdateForm])
+  }, [user?.id])
 
   useEffect(() => {
     loadAuditLogs()
@@ -84,14 +85,15 @@ export default function DirectorSettingsPage() {
   const loadAuditLogs = async () => {
     try {
       setIsLoading(true)
-      const logs = await apiGateway.get('/audit-logs/', {
+      const response = await apiGateway.get<any>('/audit-logs/', {
         params: {
           resource_type: 'user',
-          resource_id: user?.id?.toString(),
+          ...(user?.id != null && { user_id: user.id.toString() }),
           range: 'month',
         },
       })
-      setAuditLogs(Array.isArray(logs) ? logs : [])
+      const list = Array.isArray(response) ? response : (response?.results ?? [])
+      setAuditLogs(Array.isArray(list) ? list : [])
     } catch (error) {
       console.error('Failed to load audit logs:', error)
       setAuditLogs([])
@@ -106,29 +108,33 @@ export default function DirectorSettingsPage() {
     setIsSaving(true)
     setSaveStatus(null)
     try {
-      // Update user via API
-      const updatedUser = await apiGateway.patch(`/users/${user.id}/`, formData)
-      
-      // Update form data immediately from API response
+      const payload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        bio: formData.bio || null,
+        phone_number: formData.phone_number || null,
+        country: formData.country || null,
+        timezone: formData.timezone,
+        language: formData.language,
+      }
+      const updatedUser = await apiGateway.patch<User>('/profile/', payload)
+
       if (updatedUser) {
-        const userData = updatedUser as User
+        setProfile(updatedUser)
         setFormData({
-          first_name: userData.first_name || '',
-          last_name: userData.last_name || '',
-          email: userData.email || '',
-          bio: userData.bio || '',
-          phone_number: userData.phone_number || '',
-          country: userData.country || '',
-          timezone: userData.timezone || 'UTC',
-          language: userData.language || 'en',
+          first_name: updatedUser.first_name ?? '',
+          last_name: updatedUser.last_name ?? '',
+          email: updatedUser.email ?? '',
+          bio: updatedUser.bio ?? '',
+          phone_number: updatedUser.phone_number ?? '',
+          country: updatedUser.country ?? '',
+          timezone: updatedUser.timezone ?? 'UTC',
+          language: updatedUser.language ?? 'en',
         })
       }
-      
       setSaveStatus('Account updated successfully')
-      
-      // Reload user to get full profile with roles, etc.
       await reloadUser()
-      
       setTimeout(() => setSaveStatus(null), 3000)
     } catch (error: any) {
       setSaveStatus(`Error: ${error.message || 'Failed to update account'}`)
@@ -160,8 +166,8 @@ export default function DirectorSettingsPage() {
     setIsSaving(true)
     setSaveStatus(null)
     try {
-      await apiGateway.post('/users/change_password/', {
-        old_password: passwordData.old_password,
+      await apiGateway.post('/auth/change-password/', {
+        current_password: passwordData.old_password,
         new_password: passwordData.new_password,
       })
       setSaveStatus('Password changed successfully')
@@ -203,15 +209,12 @@ export default function DirectorSettingsPage() {
     setSaveStatus(null)
 
     try {
-      const formData = new FormData()
-      formData.append('avatar', file)
-
-      const response = await apiGateway.post('/users/upload_avatar/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-
+      const fd = new FormData()
+      fd.append('avatar', file)
+      const res = await apiGateway.post<{ avatar_url?: string }>('/users/upload_avatar/', fd, { headers: {} })
+      if (res?.avatar_url) {
+        setProfile((prev) => (prev ? { ...prev, avatar_url: res.avatar_url } : null))
+      }
       setSaveStatus('Profile picture updated successfully')
       await reloadUser()
       setTimeout(() => setSaveStatus(null), 3000)
@@ -251,14 +254,15 @@ export default function DirectorSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-och-midnight p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2 text-och-mint">Account Settings</h1>
-          <p className="text-och-steel">Manage your account information, security, and preferences</p>
-        </div>
+    <RouteGuard>
+      <DirectorLayout>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold mb-2 text-och-mint">Account Settings</h1>
+            <p className="text-och-steel">Manage your account information, security, and preferences</p>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content - Takes 2 columns */}
           <div className="lg:col-span-2 space-y-6">
             {/* Tab Navigation */}
@@ -297,94 +301,94 @@ export default function DirectorSettingsPage() {
 
             {/* Profile Info Tab */}
             {activeTab === 'profile' && (
-              <Card>
-                <h2 className="text-2xl font-bold mb-4 text-white">Account Information</h2>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-och-steel mb-2">
+              <Card className="p-6">
+                <h2 className="text-2xl font-bold mb-6 text-white">Account Information</h2>
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-och-steel">
                         First Name
                       </label>
                       <input
                         type="text"
                         value={formData.first_name}
                         onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                        className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                        className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-och-steel mb-2">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-och-steel">
                         Last Name
                       </label>
                       <input
                         type="text"
                         value={formData.last_name}
                         onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                        className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                        className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       Email
                     </label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       Phone Number
                     </label>
                     <input
                       type="tel"
                       value={formData.phone_number}
                       onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-                      placeholder="+1234567890"
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                      placeholder="e.g. +1234567890"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       Bio
                     </label>
                     <textarea
                       rows={4}
                       value={formData.bio}
                       onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-                      placeholder="Tell us about yourself..."
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint resize-none"
+                      placeholder="Optional"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-och-steel">
                         Country
                       </label>
                       <input
                         type="text"
                         value={formData.country}
                         onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-                        placeholder="US"
+                        className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                        placeholder="e.g. US"
                         maxLength={2}
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-och-steel mb-2">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-och-steel">
                         Timezone
                       </label>
                       <select
                         value={formData.timezone}
                         onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                        className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                        className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                       >
                         <option value="UTC">UTC</option>
                         <option value="America/New_York">America/New_York</option>
@@ -397,14 +401,14 @@ export default function DirectorSettingsPage() {
                         <option value="Africa/Nairobi">Africa/Nairobi</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-och-steel mb-2">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-och-steel">
                         Language
                       </label>
                       <select
                         value={formData.language}
                         onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                        className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                        className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                       >
                         <option value="en">English</option>
                         <option value="es">Spanish</option>
@@ -460,11 +464,11 @@ export default function DirectorSettingsPage() {
 
             {/* Password Change Tab */}
             {activeTab === 'password' && (
-              <Card>
-                <h2 className="text-2xl font-bold mb-4 text-white">Change Password</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+              <Card className="p-6">
+                <h2 className="text-2xl font-bold mb-6 text-white">Change Password</h2>
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       Current Password
                     </label>
                     <input
@@ -473,13 +477,13 @@ export default function DirectorSettingsPage() {
                       onChange={(e) =>
                         setPasswordData({ ...passwordData, old_password: e.target.value })
                       }
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-                      placeholder="Enter current password"
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                      placeholder="Current password"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       New Password
                     </label>
                     <input
@@ -488,16 +492,16 @@ export default function DirectorSettingsPage() {
                       onChange={(e) =>
                         setPasswordData({ ...passwordData, new_password: e.target.value })
                       }
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
-                      placeholder="Enter new password (min 8 characters)"
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                      placeholder="Min 8 characters"
                     />
-                    <p className="text-xs text-och-steel mt-1">
+                    <p className="text-xs text-och-steel">
                       Password must be at least 8 characters long
                     </p>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-och-steel mb-2">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-och-steel">
                       Confirm New Password
                     </label>
                     <input
@@ -506,7 +510,7 @@ export default function DirectorSettingsPage() {
                       onChange={(e) =>
                         setPasswordData({ ...passwordData, confirm_password: e.target.value })
                       }
-                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+                      className="w-full px-4 py-2.5 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
                       placeholder="Confirm new password"
                     />
                   </div>
@@ -550,22 +554,22 @@ export default function DirectorSettingsPage() {
 
             {/* Profile Picture Tab */}
             {activeTab === 'avatar' && (
-              <Card>
-                <h2 className="text-2xl font-bold mb-4 text-white">Profile Picture</h2>
+              <Card className="p-6">
+                <h2 className="text-2xl font-bold mb-6 text-white">Profile Picture</h2>
                 <div className="space-y-4">
                   {/* Current Avatar */}
                   <div className="flex items-center gap-6">
                     <div className="relative">
-                      {user?.avatar_url ? (
+                      {(profile ?? user)?.avatar_url ? (
                         <img
-                          src={user.avatar_url}
+                          src={(profile ?? user)!.avatar_url!}
                           alt="Profile"
                           className="w-32 h-32 rounded-full object-cover border-2 border-och-mint"
                         />
                       ) : (
                         <div className="w-32 h-32 rounded-full bg-och-defender/20 border-2 border-och-defender flex items-center justify-center">
                           <span className="text-4xl text-och-steel">
-                            {user?.first_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
+                            {(profile ?? user)?.first_name?.[0]?.toUpperCase() ?? (profile ?? user)?.email?.[0]?.toUpperCase() ?? '?'}
                           </span>
                         </div>
                       )}
@@ -607,7 +611,7 @@ export default function DirectorSettingsPage() {
             )}
 
             {/* Account Updates History */}
-            <Card>
+            <Card className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-white">Account Update History</h2>
                 <Button variant="outline" size="sm" onClick={loadAuditLogs}>
@@ -662,103 +666,103 @@ export default function DirectorSettingsPage() {
             </Card>
           </div>
 
-          {/* Current User Info Sidebar */}
-          <div className="space-y-6">
-            <Card>
-              <h2 className="text-2xl font-bold mb-4 text-white">Current Account</h2>
-              <div className="space-y-4">
+          {/* Current User Info Sidebar - use full profile from GET /profile/ */}
+          <div className="space-y-6 lg:min-w-0">
+            <Card className="p-6">
+              <h2 className="text-2xl font-bold mb-6 text-white">Current Account</h2>
+              <div className="space-y-5">
                 {/* Profile Picture Preview */}
                 <div className="flex justify-center">
-                  {user?.avatar_url ? (
+                  {(profile ?? user)?.avatar_url ? (
                     <img
-                      src={user.avatar_url}
+                      src={(profile ?? user)!.avatar_url!}
                       alt="Profile"
                       className="w-24 h-24 rounded-full object-cover border-2 border-och-mint"
                     />
                   ) : (
                     <div className="w-24 h-24 rounded-full bg-och-defender/20 border-2 border-och-defender flex items-center justify-center">
                       <span className="text-2xl text-och-steel">
-                        {user?.first_name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || '?'}
+                        {(profile ?? user)?.first_name?.[0]?.toUpperCase() ?? (profile ?? user)?.email?.[0]?.toUpperCase() ?? '?'}
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <p className="text-sm text-och-steel mb-1">User ID</p>
-                  <p className="text-white font-mono text-sm">{user?.id}</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">User ID</p>
+                  <p className="text-white font-mono text-sm break-all">{(profile ?? user)?.id ?? '—'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">Email</p>
-                  <p className="text-white">{user?.email}</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">Email</p>
+                  <p className="text-white break-all">{(profile ?? user)?.email ?? '—'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">Full Name</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">Full Name</p>
                   <p className="text-white">
-                    {user?.first_name || ''} {user?.last_name || ''}
+                    {[(profile ?? user)?.first_name, (profile ?? user)?.last_name].filter(Boolean).join(' ') || '—'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">Account Status</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">Account Status</p>
                   <Badge
                     variant={
-                      user?.account_status === 'active'
+                      (profile ?? user)?.account_status === 'active'
                         ? 'mint'
-                        : user?.account_status === 'suspended'
+                        : (profile ?? user)?.account_status === 'suspended'
                         ? 'orange'
                         : 'defender'
                     }
                   >
-                    {user?.account_status || 'Unknown'}
+                    {(profile ?? user)?.account_status ?? 'Unknown'}
                   </Badge>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">Email Verified</p>
-                  <Badge variant={user?.email_verified ? 'mint' : 'orange'}>
-                    {user?.email_verified ? 'Verified' : 'Not Verified'}
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">Email Verified</p>
+                  <Badge variant={(profile ?? user)?.email_verified ? 'mint' : 'orange'}>
+                    {(profile ?? user)?.email_verified ? 'Verified' : 'Not Verified'}
                   </Badge>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">MFA Enabled</p>
-                  <Badge variant={user?.mfa_enabled ? 'mint' : 'defender'}>
-                    {user?.mfa_enabled ? 'Enabled' : 'Disabled'}
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">MFA Enabled</p>
+                  <Badge variant={(profile ?? user)?.mfa_enabled ? 'mint' : 'defender'}>
+                    {(profile ?? user)?.mfa_enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
                 </div>
-                <div>
-                  <p className="text-sm text-och-steel mb-1">Risk Level</p>
+                <div className="space-y-1">
+                  <p className="text-sm text-och-steel">Risk Level</p>
                   <Badge
                     variant={
-                      user?.risk_level === 'low'
+                      (profile ?? user)?.risk_level === 'low'
                         ? 'mint'
-                        : user?.risk_level === 'high'
+                        : (profile ?? user)?.risk_level === 'high'
                         ? 'orange'
                         : 'defender'
                     }
                   >
-                    {user?.risk_level || 'Unknown'}
+                    {(profile ?? user)?.risk_level ?? 'Unknown'}
                   </Badge>
                 </div>
-                {user?.created_at && (
-                  <div>
-                    <p className="text-sm text-och-steel mb-1">Member Since</p>
+                {(profile ?? user)?.created_at && (
+                  <div className="space-y-1">
+                    <p className="text-sm text-och-steel">Member Since</p>
                     <p className="text-white text-sm">
-                      {new Date(user.created_at).toLocaleDateString()}
+                      {new Date((profile ?? user)!.created_at!).toLocaleDateString()}
                     </p>
                   </div>
                 )}
-                {user && (user as any).last_login && (
-                  <div>
-                    <p className="text-sm text-och-steel mb-1">Last Login</p>
+                {((profile ?? user) as any)?.last_login && (
+                  <div className="space-y-1">
+                    <p className="text-sm text-och-steel">Last Login</p>
                     <p className="text-white text-sm">
-                      {new Date((user as any).last_login).toLocaleString()}
+                      {new Date(((profile ?? user) as any).last_login).toLocaleString()}
                     </p>
                   </div>
                 )}
               </div>
             </Card>
 
-            <Card>
-              <h2 className="text-2xl font-bold mb-4 text-white text-och-orange">Session</h2>
+            <Card className="p-6">
+              <h2 className="text-2xl font-bold mb-6 text-white text-och-orange">Session</h2>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-och-steel mb-2">
@@ -779,8 +783,9 @@ export default function DirectorSettingsPage() {
               </div>
             </Card>
           </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </DirectorLayout>
+    </RouteGuard>
   )
 }

@@ -80,7 +80,7 @@ function getDashboardForRole(role: string | null): string {
   switch (role) {
     case 'admin': dashboard = '/dashboard/admin'; break
     case 'program_director': dashboard = '/dashboard/director'; break
-    case 'mentor': dashboard = '/mentor/dashboard'; break
+    case 'mentor': dashboard = '/dashboard/mentor'; break
     case 'analyst': dashboard = '/dashboard/analyst'; break
     case 'sponsor_admin': dashboard = '/dashboard/sponsor'; break
     case 'employer': dashboard = '/dashboard/employer'; break
@@ -121,18 +121,39 @@ export async function POST(request: NextRequest) {
     console.log('[Login API] API response status:', apiResponse.status);
 
     if (!apiResponse.ok) {
-      console.log('[Login API] API auth failed with status:', apiResponse.status);
-      const errorText = await apiResponse.text();
-      console.log('[Login API] API error response:', errorText);
+      const statusCode = apiResponse.status;
+      // Read body once as text so we can parse JSON or use as message (avoids "Body has already been read")
+      const text = await apiResponse.text();
+      let backendBody: { detail?: string; error?: string } = {};
+      try {
+        backendBody = text ? JSON.parse(text) : {};
+      } catch {
+        backendBody = { detail: text || 'Request failed' };
+      }
+      const backendDetail = backendBody.detail || backendBody.error || '';
+      console.log('[Login API] API auth failed:', statusCode, backendDetail || text?.slice(0, 200));
+      // 4xx: forward as-is with clear message; 5xx: return 502 with clear BAD_GATEWAY response
+      const isBackendError = statusCode >= 500;
+      const clientStatus = isBackendError ? 502 : statusCode === 403 ? 403 : 401;
+      const userMessage = isBackendError
+        ? 'The login service is temporarily unavailable. Please try again in a moment.'
+        : statusCode === 401
+          ? 'Invalid email or password.'
+          : statusCode === 403
+            ? (backendDetail || 'Account cannot sign in.')
+            : 'Login failed.';
       return NextResponse.json(
         {
-          error: 'Login failed',
-          detail: 'Invalid credentials'
+          error: isBackendError ? 'Service temporarily unavailable' : 'Login failed',
+          detail: userMessage,
+          code: isBackendError ? 'BAD_GATEWAY' : undefined,
+          ...(process.env.NODE_ENV === 'development' && backendDetail ? { debug: backendDetail } : {}),
         },
-        { status: 401 }
+        { status: clientStatus }
       );
     }
 
+    // Parse body once (already consumed above only when !ok)
     const apiData = await apiResponse.json();
     console.log('[Login API] API response status:', apiResponse.status);
     console.log('[Login API] API response keys:', Object.keys(apiData));

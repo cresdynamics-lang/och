@@ -88,17 +88,17 @@ export default function SponsorsPage() {
     setError(null)
     try {
       // Load sponsors (users with sponsor role or from sponsor organizations)
-      const sponsorsData = await apiGateway.get('/users?role=sponsor')
+      const sponsorsData = await apiGateway.get('/users?role=sponsor') as any
       const sponsorsList = sponsorsData?.results || sponsorsData?.data || sponsorsData || []
       setSponsors(sponsorsList)
 
       // Load cohorts
-      const cohortsData = await apiGateway.get('/cohorts/')
+      const cohortsData = await apiGateway.get('/cohorts/') as any
       const cohortsList = cohortsData?.results || cohortsData?.data || cohortsData || []
       setCohorts(cohortsList)
 
       // Load sponsor assignments
-      const assignmentsData = await apiGateway.get('/sponsor-assignments/')
+      const assignmentsData = await apiGateway.get('/sponsor-assignments/') as any
       const assignmentsList = assignmentsData?.data || assignmentsData?.results || assignmentsData || []
       setAssignments(assignmentsList)
     } catch (err: any) {
@@ -132,7 +132,7 @@ export default function SponsorsPage() {
     try {
       // Assign each selected sponsor to the cohort
       const assignments = []
-      for (const sponsorId of selectedSponsors) {
+      for (const sponsorId of Array.from(selectedSponsors)) {
         try {
           const payload = {
             sponsor_id: sponsorId,

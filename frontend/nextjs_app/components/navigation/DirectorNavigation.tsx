@@ -83,7 +83,7 @@ const navItems: NavItem[] = [
     icon: Handshake,
     children: [
       { label: 'View All Mentors', href: '/dashboard/director/mentors', icon: Users },
-      { label: 'Auto-Matching', href: '/dashboard/director/mentorship/matching', icon: Shuffle },
+      { label: 'Mentor Assignment', href: '/dashboard/director/mentorship/matching', icon: Shuffle },
       { label: 'Mentor Reviews', href: '/dashboard/director/mentorship/reviews', icon: Star },
       { label: 'Cycle Configuration', href: '/dashboard/director/mentorship/cycles', icon: RotateCcw },
     ]

@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.decorators import api_view, permission_classes
 import logging
 
 from users.utils.consent_utils import check_consent
@@ -22,13 +23,32 @@ from .serializers import (
     JobApplicationCreateSerializer,
 )
 
+# Export for URLs
+__all__ = [
+    'MarketplaceTalentListView',
+    'MarketplaceProfileMeView',
+    'EmployerInterestLogView',
+    'EmployerInterestListView',
+    'StudentContactRequestsView',
+    'JobPostingListCreateView',
+    'JobPostingRetrieveUpdateDestroyView',
+    'StudentJobBrowseView',
+    'StudentJobDetailView',
+    'StudentJobApplicationView',
+    'StudentJobApplicationsView',
+    'StudentJobApplicationDetailView',
+    'EmployerJobApplicationsView',
+    'EmployerJobApplicationDetailView',
+    'AdminMarketplaceSettingsView',
+]
+
 
 class IsEmployer(permissions.BasePermission):
     """
     Only users with an Employer profile or employer role can access these endpoints.
     Checks for:
     1. Direct employer_profile relationship
-    2. UserRole with 'sponsor_admin' role (which is the employer role)
+    2. UserRole with 'sponsor_admin' or legacy 'sponsor' role (employer roles)
     """
 
     def has_permission(self, request, view):
@@ -39,9 +59,9 @@ class IsEmployer(permissions.BasePermission):
         if hasattr(request.user, 'employer_profile'):
             return True
         
-        # Check if user has sponsor_admin role (employer role)
+        # Check if user has sponsor_admin (or legacy sponsor) role
         if request.user.user_roles.filter(
-            role__name='sponsor_admin',
+            role__name__in=['sponsor_admin', 'sponsor'],
             is_active=True
         ).exists():
             return True
@@ -73,10 +93,36 @@ class MarketplaceTalentListView(generics.ListAPIView):
             tier__in=['starter', 'professional'],  # free tier never visible
         )
 
-        # Filter: only Professional tier are directly contactable
+        # Filter: only Professional tier are directly contactable (for base visible set)
         contactable_only = self.request.query_params.get('contactable_only')
         if contactable_only and contactable_only.lower() == 'true':
             qs = qs.filter(tier='professional')
+
+        # Include profiles the employer has engaged with (contacted, favorited, shortlisted)
+        # or who have applied to the employer's jobs - even if they no longer meet visibility.
+        # This ensures contacted/placed students always appear in the talent list.
+        employer = get_employer_for_user(self.request.user)
+        if employer:
+            interest_profile_ids = EmployerInterestLog.objects.filter(
+                employer=employer
+            ).values_list('profile_id', flat=True).distinct()
+            # applicant_id is VARCHAR in DB; convert to int for mentee_id (BIGINT) comparison
+            applicant_ids_raw = JobApplication.objects.filter(
+                job_posting__employer=employer
+            ).values_list('applicant_id', flat=True).distinct()
+            applicant_ids = [
+                int(aid) for aid in applicant_ids_raw
+                if aid is not None and str(aid).strip().isdigit()
+            ]
+            engaged_profile_ids = list(interest_profile_ids) + list(
+                MarketplaceProfile.objects.filter(
+                    mentee_id__in=applicant_ids
+                ).values_list('id', flat=True)
+            ) if applicant_ids else list(interest_profile_ids)
+            engaged_profile_ids = list(set(engaged_profile_ids))
+            if engaged_profile_ids:
+                engaged_qs = MarketplaceProfile.objects.filter(id__in=engaged_profile_ids)
+                qs = (qs | engaged_qs).distinct()
 
         # Filter by profile status
         status_param = self.request.query_params.get('status')

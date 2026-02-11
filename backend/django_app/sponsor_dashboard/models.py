@@ -335,3 +335,71 @@ class SponsorCode(models.Model):
         if self.max_usage and self.usage_count >= self.max_usage:
             return False
         return True
+
+
+class SponsorReportRequest(models.Model):
+    """
+    Sponsor request for a detailed report from the program director.
+    Director fulfills by uploading/delivering the report; status moves to delivered.
+    """
+    REQUEST_TYPE_CHOICES = [
+        ('graduate_breakdown', 'Graduate Breakdown'),
+        ('roi_projection', 'ROI Projection'),
+        ('cohort_analytics', 'Cohort Analytics'),
+        ('custom', 'Custom Report'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('delivered', 'Delivered'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    org = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name='sponsor_report_requests',
+        db_index=True,
+    )
+    request_type = models.CharField(
+        max_length=32,
+        choices=REQUEST_TYPE_CHOICES,
+        default='graduate_breakdown',
+    )
+    cohort = models.ForeignKey(
+        'programs.Cohort',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sponsor_report_requests',
+        db_index=True,
+    )
+    details = models.TextField(blank=True, help_text='Additional requirements from sponsor')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivered_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delivered_sponsor_reports',
+    )
+    attachment_url = models.URLField(max_length=500, blank=True, help_text='Link to delivered report file')
+
+    class Meta:
+        db_table = 'sponsor_report_requests'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['org', 'status']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"Report request {self.get_request_type_display()} ({self.status})"

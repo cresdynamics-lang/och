@@ -13,16 +13,18 @@ from users.models import User
 
 class CurriculumTrack(models.Model):
     """
-    Curriculum track - one of 5 main tracks (Defender, Offensive, GRC, Innovation, Leadership)
-    Also includes cross-track programs (tier 6)
+    Curriculum track — one of 5 main tracks (Defender, Offensive, GRC, Innovation, Leadership).
+    Beginner Level: the first structured learning pathway inside OCH after Foundations.
+    This tier moves the learner from orientation → competence-building. Also includes cross-track
+    programs (tier 6).
     """
     TIER_CHOICES = [
-        (0, 'Tier 0 - Profiler'),
-        (1, 'Tier 1 - Foundations'),
-        (2, 'Tier 2 - Beginner Tracks'),
-        (3, 'Tier 3 - Intermediate Tracks'),
-        (4, 'Tier 4 - Advanced Tracks'),
-        (5, 'Tier 5 - Mastery Tracks'),
+        (0, 'Foundations - Profiler'),
+        (1, 'Foundations'),
+        (2, 'Beginner Level'),
+        (3, 'Intermediate Level'),
+        (4, 'Advanced Level'),
+        (5, 'Mastery Level'),
         (6, 'Tier 6 - Cross-Track Programs'),
         (7, 'Tier 7 - Missions & Recipe Engine'),
         (8, 'Tier 8 - Platform Ecosystem'),
@@ -55,7 +57,7 @@ class CurriculumTrack(models.Model):
         choices=TIER_CHOICES,
         default=2,
         db_index=True,
-        help_text='Academic tier (0-9). Tier 2 = Beginner Tracks'
+        help_text='Academic tier (0-9). Tier 2 = Beginner Level, Tier 3 = Intermediate Level, Tier 4 = Advanced Level, Tier 5 = Mastery Level'
     )
 
     # Linking to programs.Track — auto-populated by sync signal
@@ -70,6 +72,45 @@ class CurriculumTrack(models.Model):
     module_count = models.IntegerField(default=0)
     lesson_count = models.IntegerField(default=0)
     mission_count = models.IntegerField(default=0)
+
+    # Beginner Level completion rules — admin-configurable per spec
+    tier2_mini_missions_required = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(2)],
+        help_text='Minimum mini-missions required to complete this Beginner track (1 or 2)'
+    )
+    tier2_require_mentor_approval = models.BooleanField(
+        default=False,
+        help_text='If True, mentor must approve before Beginner level completion'
+    )
+    # Intermediate Level completion rules — all mandatory modules, all missions passed, reflections, optional mentor approval
+    tier3_require_mentor_approval = models.BooleanField(
+        default=False,
+        help_text='If True, mentor must approve before Intermediate level track completion'
+    )
+    # Advanced Level completion rules — all mandatory modules, all advanced missions approved, feedback cycles complete, final reflection, optional mentor approval
+    tier4_require_mentor_approval = models.BooleanField(
+        default=False,
+        help_text='If True, mentor must approve before Advanced level track completion'
+    )
+    # Mastery Level completion rules — all mastery missions approved, capstone approved, reflections complete, mastery completion rubric passed, optional mentor approval
+    tier5_require_mentor_approval = models.BooleanField(
+        default=False,
+        help_text='If True, mentor must approve before Mastery level track completion'
+    )
+    mastery_completion_rubric_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='UUID of rubric for Mastery completion validation'
+    )
+    # Admin-configurable: sequential (unlock one by one) or flexible (all modules open)
+    progression_mode = models.CharField(
+        max_length=20,
+        choices=[('sequential', 'Sequential'), ('flexible', 'Flexible')],
+        default='sequential',
+        help_text='Sequential = unlock modules in order; Flexible = all modules available'
+    )
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -353,6 +394,7 @@ class Lesson(models.Model):
         ('assessment', 'Assessment'),
         ('lab', 'Hands-on Lab'),
         ('reading', 'Reading Material'),
+        ('diagram', 'Diagram/Flow'),
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -645,13 +687,25 @@ class UserTrackProgress(models.Model):
     last_activity_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     
-    # Tier 2 (Beginner Tracks) specific completion tracking
-    tier2_quizzes_passed = models.IntegerField(default=0, help_text='Number of quizzes passed (Tier 2)')
-    tier2_mini_missions_completed = models.IntegerField(default=0, help_text='Number of mini-missions completed (Tier 2)')
-    tier2_reflections_submitted = models.IntegerField(default=0, help_text='Number of reflections submitted (Tier 2)')
-    tier2_mentor_approval = models.BooleanField(default=False, help_text='Mentor approval for Tier 2 completion (optional)')
-    tier2_completion_requirements_met = models.BooleanField(default=False, db_index=True, help_text='All Tier 2 requirements met')
+    # Beginner Level specific completion tracking
+    tier2_quizzes_passed = models.IntegerField(default=0, help_text='Number of quizzes passed (Beginner level)')
+    tier2_mini_missions_completed = models.IntegerField(default=0, help_text='Number of mini-missions completed (Beginner level)')
+    tier2_reflections_submitted = models.IntegerField(default=0, help_text='Number of reflections submitted (Beginner level)')
+    tier2_mentor_approval = models.BooleanField(default=False, help_text='Mentor approval for Beginner level completion (optional)')
+    tier2_completion_requirements_met = models.BooleanField(default=False, db_index=True, help_text='All Beginner level requirements met')
+    # Intermediate Level completion tracking
+    tier3_mentor_approval = models.BooleanField(default=False, help_text='Mentor approval for Intermediate level completion (if required)')
+    tier3_completion_requirements_met = models.BooleanField(default=False, db_index=True, help_text='All Intermediate level requirements met: modules, missions passed, reflections, mentor approval if required')
+    tier4_unlocked = models.BooleanField(default=False, db_index=True, help_text='User has completed an Intermediate level track and can access Advanced level')
     
+    # Advanced Level completion tracking
+    tier4_mentor_approval = models.BooleanField(default=False, help_text='Mentor approval for Advanced level completion (if required)')
+    tier4_completion_requirements_met = models.BooleanField(default=False, db_index=True, help_text='All Advanced level requirements met: modules, advanced missions approved, feedback cycles complete, final reflection submitted')
+    tier5_unlocked = models.BooleanField(default=False, db_index=True, help_text='User has completed an Advanced level track and can access Mastery level')
+    
+    # Mastery Level completion tracking
+    tier5_mentor_approval = models.BooleanField(default=False, help_text='Mentor approval for Mastery level completion (if required)')
+    tier5_completion_requirements_met = models.BooleanField(default=False, db_index=True, help_text='All Mastery level requirements met: mastery missions approved, capstone approved, reflections complete, mastery completion rubric passed')
     class Meta:
         db_table = 'user_track_progress'
         verbose_name = 'User Track Progress'
@@ -666,7 +720,7 @@ class UserTrackProgress(models.Model):
     
     def check_tier2_completion(self, require_mentor_approval=False):
         """
-        Check if Tier 2 (Beginner Track) completion requirements are met.
+        Check if Beginner Level completion requirements are met.
         
         Requirements:
         - All mandatory modules completed
@@ -677,7 +731,7 @@ class UserTrackProgress(models.Model):
         Returns: (is_complete: bool, missing_requirements: list)
         """
         if self.track.tier != 2:
-            return False, ['Not a Tier 2 track']
+            return False, ['Not a Beginner level track']
         
         missing = []
         
@@ -711,13 +765,18 @@ class UserTrackProgress(models.Model):
         if passed_quizzes.count() < required_quizzes.count():
             missing.append(f"Pass all {required_quizzes.count()} quizzes (70% minimum)")
         
-        # Check minimum mini-missions completed (at least 1-2 as per guidelines)
-        min_missions_required = 1  # Configurable, default 1
+        # Check minimum mini-missions completed (1-2 per track config)
+        min_missions_required = getattr(
+            self.track, 'tier2_mini_missions_required', 1
+        )
         if self.tier2_mini_missions_completed < min_missions_required:
             missing.append(f"Complete at least {min_missions_required} mini-mission(s)")
         
-        # Check mentor approval if required
-        if require_mentor_approval and not self.tier2_mentor_approval:
+        # Check mentor approval if required (track-level or param)
+        need_mentor = require_mentor_approval or getattr(
+            self.track, 'tier2_require_mentor_approval', False
+        )
+        if need_mentor and not self.tier2_mentor_approval:
             missing.append("Mentor approval required")
         
         is_complete = len(missing) == 0
@@ -725,7 +784,365 @@ class UserTrackProgress(models.Model):
         self.save(update_fields=['tier2_completion_requirements_met'])
         
         return is_complete, missing
-    
+
+    def check_tier3_completion(self, require_mentor_approval=None):
+        """
+        Check if Intermediate Level completion requirements are met.
+        Requirements: mandatory modules completed; all Intermediate missions submitted and passed;
+        reflections completed; mentor approval (if required).
+        Returns: (is_complete: bool, missing_requirements: list)
+        """
+        if self.track.tier != 3:
+            return False, ['Not an Intermediate level track']
+        missing = []
+        # 1. Mandatory modules completed
+        mandatory_modules = CurriculumModule.objects.filter(
+            track=self.track,
+            is_required=True,
+            is_active=True
+        )
+        completed_modules = UserModuleProgress.objects.filter(
+            user=self.user,
+            module__in=mandatory_modules,
+            status='completed'
+        )
+        if completed_modules.count() < mandatory_modules.count():
+            missing.append(f"Complete all {mandatory_modules.count()} mandatory modules")
+        # 2. All Intermediate missions for this track submitted and passed
+        try:
+            from missions.models_mxp import MissionProgress
+        except ImportError:
+            pass
+        else:
+            required_mission_ids = list(
+                ModuleMission.objects.filter(
+                    module__track=self.track,
+                    module__is_required=True,
+                    is_required=True
+                ).values_list('mission_id', flat=True).distinct()
+            )
+            if required_mission_ids:
+                passed = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass'
+                ).count()
+                if passed < len(required_mission_ids):
+                    missing.append(
+                        f"Complete and pass all {len(required_mission_ids)} Intermediate mission(s)"
+                    )
+                # 3. Reflections completed where required
+                for prog in MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass'
+                ).only('reflection_required', 'reflection_submitted'):
+                    if prog.reflection_required and not prog.reflection_submitted:
+                        missing.append("Complete required reflection(s) for missions")
+                        break
+        # 4. Mentor approval (if required)
+        need_mentor = require_mentor_approval if require_mentor_approval is not None else getattr(
+            self.track, 'tier3_require_mentor_approval', False
+        )
+        if need_mentor and not self.tier3_mentor_approval:
+            missing.append("Mentor approval required")
+        is_complete = len(missing) == 0
+        self.tier3_completion_requirements_met = is_complete
+        update_fields = ['tier3_completion_requirements_met']
+        if is_complete:
+            self.tier4_unlocked = True
+            update_fields.append('tier4_unlocked')
+        self.save(update_fields=update_fields)
+        return is_complete, missing
+
+    def check_tier4_completion(self, require_mentor_approval=None):
+        """
+        Check if Advanced Level completion requirements are met.
+        Requirements: mandatory modules completed; all Advanced missions submitted and approved;
+        feedback cycles complete; final advanced reflection submitted; mentor approval (if required).
+        Returns: (is_complete: bool, missing_requirements: list)
+        """
+        if self.track.tier != 4:
+            return False, ['Not an Advanced level track']
+        
+        missing = []
+        
+        # 1. Mandatory modules completed
+        mandatory_modules = CurriculumModule.objects.filter(
+            track=self.track,
+            is_required=True,
+            is_active=True
+        )
+        completed_modules = UserModuleProgress.objects.filter(
+            user=self.user,
+            module__in=mandatory_modules,
+            status='completed'
+        )
+        if completed_modules.count() < mandatory_modules.count():
+            missing.append(f"Complete all {mandatory_modules.count()} mandatory modules")
+        
+        # 2. All Advanced missions for this track submitted and approved
+        try:
+            from missions.models_mxp import MissionProgress
+            from missions.models import Mission
+        except ImportError:
+            pass
+        else:
+            # Get all advanced missions for this track
+            # Match by track code (e.g., 'DEFENDER_4') or track name
+            track_code_lower = self.track.code.lower() if hasattr(self.track, 'code') else None
+            track_name_lower = self.track.name.lower() if hasattr(self.track, 'name') else None
+            
+            # Try to match track field (defender/offensive/grc/innovation/leadership)
+            track_match = None
+            if track_code_lower:
+                # Extract track name from code (e.g., 'DEFENDER_4' -> 'defender')
+                if 'defender' in track_code_lower:
+                    track_match = 'defender'
+                elif 'offensive' in track_code_lower:
+                    track_match = 'offensive'
+                elif 'grc' in track_code_lower:
+                    track_match = 'grc'
+                elif 'innovation' in track_code_lower:
+                    track_match = 'innovation'
+                elif 'leadership' in track_code_lower:
+                    track_match = 'leadership'
+            
+            advanced_missions = Mission.objects.filter(
+                tier='advanced',
+                is_active=True
+            )
+            
+            if track_match:
+                advanced_missions = advanced_missions.filter(track=track_match)
+            elif track_code_lower:
+                # Fallback: match by track_id
+                advanced_missions = advanced_missions.filter(track_id__icontains=track_code_lower)
+            
+            # Get required missions via ModuleMission if available
+            required_mission_ids = list(
+                ModuleMission.objects.filter(
+                    module__track=self.track,
+                    module__is_required=True,
+                    is_required=True
+                ).values_list('mission_id', flat=True).distinct()
+            )
+            
+            # If no ModuleMission links, use all advanced missions for the track
+            if not required_mission_ids:
+                required_mission_ids = list(advanced_missions.values_list('id', flat=True))
+            
+            if required_mission_ids:
+                # Check all missions are approved (status='approved' and final_status='pass')
+                approved_missions = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass',
+                    status='approved'
+                ).count()
+                
+                if approved_missions < len(required_mission_ids):
+                    missing.append(
+                        f"Complete and get approval for all {len(required_mission_ids)} Advanced mission(s)"
+                    )
+                
+                # 3. Feedback cycles complete (all missions have been reviewed)
+                reviewed_missions = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    mentor_reviewed_at__isnull=False
+                ).count()
+                
+                if reviewed_missions < len(required_mission_ids):
+                    missing.append("Complete feedback cycles for all Advanced missions")
+                
+                # 4. Final advanced reflection submitted
+                # Check if any advanced mission requires reflection and if it's submitted
+                reflection_required = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True
+                ).exists()
+                
+                if reflection_required:
+                    reflection_submitted = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=required_mission_ids,
+                        reflection_required=True,
+                        reflection_submitted=True
+                    ).count()
+                    
+                    reflection_total = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=required_mission_ids,
+                        reflection_required=True
+                    ).count()
+                    
+                    if reflection_submitted < reflection_total:
+                        missing.append("Submit final advanced reflection(s) for missions")
+        
+        # 5. Mentor approval (if required)
+        need_mentor = require_mentor_approval if require_mentor_approval is not None else getattr(
+            self.track, 'tier4_require_mentor_approval', False
+        )
+        if need_mentor and not self.tier4_mentor_approval:
+            missing.append("Mentor approval required")
+        
+        is_complete = len(missing) == 0
+        self.tier4_completion_requirements_met = is_complete
+        update_fields = ['tier4_completion_requirements_met']
+        
+        if is_complete:
+            self.tier5_unlocked = True
+            update_fields.append('tier5_unlocked')
+        
+        self.save(update_fields=update_fields)
+        return is_complete, missing
+
+    def check_tier5_completion(self, require_mentor_approval=None):
+        """
+        Check if Mastery Level completion requirements are met.
+        Requirements: all Mastery missions submitted and approved; all reflections completed;
+        final Capstone approved; Mastery Completion Rubric passed; mentor approval (if required).
+        Returns: (is_complete: bool, missing_requirements: list)
+        """
+        if self.track.tier != 5:
+            return False, ['Not a Mastery level track']
+        
+        missing = []
+        
+        # 1. All Mastery missions for this track submitted and approved
+        try:
+            from missions.models_mxp import MissionProgress
+            from missions.models import Mission
+        except ImportError:
+            pass
+        else:
+            # Match by track code (e.g., 'DEFENDER_5') or track name
+            track_code_lower = self.track.code.lower() if hasattr(self.track, 'code') else None
+            
+            # Try to match track field (defender/offensive/grc/innovation/leadership)
+            track_match = None
+            if track_code_lower:
+                if 'defender' in track_code_lower:
+                    track_match = 'defender'
+                elif 'offensive' in track_code_lower:
+                    track_match = 'offensive'
+                elif 'grc' in track_code_lower:
+                    track_match = 'grc'
+                elif 'innovation' in track_code_lower:
+                    track_match = 'innovation'
+                elif 'leadership' in track_code_lower:
+                    track_match = 'leadership'
+            
+            mastery_missions = Mission.objects.filter(
+                tier='mastery',
+                is_active=True
+            )
+            
+            if track_match:
+                mastery_missions = mastery_missions.filter(track=track_match)
+            elif track_code_lower:
+                mastery_missions = mastery_missions.filter(track_id__icontains=track_code_lower)
+            
+            # Get required missions via ModuleMission if available
+            required_mission_ids = list(
+                ModuleMission.objects.filter(
+                    module__track=self.track,
+                    module__is_required=True,
+                    is_required=True
+                ).values_list('mission_id', flat=True).distinct()
+            )
+            
+            # If no ModuleMission links, use all mastery missions for the track
+            if not required_mission_ids:
+                required_mission_ids = list(mastery_missions.values_list('id', flat=True))
+            
+            if required_mission_ids:
+                # Check all mastery missions are approved (status='approved' and final_status='pass')
+                approved_missions = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass',
+                    status='approved'
+                ).count()
+                
+                if approved_missions < len(required_mission_ids):
+                    missing.append(
+                        f"Complete and get approval for all {len(required_mission_ids)} Mastery mission(s)"
+                    )
+                
+                # 2. All reflections completed
+                reflection_required = MissionProgress.objects.filter(
+                    user=self.user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True
+                ).exists()
+                
+                if reflection_required:
+                    reflection_submitted = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=required_mission_ids,
+                        reflection_required=True,
+                        reflection_submitted=True
+                    ).count()
+                    
+                    reflection_total = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=required_mission_ids,
+                        reflection_required=True
+                    ).count()
+                    
+                    if reflection_submitted < reflection_total:
+                        missing.append("Submit all required reflection(s) for Mastery missions")
+                
+                # 3. Final Capstone approved
+                capstone_missions = Mission.objects.filter(
+                    id__in=required_mission_ids,
+                    mission_type='capstone',
+                    is_active=True
+                )
+                
+                if capstone_missions.exists():
+                    capstone_ids = list(capstone_missions.values_list('id', flat=True))
+                    capstone_approved = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=capstone_ids,
+                        final_status='pass',
+                        status='approved'
+                    ).count()
+                    
+                    if capstone_approved < len(capstone_ids):
+                        missing.append(f"Complete and get approval for Capstone project ({len(capstone_ids)} required)")
+                
+                # 4. Mastery Completion Rubric passed (if configured)
+                completion_rubric_id = getattr(self.track, 'mastery_completion_rubric_id', None)
+                if completion_rubric_id:
+                    # Check if rubric scores meet threshold (this would need rubric service integration)
+                    # For now, we'll check if all missions have mentor scores above a threshold
+                    low_scores = MissionProgress.objects.filter(
+                        user=self.user,
+                        mission_id__in=required_mission_ids,
+                        mentor_score__lt=70  # 70% threshold
+                    ).exists()
+                    
+                    if low_scores:
+                        missing.append("Meet Mastery Completion Rubric requirements (minimum 70% score on all missions)")
+        
+        # 5. Mentor approval (if required)
+        need_mentor = require_mentor_approval if require_mentor_approval is not None else getattr(
+            self.track, 'tier5_require_mentor_approval', False
+        )
+        if need_mentor and not self.tier5_mentor_approval:
+            missing.append("Mentor approval required")
+        
+        is_complete = len(missing) == 0
+        self.tier5_completion_requirements_met = is_complete
+        update_fields = ['tier5_completion_requirements_met']
+        
+        self.save(update_fields=update_fields)
+        return is_complete, missing
+
     def __str__(self):
         return f"{self.user.email} - {self.track.name} ({self.completion_percentage}%)"
 
@@ -863,6 +1280,80 @@ class UserLessonProgress(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.lesson.title} ({self.status})"
+
+
+class UserLessonBookmark(models.Model):
+    """Bookmark / save for later — learner can bookmark lessons within a track."""
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='lesson_bookmarks',
+        db_index=True
+    )
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='bookmarked_by',
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_lesson_bookmarks'
+        verbose_name = 'Lesson Bookmark'
+        verbose_name_plural = 'Lesson Bookmarks'
+        unique_together = [['user', 'lesson']]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.email} bookmarked {self.lesson.title}"
+
+
+class CurriculumMentorFeedback(models.Model):
+    """Mentor comments on specific tasks (lesson or module) for a learner."""
+    mentor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='curriculum_feedback_given',
+        db_index=True
+    )
+    learner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='curriculum_feedback_received',
+        db_index=True
+    )
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name='mentor_feedback',
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    module = models.ForeignKey(
+        CurriculumModule,
+        on_delete=models.CASCADE,
+        related_name='mentor_feedback',
+        null=True,
+        blank=True,
+        db_index=True
+    )
+    comment_text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'curriculum_mentor_feedback'
+        verbose_name = 'Curriculum Mentor Feedback'
+        verbose_name_plural = 'Curriculum Mentor Feedback'
+        indexes = [
+            models.Index(fields=['learner', 'lesson']),
+            models.Index(fields=['learner', 'module']),
+        ]
+
+    def __str__(self):
+        return f"Mentor feedback for {self.learner.email} on {self.lesson_id or self.module_id}"
 
 
 class UserMissionProgress(models.Model):

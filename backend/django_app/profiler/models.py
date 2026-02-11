@@ -104,11 +104,65 @@ class ProfilerSession(models.Model):
         help_text='Confidence score 0.0-1.0'
     )
     
+    # Telemetry fields
+    technical_exposure_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text='Technical exposure score 0-100'
+    )
+    work_style_cluster = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='Work style cluster: "collaborative", "independent", "balanced", etc.'
+    )
+    scenario_choices = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Scenario preference choices: [{question_id: "...", selected_option: "A", ...}]'
+    )
+    difficulty_selection = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=[
+            ('novice', 'Novice'),
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+            ('elite', 'Elite'),
+        ],
+        help_text='User-selected difficulty level'
+    )
+    track_alignment_percentages = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Percentage alignment per track: {"defender": 85.5, "offensive": 72.3, ...}'
+    )
+    result_accepted = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text='Whether user accepted the profiler result (True) or overrode it (False)'
+    )
+    result_accepted_at = models.DateTimeField(null=True, blank=True, help_text='When result was accepted/overridden')
+    foundations_transition_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Timestamp when user transitioned from Profiler to Foundations'
+    )
+    
     # Timing
     started_at = models.DateTimeField(auto_now_add=True, db_index=True)
     last_activity = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     time_spent_seconds = models.IntegerField(default=0, help_text='Total time spent in seconds')
+    time_spent_per_module = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Time spent per module in seconds: {"identity_value": 120, "cyber_aptitude": 300, ...}'
+    )
     
     # Lock mechanism (one-time attempt)
     is_locked = models.BooleanField(default=False, db_index=True)
@@ -120,6 +174,41 @@ class ProfilerSession(models.Model):
         blank=True,
         related_name='profiler_resets',
         help_text='Admin who reset this session'
+    )
+    
+    # Anti-cheat fields
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text='IP address of session start'
+    )
+    user_agent = models.TextField(
+        blank=True,
+        help_text='User agent string for device fingerprinting'
+    )
+    device_fingerprint = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+        help_text='Device/browser fingerprint hash'
+    )
+    response_times = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Response times in ms for each question: [{question_id: "...", time_ms: 1234}]'
+    )
+    suspicious_patterns = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Detected suspicious patterns: ["too_fast", "identical_responses", ...]'
+    )
+    anti_cheat_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text='Anti-cheat confidence score (0-100, higher = more suspicious)'
     )
     
     class Meta:
@@ -317,3 +406,91 @@ class ProfilerResult(models.Model):
     
     def __str__(self):
         return f"Profiler Result: {self.user.email} - Score: {self.overall_score}"
+
+
+class ProfilerRetakeRequest(models.Model):
+    """Request for retaking the profiler assessment (requires admin approval)."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('completed', 'Completed'),  # Retake completed
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profiler_retake_requests',
+        db_index=True
+    )
+    original_session = models.ForeignKey(
+        ProfilerSession,
+        on_delete=models.CASCADE,
+        related_name='retake_requests',
+        null=True,
+        blank=True,
+        help_text='Original session that was locked'
+    )
+    reason = models.TextField(help_text='User-provided reason for retake request')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True
+    )
+    
+    # Admin fields
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='profiler_retake_reviews',
+        help_text='Admin who reviewed this request'
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text='Admin notes on approval/rejection'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    
+    # New session after approval
+    new_session = models.ForeignKey(
+        ProfilerSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='retake_from_request',
+        help_text='New session created after approval'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'profilerretakerequests'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Retake Request: {self.user.email} - {self.status}"
+    
+    def approve(self, admin_user, notes=''):
+        """Approve retake request."""
+        self.status = 'approved'
+        self.reviewed_by = admin_user
+        self.admin_notes = notes
+        self.reviewed_at = timezone.now()
+        self.save()
+    
+    def reject(self, admin_user, notes=''):
+        """Reject retake request."""
+        self.status = 'rejected'
+        self.reviewed_by = admin_user
+        self.admin_notes = notes
+        self.reviewed_at = timezone.now()
+        self.save()

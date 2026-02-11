@@ -25,7 +25,7 @@ const generateBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
   // Determine dashboard label based on context
   const dashboardLabelMap: Record<string, string> = {
     '/dashboard/student': 'Student Dashboard',
-    '/mentor/dashboard': 'Mentor Dashboard',
+    '/dashboard/mentor': 'Mentor Dashboard',
     '/dashboard/admin': 'Admin Dashboard',
     '/dashboard/director': 'Director Dashboard',
     '/dashboard/sponsor': 'Sponsor Dashboard',

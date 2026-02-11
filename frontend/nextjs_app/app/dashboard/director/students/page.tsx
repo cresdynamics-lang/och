@@ -6,7 +6,7 @@ import { StudentsManagementClient } from './students-client'
 
 export default function StudentsPage() {
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <StudentsManagementClient />
       </DirectorLayout>

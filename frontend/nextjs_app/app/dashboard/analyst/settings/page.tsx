@@ -11,11 +11,8 @@ export default function AnalystSettingsRedirect() {
 
   useEffect(() => {
     if (!isLoading) {
-      if (user?.uuid_id) {
-        // Redirect to the correct analyst settings path
-        router.replace(`/analyst/${user.uuid_id}/settings`);
-      } else if (user) {
-        // Fallback: try to use id if uuid_id is not available
+      if (user) {
+        // Use id as string for the analyst settings path
         router.replace(`/analyst/${user.id}/settings`);
       } else {
         // User not authenticated, redirect to login

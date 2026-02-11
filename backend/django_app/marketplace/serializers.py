@@ -229,12 +229,14 @@ class JobApplicationSerializer(serializers.ModelSerializer):
 
     def get_applicant_name(self, obj):
         try:
+            if obj.applicant is None:
+                return '—'
             return obj.applicant.get_full_name() or obj.applicant.email
         except Exception:
-            return obj.applicant.email
+            return getattr(obj.applicant, 'email', '—') if obj.applicant else '—'
 
     def get_applicant_email(self, obj):
-        return obj.applicant.email
+        return getattr(obj.applicant, 'email', '—') if obj.applicant else '—'
 
 
 class JobApplicationCreateSerializer(serializers.ModelSerializer):

@@ -77,7 +77,7 @@ function RiskChip({ level }: { level: 'low' | 'medium' | 'high' }) {
   )
 }
 
-export function SponsorCohortRow({ cohort, selected, onSelect, currency = 'BWP' }: SponsorCohortRowProps) {
+export function SponsorCohortRow({ cohort, selected, onSelect, currency = 'Ksh' }: SponsorCohortRowProps) {
   return (
     <tr className={`hover:bg-och-midnight/80 group border-b border-och-steel/20 h-20 transition-all duration-200 ${
       selected ? 'ring-2 ring-och-mint/50 bg-och-mint/10' : ''

@@ -29,7 +29,7 @@ def director_students_list(request):
         
         students = User.objects.filter(
             id__in=student_user_ids,
-            account_status='active'
+            is_active=True
         ).order_by('-created_at')
         
         students_data = []
@@ -51,6 +51,7 @@ def director_students_list(request):
             
             students_data.append({
                 'id': student.id,
+                'uuid_id': str(student.uuid_id),
                 'email': student.email,
                 'first_name': student.first_name or '',
                 'last_name': student.last_name or '',
@@ -129,11 +130,16 @@ def link_students_to_sponsor(request):
                 'error': 'student_ids and sponsor_id are required'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Verify sponsor exists and has sponsor role
+        # Verify sponsor exists and has sponsor role (sponsor_id is uuid_id from frontend)
+        # Accept both 'sponsor_admin' and 'sponsor' roles (createsponsor uses 'sponsor')
         try:
-            sponsor = User.objects.get(id=sponsor_id, account_status='active')
-            sponsor_role = Role.objects.filter(name='sponsor_admin').first()
-            if not UserRole.objects.filter(user=sponsor, role=sponsor_role, is_active=True).exists():
+            sponsor = User.objects.get(uuid_id=sponsor_id, account_status='active')
+            has_sponsor_role = UserRole.objects.filter(
+                user=sponsor,
+                role__name__in=['sponsor_admin', 'sponsor'],
+                is_active=True
+            ).exists()
+            if not has_sponsor_role:
                 return Response({
                     'success': False,
                     'error': 'Invalid sponsor'
@@ -144,11 +150,11 @@ def link_students_to_sponsor(request):
                 'error': 'Sponsor not found'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # Create sponsor-student links
+        # Create sponsor-student links (use is_active=True; students may have pending_verification)
         created_count = 0
         for student_id in student_ids:
             try:
-                student = User.objects.get(id=student_id, account_status='active')
+                student = User.objects.get(uuid_id=student_id, is_active=True)
                 link, created = SponsorStudentLink.objects.get_or_create(
                     sponsor=sponsor,
                     student=student,
@@ -184,9 +190,9 @@ def link_students_to_sponsor(request):
 def sponsor_linked_students(request, sponsor_id):
     """Get students linked to a specific sponsor."""
     try:
-        # Verify sponsor exists
+        # Verify sponsor exists (sponsor_id is uuid_id from URL)
         try:
-            sponsor = User.objects.get(id=sponsor_id, account_status='active')
+            sponsor = User.objects.get(uuid_id=sponsor_id, account_status='active')
         except User.DoesNotExist:
             return Response({
                 'success': False,

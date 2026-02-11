@@ -19,7 +19,7 @@ interface Lesson {
 }
 
 export default function CurriculumLearnPage() {
-  const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defensive-security' : 'defensive-security';
+  const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defender' : 'defender';
 
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [currentLevel, setCurrentLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
@@ -29,9 +29,9 @@ export default function CurriculumLearnPage() {
   const [modules, setModules] = useState<any[]>([]);
 
   const levelNames = {
-    beginner: 'Beginner Level (Tier 2)',
-    intermediate: 'Intermediate Level (Tier 3)',
-    advanced: 'Advanced Level (Tier 4)'
+    beginner: 'Beginner Level Track',
+    intermediate: 'Intermediate Level',
+    advanced: 'Advanced Level'
   };
 
   const levelMap = {

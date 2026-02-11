@@ -22,7 +22,12 @@ export default function EditCohortPage() {
   const router = useRouter()
   const cohortId = params.id as string
   const { cohort, isLoading: loadingCohort, reload: reloadCohort } = useCohort(cohortId)
-  const { track, isLoading: loadingTrack } = useTrack(cohort?.track || '')
+  const trackId = cohort?.track != null
+    ? (typeof cohort.track === 'object' && cohort.track && 'id' in cohort.track
+        ? String((cohort.track as { id: string }).id)
+        : String(cohort.track))
+    : ''
+  const { track, isLoading: loadingTrack } = useTrack(trackId)
   const { updateCohort, isLoading: isUpdating, error: updateError } = useUpdateCohort()
 
   const [formData, setFormData] = useState<Partial<Cohort>>({
@@ -81,8 +86,13 @@ export default function EditCohortPage() {
     }
 
     try {
+      const trackValue =
+        cohort.track != null && typeof cohort.track === 'object' && cohort.track && 'id' in cohort.track
+          ? String((cohort.track as { id: string }).id)
+          : cohort.track != null
+            ? String(cohort.track)
+            : undefined
       const updateData: any = {
-        track: cohort.track, // Track is required by backend serializer
         name: formData.name.trim(),
         start_date: formData.start_date,
         end_date: formData.end_date,
@@ -91,6 +101,7 @@ export default function EditCohortPage() {
         mentor_ratio: formData.mentor_ratio,
         status: formData.status,
       }
+      if (trackValue) updateData.track = trackValue
 
       // Include seat pool if it has values
       if (seatPool.paid > 0 || seatPool.scholarship > 0 || seatPool.sponsored > 0) {
@@ -214,7 +225,14 @@ export default function EditCohortPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
                     <span className="text-och-steel">Track:</span>
-                    <span className="ml-2 text-white">{cohort.track_name || track?.name || 'N/A'}</span>
+                    <span className="ml-2 text-white">
+                    {cohort.track_name ||
+                      (cohort.track && typeof cohort.track === 'object' && cohort.track !== null && 'name' in cohort.track
+                        ? String((cohort.track as { name: string }).name)
+                        : null) ||
+                      track?.name ||
+                      'N/A'}
+                  </span>
                   </div>
                   <div>
                     <span className="text-och-steel">Mode:</span>
@@ -238,15 +256,9 @@ export default function EditCohortPage() {
               <div className="p-6 space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-4">Cohort Details</h2>
 
-                {error && (
+                {(error || updateError) && (
                   <div className="p-4 bg-och-orange/20 border border-och-orange rounded-lg text-och-orange">
-                    {error}
-                  </div>
-                )}
-
-                {updateError && (
-                  <div className="p-4 bg-och-orange/20 border border-och-orange rounded-lg text-och-orange">
-                    {updateError}
+                    {error || updateError}
                   </div>
                 )}
 

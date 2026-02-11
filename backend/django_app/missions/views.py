@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import Prefetch
 from .models import Mission, MissionAssignment, MissionSubmission
 from .serializers import MissionSerializer, MissionAssignmentSerializer, MissionSubmissionSerializer
 
@@ -16,6 +17,44 @@ class MissionViewSet(viewsets.ModelViewSet):
     queryset = Mission.objects.filter(is_active=True)
     serializer_class = MissionSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Mission.objects.filter(is_active=True)
+            .prefetch_related(
+                Prefetch(
+                    'assignments',
+                    queryset=MissionAssignment.objects.filter(assignment_type='cohort'),
+                )
+            )
+        )
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action in ('list', 'retrieve'):
+            if self.action == 'list':
+                qs = self.filter_queryset(self.get_queryset())
+                cohort_ids = list(
+                    MissionAssignment.objects.filter(
+                        mission__in=qs, assignment_type='cohort'
+                    ).values_list('cohort_id', flat=True).distinct()
+                )
+            else:
+                mission = self.get_object()
+                cohort_ids = list(
+                    MissionAssignment.objects.filter(
+                        mission=mission, assignment_type='cohort'
+                    ).values_list('cohort_id', flat=True).distinct()
+                )
+            if cohort_ids:
+                from programs.models import Cohort
+                context['cohort_map'] = {
+                    str(c.id): c.name
+                    for c in Cohort.objects.filter(id__in=cohort_ids)
+                }
+            else:
+                context['cohort_map'] = {}
+        return context
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -98,6 +137,48 @@ class MissionViewSet(viewsets.ModelViewSet):
         
         serializer = MissionSubmissionSerializer(submission)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sample_mission(request):
+    """
+    GET /api/v1/missions/sample
+    Get a sample mission for Foundations preview.
+    Returns a beginner-friendly mission without starting it.
+    """
+    try:
+        # Get a beginner-friendly sample mission
+        sample_mission = Mission.objects.filter(
+            difficulty=1,  # Beginner difficulty
+            mission_type='beginner',
+            is_active=True
+        ).order_by('?').first()
+        
+        # If no beginner mission, try any active mission
+        if not sample_mission:
+            sample_mission = Mission.objects.filter(
+                is_active=True
+            ).order_by('?').first()
+        
+        if not sample_mission:
+            return Response(
+                {'error': 'No sample mission available'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Return mission data (preview only, don't start it)
+        serializer = MissionSerializer(sample_mission)
+        return Response({
+            **serializer.data,
+            'preview_only': True,
+            'message': 'This is a preview. You will start missions after completing Foundations.'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to fetch sample mission: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
     
     @action(detail=True, methods=['get'])
     def progress(self, request, pk=None):

@@ -312,3 +312,51 @@ class DirectorMentorManagementViewSet(viewsets.ViewSet):
                 {'error': 'Cohort not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=True, methods=['get'], url_path='analytics')
+    def analytics(self, request, pk=None):
+        """GET /api/v1/director/mentors/{id}/analytics/ - Mentor analytics for director view."""
+        mentor = get_object_or_404(User, id=pk, is_mentor=True)
+        active_assignments = MentorAssignment.objects.filter(
+            mentor=mentor, active=True
+        ).select_related('cohort', 'cohort__track', 'cohort__track__program')
+        cohorts = list({a.cohort for a in active_assignments})
+        from programs.models import Enrollment
+        total_mentees = Enrollment.objects.filter(
+            cohort__in=cohorts, status='active'
+        ).count()
+        metrics = {
+            'total_mentees': total_mentees,
+            'active_cohorts': len(cohorts),
+            'session_completion_rate': 0,
+            'feedback_average': 0,
+            'mentee_completion_rate': 0,
+            'impact_score': 0,
+            'sessions_scheduled': 0,
+            'sessions_completed': 0,
+            'sessions_missed': 0,
+            'average_session_rating': 0,
+            'mentee_satisfaction_score': 0,
+        }
+        assignments_data = [
+            {
+                'id': str(a.id),
+                'cohort_id': str(a.cohort_id),
+                'cohort_name': a.cohort.name if a.cohort else '',
+                'role': a.role or 'support',
+                'mentees_count': Enrollment.objects.filter(cohort=a.cohort, status='active').count() if a.cohort else 0,
+                'start_date': a.cohort.start_date.isoformat() if a.cohort and getattr(a.cohort, 'start_date', None) else None,
+                'end_date': a.cohort.end_date.isoformat() if a.cohort and getattr(a.cohort, 'end_date', None) else None,
+            }
+            for a in active_assignments
+        ]
+        return Response({
+            'mentor_id': str(mentor.id),
+            'mentor_name': mentor.get_full_name() or mentor.email,
+            'metrics': metrics,
+            'assignments': assignments_data,
+            'cohorts': [{'id': str(c.id), 'name': c.name} for c in cohorts],
+            'reviews': [],
+            'mentee_goals': [],
+            'activity_over_time': [],
+        })

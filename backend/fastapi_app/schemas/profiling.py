@@ -49,6 +49,22 @@ class ProfilingSession(BaseModel):
     completed_at: Optional[datetime] = None
     scores: Optional[Dict[str, float]] = None
     recommended_track: Optional[str] = None
+    
+    # Anti-cheat fields (optional, added dynamically)
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    device_fingerprint: Optional[str] = None
+    response_times: Optional[List[Dict[str, Any]]] = None
+    suspicious_patterns: Optional[List[str]] = None
+    anti_cheat_score: Optional[float] = None
+    
+    # Telemetry and metadata (optional, added dynamically)
+    telemetry: Optional[Dict[str, Any]] = None
+    difficulty_verification: Optional[Dict[str, Any]] = None
+    reflection_responses: Optional[Dict[str, Any]] = None
+    
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class TrackRecommendation(BaseModel):

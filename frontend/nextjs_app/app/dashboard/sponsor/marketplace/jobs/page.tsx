@@ -268,10 +268,10 @@ export default function JobPostingsPage() {
   return (
     <div className="min-h-screen bg-och-midnight p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
+        <div className="mb-6 flex justify-between items-center gap-3">
           <div>
-            <h1 className="text-4xl font-bold mb-2 text-och-gold">Job Postings</h1>
-            <p className="text-och-steel">Manage your job postings and assignments.</p>
+            <h1 className="text-3xl sm:text-4xl font-bold mb-1 text-och-gold">Job postings</h1>
+            <p className="text-och-steel text-sm">Create roles and track applications.</p>
           </div>
           <Button
             variant="gold"
@@ -285,7 +285,6 @@ export default function JobPostingsPage() {
             Post New Job
           </Button>
         </div>
-
 
         {/* Form */}
         {showForm && (
@@ -425,90 +424,118 @@ export default function JobPostingsPage() {
 
         {/* Job List */}
         {loading ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">Loading job postings...</div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            Loading job postings…
           </Card>
         ) : error ? (
-          <Card className="p-8">
-            <div className="text-center text-red-400">{error}</div>
-          </Card>
+          <Card className="p-6 text-center text-red-400 text-sm">{error}</Card>
         ) : safeJobs.length === 0 ? (
-          <Card className="p-8">
-            <div className="text-center text-och-steel">
-              No job postings yet. Create your first posting to get started.
-            </div>
+          <Card className="p-6 text-center text-och-steel text-sm">
+            No job postings yet. Create your first posting to get started.
           </Card>
         ) : (
-          <div className="space-y-4">
-            {safeJobs.map((job) => (
-              <Card key={job.id} className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-2xl font-bold text-white">{job.title}</h3>
-                      <Badge variant={job.is_active ? 'mint' : 'steel'}>
-                        {job.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    <p className="text-och-steel mb-4">{job.description}</p>
-                    <div className="flex flex-wrap gap-4 text-sm text-och-steel">
-                      {job.location && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" />
-                          {job.location}
+          <Card className="p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-och-midnight/80 border-b border-och-steel/20 text-xs uppercase tracking-wide text-och-steel">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Title</th>
+                    <th className="px-4 py-3 text-left">Type</th>
+                    <th className="px-4 py-3 text-left">Location</th>
+                    <th className="px-4 py-3 text-left">Compensation</th>
+                    <th className="px-4 py-3 text-left">Deadline</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-och-steel/20">
+                  {safeJobs.map((job) => (
+                    <tr key={job.id} className="hover:bg-och-steel/10 transition-colors">
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold text-white">{job.title}</span>
+                          {job.required_skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {job.required_skills.slice(0, 3).map((skill) => (
+                                <Badge key={skill} variant="defender" className="text-[11px]">
+                                  {skill}
+                                </Badge>
+                              ))}
+                              {job.required_skills.length > 3 && (
+                                <Badge variant="steel" className="text-[11px]">
+                                  +{job.required_skills.length - 3}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {job.job_type.replace('_', ' ').toUpperCase()}
-                      </div>
-                      {(job.salary_min || job.salary_max) && (
-                        <div className="flex items-center gap-1">
-                          <DollarSign className="w-4 h-4" />
-                          {job.salary_min && job.salary_max
-                            ? `${job.salary_min} - ${job.salary_max} ${job.salary_currency}`
-                            : job.salary_min
-                            ? `${job.salary_min}+ ${job.salary_currency}`
-                            : `Up to ${job.salary_max} ${job.salary_currency}`}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {job.job_type.replace('_', ' ')}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {job.location || 'Remote / flexible'}
+                      </td>
+                      <td className="px-4 py-3 align-top text-och-steel">
+                        {(job.salary_min || job.salary_max) ? (
+                          <>
+                            {job.salary_min && job.salary_max
+                              ? `${job.salary_min} - ${job.salary_max} ${job.salary_currency}`
+                              : job.salary_min
+                                ? `${job.salary_min}+ ${job.salary_currency}`
+                                : `Up to ${job.salary_max} ${job.salary_currency}`}
+                          </>
+                        ) : (
+                          <span className="text-xs text-och-steel">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top text-xs text-och-steel">
+                        {job.application_deadline
+                          ? new Date(job.application_deadline).toLocaleDateString()
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        <Badge variant={job.is_active ? 'mint' : 'steel'} className="text-[11px]">
+                          {job.is_active ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 align-top text-right">
+                        <div className="inline-flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleViewApplications(job)}
+                            title="View applications"
+                          >
+                            <Users className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(job)}
+                            title="Edit job"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDelete(job.id)}
+                            title="Delete job"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
-                      )}
-                      {job.application_deadline && (
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          Deadline: {new Date(job.application_deadline).toLocaleDateString()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2 ml-4">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleViewApplications(job)}
-                      title="View Applications"
-                    >
-                      <Users className="w-4 h-4 mr-1" />
-                      Applications
-                    </Button>
-                    <Button variant="outline" onClick={() => handleEdit(job)}>
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button variant="outline" onClick={() => handleDelete(job.id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                {job.required_skills.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {job.required_skills.map((skill) => (
-                      <Badge key={skill} variant="defender">
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            ))}
-          </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )}
 
         {/* Applications Modal */}

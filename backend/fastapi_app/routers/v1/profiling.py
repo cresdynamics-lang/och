@@ -1,11 +1,12 @@
 """
 FastAPI router for AI profiling endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import List, Optional
 from uuid import UUID
 import time
 import logging
+import hashlib
 
 from schemas.profiling import (
     ProfilingSession, ProfilingResult, ProfilingProgress,
@@ -24,12 +25,74 @@ async def get_current_user_id(user_id: int = Depends(verify_token)) -> int:
 router = APIRouter(prefix="/profiling", tags=["ai-profiling"])
 
 
+def _detect_suspicious_patterns(session: ProfilingSession) -> List[str]:
+    """Detect suspicious patterns in responses."""
+    patterns = []
+    
+    if not hasattr(session, 'response_times') or not session.response_times or len(session.response_times) < 3:
+        return patterns
+    
+    response_times = session.response_times
+    
+    # Check for too-fast responses (less than 2 seconds average)
+    avg_time = sum(r.get('time_ms', 0) for r in response_times) / len(response_times)
+    if avg_time < 2000:  # Less than 2 seconds per question
+        patterns.append('too_fast')
+    
+    # Check for identical response times (possible automation)
+    if len(response_times) >= 5:
+        times = [r.get('time_ms', 0) for r in response_times[-5:]]
+        if len(set(times)) == 1:  # All identical
+            patterns.append('identical_response_times')
+    
+    # Check for too-consistent timing (within 100ms of each other)
+    if len(response_times) >= 5:
+        times = [r.get('time_ms', 0) for r in response_times[-5:]]
+        time_range = max(times) - min(times) if times else 0
+        if time_range < 100:  # All within 100ms
+            patterns.append('too_consistent_timing')
+    
+    # Check for identical responses (same option selected repeatedly)
+    if len(session.responses) >= 5:
+        recent_responses = session.responses[-5:]
+        selected_options = [r.selected_option for r in recent_responses]
+        if len(set(selected_options)) == 1:  # All same option
+            patterns.append('identical_responses')
+    
+    return patterns
+
+
+def _calculate_anti_cheat_score(session: ProfilingSession) -> float:
+    """Calculate anti-cheat confidence score (0-100, higher = more suspicious)."""
+    score = 0.0
+    
+    if not hasattr(session, 'suspicious_patterns') or not session.suspicious_patterns:
+        return score
+    
+    # Base score from suspicious patterns
+    pattern_weights = {
+        'too_fast': 30.0,
+        'identical_response_times': 25.0,
+        'too_consistent_timing': 20.0,
+        'identical_responses': 25.0,
+    }
+    
+    for pattern in session.suspicious_patterns:
+        score += pattern_weights.get(pattern, 10.0)
+    
+    # Cap at 100
+    return min(100.0, score)
+
+
 # In-memory session storage (in production, use Redis or database)
 _active_sessions = {}
 
 
 @router.post("/session/start", response_model=dict)
-async def start_profiling_session(user_id: int = Depends(get_current_user_id)):
+async def start_profiling_session(
+    request: Request,
+    user_id: int = Depends(get_current_user_id)
+):
     """
     Start a new AI profiling session for a user.
 
@@ -53,6 +116,24 @@ async def start_profiling_session(user_id: int = Depends(get_current_user_id)):
 
     # Create new session
     session = enhanced_profiling_service.create_session(user_id)
+    
+    # Anti-cheat: Capture IP and user agent
+    client_host = request.client.host if request.client else None
+    user_agent = request.headers.get('user-agent', '')
+    
+    # Store anti-cheat metadata
+    session.ip_address = client_host
+    session.user_agent = user_agent
+    
+    # Generate device fingerprint
+    fingerprint_data = f"{client_host}:{user_agent}:{user_id}"
+    session.device_fingerprint = hashlib.sha256(fingerprint_data.encode()).hexdigest()[:32]
+    
+    # Initialize anti-cheat tracking
+    session.response_times = []
+    session.suspicious_patterns = []
+    session.anti_cheat_score = 0.0
+    
     _active_sessions[session.id] = session
 
     progress = enhanced_profiling_service.get_progress(session)
@@ -198,6 +279,27 @@ async def submit_question_response(
         if response.question_id == question_id:
             response.response_time_ms = response_time_ms
             break
+    
+    # Anti-cheat: Track response times and detect suspicious patterns
+    if not hasattr(session, 'response_times'):
+        session.response_times = []
+    
+    session.response_times.append({
+        'question_id': question_id,
+        'time_ms': response_time_ms,
+        'timestamp': time.time()
+    })
+    
+    # Detect suspicious patterns
+    suspicious_patterns = _detect_suspicious_patterns(session)
+    if suspicious_patterns:
+        if not hasattr(session, 'suspicious_patterns'):
+            session.suspicious_patterns = []
+        session.suspicious_patterns.extend(suspicious_patterns)
+        session.suspicious_patterns = list(set(session.suspicious_patterns))  # Remove duplicates
+    
+    # Calculate anti-cheat score
+    session.anti_cheat_score = _calculate_anti_cheat_score(session)
 
     progress = enhanced_profiling_service.get_progress(session)
 
@@ -453,8 +555,8 @@ async def get_enhanced_profiling_questions(user_id: int = Depends(get_current_us
             "cyber_aptitude": "Cyber Aptitude (logic, patterns, reasoning)",
             "technical_exposure": "Technical Exposure (experience scoring)",
             "scenario_preference": "Scenario Preferences (choose-your-path)",
-            "work_style": "Work Style & Behavioral Profile",
-            "difficulty_selection": "Difficulty Level Self-Selection"
+            "work_style": "Work Style & Behavioral Profile"
+            # "difficulty_selection": "Difficulty Level Self-Selection" # Removed per user request
         },
         "questions": questions,
         "total_questions": sum(len(qs) for qs in questions.values())
@@ -592,6 +694,13 @@ async def complete_enhanced_profiling_session(
 
         # Mark session as completed
         session.completed_at = result.completed_at
+        
+        # Create first portfolio entry (Value Statement) automatically
+        try:
+            enhanced_profiling_service.create_value_statement_portfolio_entry(session, result)
+        except Exception as e:
+            logger.warning(f"Failed to create portfolio entry for value statement: {e}")
+            # Don't fail the entire completion if portfolio creation fails
 
         return result
 

@@ -89,14 +89,14 @@ interface ConnectionsRowProps {
 }
 
 export function ConnectionsRow({
-  employeesCount = 47,
-  employeesShared = 23,
-  directorName = 'Jane Smith',
-  directorTrack = 'Cyber Leadership',
-  financeTotal = 75000,
-  financePending = 3,
-  teamMembers = 3,
-  teamAdmins = 2,
+  employeesCount = 0,
+  employeesShared,
+  directorName,
+  directorTrack,
+  financeTotal = 0,
+  financePending,
+  teamMembers,
+  teamAdmins,
 }: ConnectionsRowProps) {
   const handleRequestDirectorReport = async () => {
     try {
@@ -112,37 +112,37 @@ export function ConnectionsRow({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
       <ConnectionCard
         title="Employees"
-        value={`${employeesCount} Active`}
-        subtitle={`${employeesShared} profiles shared`}
+        value={`${employeesCount} active`}
+        subtitle={employeesShared != null ? `${employeesShared} profiles shared` : 'Sponsored students'}
         icon="👥"
-        action="View Roster"
+        action="View roster"
         to="/dashboard/sponsor/employees"
         color="blue"
       />
       <ConnectionCard
         title="Director"
-        value={directorName}
-        subtitle={directorTrack}
+        value={directorName ?? '—'}
+        subtitle={directorTrack ?? 'Program director'}
         icon="📊"
-        action="Request Report"
+        action="Request report"
         onClick={handleRequestDirectorReport}
         color="indigo"
       />
       <ConnectionCard
         title="Finance"
-        value={`BWP ${(financeTotal / 1000).toFixed(0)}K`}
-        subtitle={`${financePending} invoices pending`}
+        value={financeTotal > 0 ? `Ksh ${(financeTotal / 1000).toFixed(0)}K` : '—'}
+        subtitle={financePending != null ? `${financePending} pending` : 'Billing & invoices'}
         icon="💰"
-        action="Request Refund"
+        action="Finance"
         to="/dashboard/sponsor/finance"
         color="emerald"
       />
       <ConnectionCard
         title="Team"
-        value={`${teamMembers} Members`}
-        subtitle={`${teamAdmins} admins, ${teamMembers - teamAdmins} viewer${teamMembers - teamAdmins !== 1 ? 's' : ''}`}
+        value={teamMembers != null ? `${teamMembers} members` : 'Team'}
+        subtitle={teamMembers != null && teamAdmins != null ? `${teamAdmins} admins` : 'Manage access'}
         icon="👥"
-        action="Manage Team"
+        action="Manage team"
         to="/dashboard/sponsor/team"
         color="purple"
       />

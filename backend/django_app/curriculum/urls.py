@@ -45,7 +45,21 @@ urlpatterns = [
     path('tier2/tracks/<str:code>/submit-reflection', views.Tier2SubmitReflectionView.as_view(), name='tier2-submit-reflection'),
     path('tier2/tracks/<str:code>/submit-mini-mission', views.Tier2SubmitMiniMissionView.as_view(), name='tier2-submit-mini-mission'),
     path('tier2/tracks/<str:code>/complete', views.Tier2CompleteView.as_view(), name='tier2-complete'),
-    
+    path('tier2/tracks/<str:code>/feedback', views.Tier2MentorFeedbackView.as_view(), name='tier2-feedback'),
+    path('tier2/tracks/<str:code>/sample-report', views.Tier2SampleMissionReportView.as_view(), name='tier2-sample-report'),
+    path('tier2/cohort-progress/', views.Tier2CohortProgressView.as_view(), name='tier2-cohort-progress'),
+    # Tier 3 (Intermediate Tracks) endpoints
+    path('tier3/tracks/<str:code>/status', views.Tier3TrackStatusView.as_view(), name='tier3-status'),
+    path('tier3/tracks/<str:code>/complete', views.Tier3CompleteView.as_view(), name='tier3-complete'),
+    # Tier 4 (Advanced Tracks) endpoints
+    path('tier4/tracks/<str:code>/status', views.Tier4TrackStatusView.as_view(), name='tier4-status'),
+    path('tier4/tracks/<str:code>/complete', views.Tier4CompleteView.as_view(), name='tier4-complete'),
+    # Tier 5 (Mastery Tracks) endpoints
+    path('tier5/tracks/<str:code>/status', views.Tier5TrackStatusView.as_view(), name='tier5-status'),
+    path('tier5/tracks/<str:code>/complete', views.Tier5CompleteView.as_view(), name='tier5-complete'),
+    path('bookmarks/', views.LessonBookmarkView.as_view(), name='lesson-bookmark-list'),
+    path('lessons/<uuid:lesson_id>/bookmark/', views.LessonBookmarkView.as_view(), name='lesson-bookmark-detail'),
+
     # Tier 6 (Cross-Track Programs) endpoints
     path('cross-track/', views.CrossTrackProgramsView.as_view(), name='cross-track-programs'),
     path('cross-track/<str:code>/', views.CrossTrackProgramDetailView.as_view(), name='cross-track-program-detail'),

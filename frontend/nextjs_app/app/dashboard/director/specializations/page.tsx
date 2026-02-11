@@ -19,8 +19,8 @@ export default function SpecializationsPage() {
 
   const fetchSpecializations = async () => {
     try {
-      const data = await apiGateway.get('/specializations/')
-      setSpecializations(data.results || data.data || data || [])
+      const data = await apiGateway.get('/specializations/') as any
+      setSpecializations(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch specializations:', error)
     } finally {
@@ -30,7 +30,7 @@ export default function SpecializationsPage() {
 
   if (isLoading) {
     return (
-      <RouteGuard allowedRoles={['program_director', 'admin']}>
+      <RouteGuard requiredRoles={['program_director', 'admin']}>
         <DirectorLayout>
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-defender"></div>
@@ -41,7 +41,7 @@ export default function SpecializationsPage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -167,8 +167,8 @@ function CreateSpecializationModal({ onClose, onSuccess }: CreateSpecializationM
 
   const fetchTracks = async () => {
     try {
-      const data = await apiGateway.get('/tracks/')
-      setTracks(data.results || data.data || data || [])
+      const data = await apiGateway.get('/tracks/') as any
+      setTracks(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch tracks:', error)
     }

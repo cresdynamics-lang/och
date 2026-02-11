@@ -117,6 +117,12 @@ def _assign_user_role(user, role_name='student'):
         defaults={'is_active': True}
     )
 
+    # Keep is_mentor flag in sync for mentor role so that mentor-only
+    # queries (e.g. cohort mentor assignment, auto-match) work correctly.
+    if mapped_role == 'mentor' and not getattr(user, 'is_mentor', False):
+        user.is_mentor = True
+        user.save(update_fields=['is_mentor'])
+
     print(f'Assigned role {role.name} to user {user.email}')
 
 # Backward compatibility
@@ -346,14 +352,20 @@ class LoginView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
-        email = data['email']
+        email = (data['email'] or '').strip().lower()
         password = data.get('password')
         code = data.get('code')
         device_fingerprint = data.get('device_fingerprint', 'unknown')
         device_name = data.get('device_name', 'Unknown Device')
         
+        if not email:
+            return Response(
+                {'detail': 'Email is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             _log_audit_event(None, 'login', 'user', 'failure', {'email': email})
             return Response(
@@ -415,11 +427,11 @@ class LoginView(APIView):
             trust_device(user, device_fingerprint, device_name, device_type, ip_address, user_agent, expires_days=365)
             device_trusted = True
         
-        # Check MFA requirement
+        # Check MFA requirement (mandatory for Finance/Finance Admin/Admin when MFA enabled)
         user_roles = UserRole.objects.filter(user=user, is_active=True)
         user_role_names = [ur.role.name for ur in user_roles]
-        primary_role = user_role_names[0] if user_role_names else None
-        
+        high_risk_roles = ['finance', 'finance_admin', 'admin']
+        primary_role = next((r for r in user_role_names if r in high_risk_roles), user_role_names[0] if user_role_names else None)
         mfa_required = requires_mfa(risk_score, primary_role, user) or user.mfa_enabled
         
         # If MFA required and not verified, return MFA challenge
@@ -869,13 +881,44 @@ class MeView(APIView):
         formatted_consents = []
         for scope in consent_scopes:
             formatted_consents.append(scope)
-        
-        return Response({
+
+        # Sponsor users: include sponsor_organizations (from org_id or OrganizationMember) so team/invite works
+        sponsor_organizations = []
+        try:
+            from organizations.models import Organization, OrganizationMember
+            sponsor_orgs = list(
+                Organization.objects.filter(
+                    org_type='sponsor',
+                    organizationmember__user=user
+                ).distinct()
+            )
+            if getattr(user, 'org_id', None) and hasattr(user.org_id, 'org_type') and user.org_id.org_type == 'sponsor':
+                if user.org_id not in sponsor_orgs:
+                    sponsor_orgs.append(user.org_id)
+            for org in sponsor_orgs:
+                try:
+                    member = OrganizationMember.objects.get(organization=org, user=user)
+                    role = member.role
+                except OrganizationMember.DoesNotExist:
+                    role = 'admin'
+                sponsor_organizations.append({
+                    'id': str(org.id),
+                    'name': org.name,
+                    'slug': org.slug,
+                    'role': role,
+                })
+        except Exception:
+            pass
+
+        payload = {
             'user': user_response,
             'roles': roles,
             'consent_scopes': formatted_consents,
             'entitlements': entitlements,
-        }, status=status.HTTP_200_OK)
+        }
+        if sponsor_organizations:
+            payload['sponsor_organizations'] = sponsor_organizations
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class ProfileView(APIView):

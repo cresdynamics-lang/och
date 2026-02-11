@@ -27,18 +27,54 @@ class Mission(models.Model):
         ('capstone', 'Capstone'),
     ]
     
+    TIER_CHOICES = [
+        ('beginner', 'Beginner'),
+        ('intermediate', 'Intermediate'),
+        ('advanced', 'Advanced'),
+        ('mastery', 'Mastery'),
+    ]
+    
+    TRACK_CHOICES = [
+        ('defender', 'Defender'),
+        ('offensive', 'Offensive'),
+        ('grc', 'GRC'),
+        ('innovation', 'Innovation'),
+        ('leadership', 'Leadership'),
+    ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=50, unique=True, db_index=True, blank=True, null=True, help_text='Unique mission code like "SIEM-03"')
     track_id = models.CharField(max_length=50, blank=True, null=True, help_text='Track identifier like SOC_DEFENSE')
+    track = models.CharField(max_length=20, choices=TRACK_CHOICES, blank=True, null=True, db_index=True, help_text='Track: defender/offensive/grc/innovation/leadership')
     module_id = models.UUIDField(blank=True, null=True, help_text='UUID of curriculum module')
     title = models.CharField(max_length=255)
     description = models.TextField()
+    story = models.TextField(blank=True, help_text='Mission narrative/story context')
+    story_narrative = models.TextField(blank=True, help_text='Alternative field for story narrative')
+    objectives = models.JSONField(default=list, blank=True, help_text='Array of mission objectives/learning outcomes')
+    competencies = models.JSONField(default=list, help_text='Array of competencies required/assessed')
     difficulty = models.IntegerField(choices=DIFFICULTY_CHOICES, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    tier = models.CharField(max_length=20, choices=TIER_CHOICES, blank=True, null=True, db_index=True, help_text='Tier: beginner/intermediate/advanced/mastery')
     mission_type = models.CharField(max_length=20, choices=MISSION_TYPE_CHOICES, default='intermediate')
     requires_mentor_review = models.BooleanField(default=False, help_text='Requires $7 tier mentor review')
     requires_lab_integration = models.BooleanField(default=False, help_text='Linked to external lab')
     estimated_duration_min = models.IntegerField(validators=[MinValueValidator(1)])
+    time_constraint_hours = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1)], help_text='Time-bound mission deadline in hours (24-168 hours)')
     skills_tags = models.JSONField(default=list, help_text='Array of skill tags')
     subtasks = models.JSONField(default=list, help_text='Array of mission subtasks with id, title, description, order_index')
+    recipe_recommendations = models.JSONField(default=list, blank=True, help_text='Array of recipe slugs/IDs recommended for this mission')
+    success_criteria = models.JSONField(default=dict, blank=True, help_text='Success criteria: {technical_accuracy: str, completeness: str, best_practices: str, documentation: str}')
+    rubric_id = models.UUIDField(null=True, blank=True, db_index=True, help_text='UUID of rubric for scoring')
+    branching_paths = models.JSONField(default=dict, blank=True, help_text='Decision points structure: {subtask_id: {decision_id: str, choices: [], consequences: {}}}')
+    hints = models.JSONField(default=list, blank=True, help_text='Hints structure: [{subtask_id: int, hint_text: str, hint_level: int}]')
+    # Mastery-level enhancements
+    templates = models.JSONField(default=list, blank=True, help_text='Professional templates: [{type: str, url: str, description: str}]')
+    ideal_path = models.JSONField(default=dict, blank=True, help_text='Ideal mission path for comparison: {subtask_id: {decision_id: str, choice_id: str, rationale: str}}')
+    presentation_required = models.BooleanField(default=False, help_text='If True, mission requires presentation submission (Mastery/Capstone)')
+    # Escalation events for Mastery missions
+    escalation_events = models.JSONField(default=list, blank=True, help_text='Escalation events: [{subtask_id: int, event_type: str, description: str, triggers: [], consequences: {}}]')
+    # Environmental cues for Mastery missions
+    environmental_cues = models.JSONField(default=list, blank=True, help_text='Environmental cues: [{subtask_id: int, cue_type: str, description: str, location: str, significance: str}]')
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_missions', db_column='created_by', to_field='uuid_id')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -49,7 +85,9 @@ class Mission(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['track_id', 'is_active']),
+            models.Index(fields=['track', 'tier', 'is_active']),
             models.Index(fields=['mission_type', 'difficulty']),
+            models.Index(fields=['code']),
             models.Index(fields=['is_active']),
         ]
     

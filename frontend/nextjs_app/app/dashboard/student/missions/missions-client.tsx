@@ -62,7 +62,7 @@ interface StudentProfile {
 
 export default function MissionsClient() {
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth()
 
   // State management
   const [missions, setMissions] = useState<Mission[]>([])
@@ -196,17 +196,24 @@ export default function MissionsClient() {
     router.push(`/dashboard/student/missions/${missionId}`)
   }
 
-  // Render loading state
-  if (profileLoading) {
+  // Wait for auth or profile to load before checking authentication
+  if (authLoading || profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-och-mint" />
       </div>
-    )
+    );
   }
 
-  // Render not authenticated state
-  if (!isAuthenticated) {
+  // Check for token even if isAuthenticated is false (might be loading)
+  const hasToken = typeof window !== 'undefined' && (
+    localStorage.getItem('access_token') ||
+    document.cookie.includes('access_token=')
+  );
+
+  // Only show login prompt if auth has finished loading AND there's no token
+  // If auth is still loading or token exists, allow access
+  if (!authLoading && !isAuthenticated && !hasToken) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <Card className="p-8 text-center">

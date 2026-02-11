@@ -13,17 +13,18 @@ class IsProgramDirector(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        # Check if user has program_director role
-        from users.models import UserRole, Role
-        director_role = Role.objects.filter(name='program_director').first()
-        if not director_role:
-            return False
+        # Use raw SQL to avoid UUID/bigint issues
+        from django.db import connection
         
-        return UserRole.objects.filter(
-            user=request.user,
-            role=director_role,
-            is_active=True
-        ).exists()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+                LIMIT 1
+            """, [request.user.id])
+            
+            return cursor.fetchone() is not None
 
 
 class IsDirectorOrAdmin(permissions.BasePermission):
@@ -37,17 +38,18 @@ class IsDirectorOrAdmin(permissions.BasePermission):
         if request.user.is_staff or request.user.is_superuser:
             return True
         
-        # Check if user has program_director role
-        from users.models import UserRole, Role
-        director_role = Role.objects.filter(name='program_director').first()
-        if not director_role:
-            return False
+        # Use raw SQL to avoid UUID/bigint issues
+        from django.db import connection
         
-        return UserRole.objects.filter(
-            user=request.user,
-            role=director_role,
-            is_active=True
-        ).exists()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+                LIMIT 1
+            """, [request.user.id])
+            
+            return cursor.fetchone() is not None
 
 
 class CanManageProgram(permissions.BasePermission):
@@ -81,4 +83,40 @@ class CanManageCohort(permissions.BasePermission):
             return True
         
         return DirectorService.can_manage_cohort(request.user, obj)
+
+
+def _is_director_or_admin(user):
+    """Return True if user is staff, superuser, or has program_director role."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT 1 FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.id
+            WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+            LIMIT 1
+        """, [user.id])
+        return cursor.fetchone() is not None
+
+
+class IsDirectorOrAdminOrMentorCohortsReadOnly(permissions.BasePermission):
+    """Directors/admins get full access; mentors get list/retrieve only for cohorts they're assigned to."""
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return True
+    
+    def has_object_permission(self, request, view, obj):
+        if _is_director_or_admin(request.user):
+            return True
+        from .models import MentorAssignment
+        return MentorAssignment.objects.filter(
+            cohort=obj,
+            mentor=request.user,
+            active=True
+        ).exists()
 

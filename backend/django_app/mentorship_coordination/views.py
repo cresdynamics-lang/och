@@ -90,6 +90,102 @@ def mentor_assignments_list(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def mentorship_registry(request):
+    """
+    GET /api/v1/mentorship/registry
+    Query mentor pool for auto-matching: availability, skills, track alignment, workload. Directors/admins only.
+    Query params: track_id (UUID), track_key (str), has_availability (true/false).
+    """
+    from programs.permissions import _is_director_or_admin
+    if not _is_director_or_admin(request.user):
+        return Response(
+            {'detail': 'Only directors or admins can query the mentorship registry.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    track_id = request.query_params.get('track_id')
+    track_key = request.query_params.get('track_key')
+    has_availability = request.query_params.get('has_availability', '').lower() == 'true'
+    if track_id and not track_key:
+        try:
+            from programs.models import Track
+            track = Track.objects.get(pk=track_id)
+            track_key = track.key
+        except Exception:
+            pass
+    mentors_qs = User.objects.filter(is_mentor=True, is_active=True).annotate(
+        cohort_count=Count('cohort_mentor_assignments', filter=Q(cohort_mentor_assignments__active=True), distinct=True)
+    ).distinct()
+    if track_key:
+        mentors_qs = mentors_qs.filter(track_key=track_key)
+    if has_availability:
+        mentors_qs = mentors_qs.exclude(mentor_availability={}).exclude(mentor_availability__isnull=True)
+    mentors_qs = mentors_qs.order_by('cohort_count', 'email')[:200]
+    results = []
+    for u in mentors_qs:
+        results.append({
+            'id': u.id,
+            'uuid_id': str(u.uuid_id),
+            'email': u.email,
+            'first_name': u.first_name or '',
+            'last_name': u.last_name or '',
+            'name': (u.get_full_name() or u.email or '').strip(),
+            'track_key': u.track_key or '',
+            'mentor_availability': u.mentor_availability or {},
+            'mentor_specialties': getattr(u, 'mentor_specialties', None) or [],
+            'mentor_capacity_weekly': getattr(u, 'mentor_capacity_weekly', None) or 0,
+            'cohort_count': getattr(u, 'cohort_count', 0) or 0,
+        })
+    return Response({'results': results, 'count': len(results)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mentor_capstones(request, mentor_id):
+    """
+    GET /api/v1/mentors/{mentor_id}/capstones
+    List capstone projects pending scoring for this mentor. Query params: status (e.g. pending_scoring).
+    """
+    if str(request.user.id) != str(mentor_id):
+        return Response({'error': 'You can only view your own capstones'}, status=status.HTTP_403_FORBIDDEN)
+    status_filter = request.query_params.get('status', 'pending_scoring')
+    try:
+        from missions.models import MissionSubmission
+        mentee_ids = list(
+            MenteeMentorAssignment.objects.filter(
+                mentor_id=mentor_id,
+                status='active'
+            ).values_list('mentee_id', flat=True)
+        )
+        if not mentee_ids:
+            return Response([])
+        mentee_uuids = list(User.objects.filter(id__in=mentee_ids).values_list('uuid_id', flat=True))
+        if not mentee_uuids:
+            return Response([])
+        qs = MissionSubmission.objects.filter(
+            student_id__in=mentee_uuids,
+            status='submitted',
+            assignment__mission__mission_type='capstone'
+        ).select_related('assignment', 'assignment__mission', 'student').order_by('-submitted_at')
+        if status_filter == 'pending_scoring':
+            qs = qs.filter(reviewed_at__isnull=True)
+        results = []
+        for sub in qs[:100]:
+            mission = sub.assignment.mission if sub.assignment else None
+            results.append({
+                'id': str(sub.id),
+                'title': mission.title if mission else 'Capstone',
+                'mentee_name': (getattr(sub.student, 'get_full_name', lambda: '')() or sub.student.email or '').strip(),
+                'submitted_at': sub.submitted_at.isoformat() if sub.submitted_at else sub.created_at.isoformat(),
+                'rubric_id': str(mission.id) if mission else None,
+            })
+        return Response(results)
+    except Exception as e:
+        logger.exception("mentor_capstones: %s", e)
+        return Response([])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def mentor_assigned_cohorts(request, mentor_id):
     """
     GET /api/v1/mentors/{mentor_id}/cohorts
@@ -286,6 +382,64 @@ def get_session_feedback(request, session_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def mentor_reviews_list(request):
+    """
+    GET /api/v1/mentorship/mentor-reviews
+    List mentor reviews (session feedback) for director Mentor Reviews dashboard.
+    Query params: mentor_id (optional), min_rating (optional).
+    """
+    mentor_id = request.query_params.get('mentor_id')
+    min_rating = request.query_params.get('min_rating')
+    qs = SessionFeedback.objects.select_related(
+        'mentor', 'mentee', 'session', 'session__assignment'
+    ).order_by('-submitted_at')
+    if mentor_id:
+        qs = qs.filter(mentor_id=mentor_id)
+    if min_rating is not None:
+        try:
+            qs = qs.filter(overall_rating__gte=int(min_rating))
+        except ValueError:
+            pass
+    reviews = []
+    for fb in qs:
+        cohort_id = None
+        cohort_name = None
+        assignment = getattr(fb.session, 'assignment', None) if fb.session else None
+        if assignment and getattr(assignment, 'cohort_id', None):
+            cohort_id = assignment.cohort_id
+            if cohort_id:
+                try:
+                    from programs.models import Cohort
+                    c = Cohort.objects.filter(id=cohort_id).first()
+                    cohort_name = c.name if c else None
+                except Exception:
+                    cohort_name = None
+        feedback_text = fb.additional_comments or ''
+        if fb.strengths:
+            feedback_text = (feedback_text + '\n\nStrengths: ' + fb.strengths).strip()
+        if fb.areas_for_improvement:
+            feedback_text = (feedback_text + '\n\nAreas for improvement: ' + fb.areas_for_improvement).strip()
+        reviews.append({
+            'id': str(fb.id),
+            'mentor_id': str(fb.mentor.id),
+            'mentor_name': fb.mentor.get_full_name() or fb.mentor.email,
+            'mentor_email': fb.mentor.email,
+            'student_id': str(fb.mentee.id),
+            'student_name': fb.mentee.get_full_name() or fb.mentee.email,
+            'student_email': fb.mentee.email,
+            'cohort_id': cohort_id,
+            'cohort_name': cohort_name,
+            'rating': fb.overall_rating,
+            'feedback': feedback_text or '',
+            'reviewed_at': fb.submitted_at.isoformat(),
+            'director_comments': [],
+            'status': 'approved',
+        })
+    return Response({'reviews': reviews})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def mentor_feedback_summary(request, mentor_id):
     """
     GET /api/v1/mentors/{mentor_id}/feedback-summary
@@ -443,7 +597,7 @@ def mentor_mentee_talentscope(request, mentor_id, mentee_id):
 
     # Missions completed (approved)
     for row in MissionSubmission.objects.filter(
-        user=mentee,
+        student=mentee,
         status='approved',
         created_at__date__gte=start,
         created_at__date__lte=today
@@ -500,9 +654,13 @@ def mentor_mentee_talentscope(request, mentor_id, mentee_id):
             behavior_type__in=['engagement_level', 'collaboration']
         ).count()
 
+    # Count mission submissions where a mentor/overall score exists.
+    # We intentionally avoid touching AI feedback tables here so this
+    # endpoint works even if those migrations haven't been applied yet.
     mission_scores = MissionSubmission.objects.filter(
-        user=mentee
-    ).filter(Q(ai_score__isnull=False) | Q(mentor_score__isnull=False)).count()
+        student=mentee,
+        score__isnull=False,
+    ).count()
 
     # Default advanced fields from snapshot when available
     core_readiness_score = float(latest_snapshot.core_readiness_score) if latest_snapshot else None
@@ -559,94 +717,130 @@ def mentor_cohort_missions(request, mentor_id):
     if str(request.user.id) != str(mentor_id):
         return Response({'error': 'You can only access your own missions view'}, status=status.HTTP_403_FORBIDDEN)
 
-    mentor = get_current_mentor(request.user)
-
-    # Get cohorts assigned to this mentor
     try:
-        from programs.models import MentorAssignment, Cohort
-        from missions.models import Mission
-        
-        cohort_ids = MentorAssignment.objects.filter(
-            mentor=mentor, 
-            active=True
-        ).values_list('cohort_id', flat=True)
-        
+        mentor = get_current_mentor(request.user)
+    except Exception as e:
+        return Response(
+            {'error': 'Not authorized as mentor', 'detail': str(e)},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        from programs.models import MentorAssignment, Track
+        from missions.models import Mission, MissionAssignment
+
+        # MentorAssignment has cohort = ForeignKey(Cohort); use cohort_id for raw FK value
+        cohort_ids = list(
+            MentorAssignment.objects.filter(
+                mentor=mentor,
+                active=True
+            ).values_list('cohort_id', flat=True)
+        )
+
         if not cohort_ids:
             return Response({
                 'results': [],
                 'count': 0,
+                'total': 0,
                 'page': 1,
                 'page_size': 20,
                 'has_next': False,
                 'has_previous': False
             })
-        
-        # Get tracks from assigned cohorts
-        cohorts = Cohort.objects.filter(id__in=cohort_ids).select_related('track')
-        track_ids = [cohort.track_id for cohort in cohorts if cohort.track_id]
-        
-        if not track_ids:
+
+        mission_ids = list(
+            MissionAssignment.objects.filter(
+                assignment_type='cohort',
+                cohort_id__in=cohort_ids
+            ).values_list('mission_id', flat=True).distinct()
+        )
+
+        if not mission_ids:
             return Response({
                 'results': [],
                 'count': 0,
+                'total': 0,
                 'page': 1,
                 'page_size': 20,
                 'has_next': False,
                 'has_previous': False
             })
-        
-        # Get missions for these tracks
+
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 20))
         page = max(page, 1)
         page_size = min(max(page_size, 1), 100)
         offset = (page - 1) * page_size
-        
-        # Build query
-        qs = Mission.objects.filter(track_id__in=track_ids)
-        
-        # Apply filters
+
+        qs = Mission.objects.filter(is_active=True, id__in=mission_ids)
+
         difficulty = request.query_params.get('difficulty')
         if difficulty and difficulty != 'all':
-            qs = qs.filter(difficulty=difficulty)
-        
-        track_key = request.query_params.get('track')
-        if track_key and track_key != 'all':
-            qs = qs.filter(track_key=track_key)
-        
+            diff_map = {
+                'beginner': 1, 'intermediate': 2, 'advanced': 3,
+                'expert': 4, 'capstone': 5, 'master': 5
+            }
+            diff_val = diff_map.get(difficulty.lower()) if isinstance(difficulty, str) else None
+            if diff_val is None:
+                try:
+                    diff_val = int(difficulty)
+                except (ValueError, TypeError):
+                    pass
+            if diff_val is not None:
+                qs = qs.filter(difficulty=diff_val)
+        track_filter = request.query_params.get('track')
+        if track_filter and track_filter != 'all':
+            qs = qs.filter(track_id=track_filter)
+
         search = request.query_params.get('search')
         if search:
             qs = qs.filter(
                 Q(title__icontains=search) |
-                Q(code__icontains=search) |
                 Q(description__icontains=search)
             )
-        
+
         total = qs.count()
-        missions = qs.order_by('code', 'title')[offset:offset + page_size]
-        
-        # Build track lookup for context
-        from programs.models import Track
-        tracks = Track.objects.filter(id__in=track_ids).select_related('program')
-        track_lookup = {}
-        for track in tracks:
-            track_lookup[str(track.id)] = {
-                'name': track.name,
-                'key': track.key,
-                'program_id': str(track.program_id) if track.program_id else None,
-                'program_name': track.program.name if track.program else None,
-            }
-        
-        # Serialize missions
-        from missions.serializers import MissionSerializer
-        serializer = MissionSerializer(
-            missions, 
-            many=True,
-            context={'track_lookup': track_lookup, 'request': request}
-        )
-        
+        missions = list(qs.order_by('title')[offset:offset + page_size])
+
+        # Build response without MissionSerializer to avoid any serializer/context issues
+        track_keys = list({m.track_id for m in missions if m.track_id})
+        track_names = {}
+        if track_keys:
+            for t in Track.objects.filter(key__in=track_keys).select_related('program'):
+                prog = getattr(t, 'program', None)
+                track_names[t.key] = {
+                    'name': getattr(t, 'name', '') or '',
+                    'key': getattr(t, 'key', '') or '',
+                    'program_name': getattr(prog, 'name', None) if prog else None,
+                }
+
+        results = []
+        for m in missions:
+            track_info = track_names.get(m.track_id or '', {}) or {}
+            results.append({
+                'id': str(m.id),
+                'title': m.title,
+                'description': getattr(m, 'description', '') or '',
+                'difficulty': m.difficulty,
+                'mission_type': getattr(m, 'mission_type', '') or m.difficulty,
+                'type': getattr(m, 'mission_type', '') or '',
+                'estimated_duration_min': getattr(m, 'estimated_duration_min', 0) or 0,
+                'estimated_time_minutes': getattr(m, 'estimated_duration_min', 0) or 0,
+                'is_active': getattr(m, 'is_active', True),
+                'track_id': m.track_id or '',
+                'track_name': track_info.get('name', '') or '',
+                'program_name': track_info.get('program_name', '') or '',
+                'skills_tags': getattr(m, 'skills_tags', []) or [],
+                'subtasks': getattr(m, 'subtasks', []) or [],
+            })
+            # Frontend may expect difficulty as string for display
+            diff_val = results[-1]['difficulty']
+            if isinstance(diff_val, int):
+                diff_names = {1: 'beginner', 2: 'intermediate', 3: 'advanced', 4: 'expert', 5: 'capstone'}
+                results[-1]['difficulty'] = diff_names.get(diff_val, str(diff_val))
+
         return Response({
-            'results': serializer.data,
+            'results': results,
             'count': total,
             'total': total,
             'page': page,
@@ -654,13 +848,15 @@ def mentor_cohort_missions(request, mentor_id):
             'has_next': offset + page_size < total,
             'has_previous': page > 1
         })
-        
+
     except Exception as e:
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
-        logger.error(f"Error fetching mentor cohort missions: {e}")
+        tb = traceback.format_exc()
+        logger.error(f"Error fetching mentor cohort missions: {e}\n{tb}")
         return Response(
-            {'error': 'Failed to fetch missions'},
+            {'error': 'Failed to fetch missions', 'detail': str(e), 'traceback': tb},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -1147,7 +1343,7 @@ def mentor_mentees(request, mentor_id):
                 try:
                     from missions.models import MissionSubmission
                     missions_completed = MissionSubmission.objects.filter(
-                        user=mentee,
+                        student=mentee,
                         status='approved'
                     ).count()
                 except Exception as mission_err:
@@ -1349,7 +1545,7 @@ def mentee_cockpit(request, mentee_id):
     
     # Quick actions
     pending_missions = MissionSubmission.objects.filter(
-        user=mentee,
+        student=mentee,
         status__in=['submitted', 'ai_reviewed']
     ).order_by('-submitted_at')[:3]
     
@@ -2856,6 +3052,122 @@ def get_student_mentor(request, mentee_id):
         )
     except Exception as e:
         logger.error(f"Error fetching mentor for mentee {mentee_id}: {str(e)}", exc_info=True)
+        return Response(
+            {'error': 'Internal server error'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_student_mentorship_assignments(request, mentee_id):
+    """
+    GET /api/v1/mentorship/mentees/{mentee_id}/assignments
+    Return ALL active mentorship assignments for a student, including
+    mentor and cohort details for each assignment.
+    """
+    try:
+        # Students can only view their own assignments
+        mentee_id_int = int(mentee_id)
+        user_id_int = int(request.user.id)
+
+        if user_id_int != mentee_id_int:
+            return Response(
+                {'error': 'You can only view your own mentorship assignments'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        results = []
+
+        try:
+            # Primary source of truth for "cohorts the student is in" is Enrollment
+            from programs.models import Enrollment, MentorAssignment
+
+            mentee = User.objects.get(id=mentee_id_int)
+
+            enrollments = Enrollment.objects.filter(
+                user_id=mentee_id_int,
+                status__in=['active', 'completed']
+            ).select_related('cohort')
+
+            # Track which (cohort, mentor) pairs we've already emitted to avoid duplicates
+            seen_pairs = set()
+
+            for enrollment in enrollments:
+                cohort = enrollment.cohort
+                if not cohort:
+                    continue
+
+                cohort_key = str(cohort.id)
+
+                # Find all active mentors for this cohort
+                mentor_assignments = MentorAssignment.objects.filter(
+                    cohort=cohort,
+                    active=True
+                ).select_related('mentor')
+
+                for mentor_assignment in mentor_assignments:
+                    mentor = mentor_assignment.mentor
+                    if not mentor:
+                        continue
+
+                    pair_key = (cohort_key, str(mentor.id))
+                    if pair_key in seen_pairs:
+                        continue
+                    seen_pairs.add(pair_key)
+
+                    # Ensure there is a MenteeMentorAssignment for this mentee+mentor pair
+                    assignment, created = MenteeMentorAssignment.objects.get_or_create(
+                        mentee=mentee,
+                        mentor=mentor,
+                        defaults={
+                            'status': 'active',
+                            'cohort_id': cohort_key,
+                        }
+                    )
+
+                    # Do not overwrite cohort_id on the assignment; a single dyad can span multiple cohorts.
+                    assigned_ts = assignment.assigned_at or mentor_assignment.assigned_at
+
+                    results.append({
+                        'id': str(assignment.id),
+                        'status': assignment.status,
+                        'assigned_at': assigned_ts.isoformat() if assigned_ts else None,
+                        'cohort_id': cohort_key,
+                        'cohort_name': cohort.name,
+                        'mentor_id': str(mentor.id),
+                        'mentor_name': mentor.get_full_name() or mentor.email,
+                    })
+
+        except Exception as e:
+            # If Enrollment / MentorAssignment lookup fails, fall back to raw MenteeMentorAssignment records
+            logger.warning(f"Falling back to direct MenteeMentorAssignment lookup for mentee {mentee_id_int}: {e}")
+            assignments = MenteeMentorAssignment.objects.filter(
+                mentee_id=mentee_id_int,
+                status__in=['active', 'pending']
+            ).select_related('mentor')
+
+            for assignment in assignments:
+                mentor = assignment.mentor
+                results.append({
+                    'id': str(assignment.id),
+                    'status': assignment.status,
+                    'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                    'cohort_id': assignment.cohort_id,
+                    'cohort_name': None,
+                    'mentor_id': str(mentor.id),
+                    'mentor_name': mentor.get_full_name() or mentor.email,
+                })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+    except (ValueError, AttributeError):
+        return Response(
+            {'error': 'Invalid request parameters'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Error fetching mentorship assignments for mentee {mentee_id}: {e}", exc_info=True)
         return Response(
             {'error': 'Internal server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

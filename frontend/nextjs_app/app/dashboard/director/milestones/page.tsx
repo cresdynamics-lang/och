@@ -19,8 +19,8 @@ export default function MilestonesPage() {
 
   const fetchMilestones = async () => {
     try {
-      const data = await apiGateway.get('/milestones/')
-      setMilestones(data.results || data.data || data || [])
+      const data = await apiGateway.get('/milestones/') as any
+      setMilestones(data?.results || data?.data || data || [])
     } catch (error) {
       console.error('Failed to fetch milestones:', error)
     } finally {
@@ -30,7 +30,7 @@ export default function MilestonesPage() {
 
   if (isLoading) {
     return (
-      <RouteGuard allowedRoles={['program_director', 'admin']}>
+      <RouteGuard requiredRoles={['program_director', 'admin']}>
         <DirectorLayout>
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-defender"></div>
@@ -41,7 +41,7 @@ export default function MilestonesPage() {
   }
 
   return (
-    <RouteGuard allowedRoles={['program_director', 'admin']}>
+    <RouteGuard requiredRoles={['program_director', 'admin']}>
       <DirectorLayout>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">
@@ -173,10 +173,10 @@ function CreateMilestoneModal({ onClose, onSuccess }: CreateMilestoneModalProps)
 
   const fetchTracks = async () => {
     try {
-      const data = await apiGateway.get('/tracks/')
+      const data = await apiGateway.get('/tracks/') as any
       console.log('Tracks API response:', data)
       // Handle different response formats
-      const tracksArray = data.results || data.data || data || []
+      const tracksArray = data?.results || data?.data || data || []
       console.log('Tracks array:', tracksArray)
       setTracks(tracksArray)
     } catch (error) {

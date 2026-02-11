@@ -6,15 +6,8 @@ import { RecipeGenerator } from '@/components/admin/RecipeGenerator';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect } from 'react';
-import { missionsClient } from '@/services/missionsClient';
+import { missionsClient, type MissionTemplate } from '@/services/missionsClient';
 import { recipesClient } from '@/services/recipesClient';
-
-interface Mission {
-  id: string;
-  title: string;
-  track_code: string;
-  instructions?: string;
-}
 
 interface EnvStatus {
   grok: boolean;
@@ -23,7 +16,7 @@ interface EnvStatus {
 }
 
 export default function AdminRecipesPage() {
-  const [missions, setMissions] = useState<Mission[]>([]);
+  const [missions, setMissions] = useState<MissionTemplate[]>([]);
   const [recipes, setRecipes] = useState<any[]>([]);
   const [filteredRecipes, setFilteredRecipes] = useState<any[]>([]);
   const [contextLinks, setContextLinks] = useState<any[]>([]);

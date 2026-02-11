@@ -136,6 +136,13 @@ class FoundationsProgress(models.Model):
     drop_off_module_id = models.UUIDField(null=True, blank=True, help_text='Module where user dropped off')
     last_accessed_module_id = models.UUIDField(null=True, blank=True)
     
+    # Interaction tracking
+    interactions = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Interaction tracking: {mission_preview: {viewed: bool, time_spent_seconds: int}, recipe_demo: {...}, track_preview: {...}, portfolio_preview: {...}}'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

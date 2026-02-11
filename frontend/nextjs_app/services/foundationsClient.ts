@@ -32,6 +32,13 @@ export interface FoundationsStatus {
   confirmed_track_key?: string
   started_at?: string
   completed_at?: string
+  total_time_spent_minutes?: number
+  interactions?: Record<string, {
+    viewed: boolean
+    time_spent_seconds: number
+    completed_at?: string
+    last_viewed_at?: string
+  }>
 }
 
 export const foundationsClient = {
@@ -47,15 +54,24 @@ export const foundationsClient = {
    * Complete a Foundations module
    * POST /api/v1/foundations/modules/{module_id}/complete
    */
-  async completeModule(moduleId: string, watchPercentage?: number): Promise<{
+  async completeModule(moduleId: string, watchPercentage?: number, interactionData?: { type: string; timeSpent: number }): Promise<{
     success: boolean
     completion_percentage: number
     is_complete: boolean
     status: string
+    total_time_spent_minutes?: number
   }> {
-    return apiGateway.post(`/foundations/modules/${moduleId}/complete`, {
+    const payload: any = {
       watch_percentage: watchPercentage || 100
-    })
+    }
+    if (interactionData) {
+      payload.interaction = {
+        type: interactionData.type,
+        timeSpent: interactionData.timeSpent
+      }
+      payload.time_spent_seconds = interactionData.timeSpent
+    }
+    return apiGateway.post(`/foundations/modules/${moduleId}/complete`, payload)
   },
 
   /**

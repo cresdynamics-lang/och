@@ -480,6 +480,8 @@ def student_analytics(request):
     GET /api/v1/coaching/student-analytics
     POST /api/v1/coaching/student-analytics (create)
     PUT /api/v1/coaching/student-analytics (update)
+    
+    Includes profiler results for coaching OS guidance.
     """
     user = request.user
 
@@ -487,7 +489,49 @@ def student_analytics(request):
         try:
             analytics = StudentAnalytics.objects.get(user=user)
             serializer = StudentAnalyticsSerializer(analytics)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            data = serializer.data
+            
+            # Add profiler results for coaching OS
+            try:
+                from profiler.models import ProfilerSession, ProfilerResult
+                profiler_session = ProfilerSession.objects.filter(
+                    user=user,
+                    status__in=['finished', 'locked']
+                ).order_by('-completed_at').first()
+                
+                if profiler_session:
+                    profiler_result = None
+                    try:
+                        profiler_result = profiler_session.result
+                    except ProfilerResult.DoesNotExist:
+                        pass
+                    
+                    data['profiler'] = {
+                        'completed': True,
+                        'session_id': str(profiler_session.id),
+                        'completed_at': profiler_session.completed_at.isoformat() if profiler_session.completed_at else None,
+                        'scores': {
+                            'aptitude': float(profiler_session.aptitude_score) if profiler_session.aptitude_score else None,
+                            'overall': float(profiler_result.overall_score) if profiler_result else None,
+                            'behavioral': float(profiler_result.behavioral_score) if profiler_result else None,
+                        },
+                        'recommended_track_id': str(profiler_session.recommended_track_id) if profiler_session.recommended_track_id else None,
+                        'track_confidence': float(profiler_session.track_confidence) if profiler_session.track_confidence else None,
+                        'strengths': profiler_session.strengths if profiler_session.strengths else (profiler_result.strengths if profiler_result else []),
+                        'areas_for_growth': profiler_result.areas_for_growth if profiler_result else [],
+                        'behavioral_profile': profiler_session.behavioral_profile if profiler_session.behavioral_profile else (profiler_result.behavioral_traits if profiler_result else {}),
+                        'future_you_persona': profiler_session.futureyou_persona if profiler_session.futureyou_persona else {},
+                    }
+                else:
+                    data['profiler'] = {
+                        'completed': False,
+                        'message': 'Profiler not completed yet'
+                    }
+            except Exception as e:
+                logger.warning(f"Could not fetch profiler data for coaching OS: {e}")
+                data['profiler'] = None
+            
+            return Response(data, status=status.HTTP_200_OK)
         except StudentAnalytics.DoesNotExist:
             return Response({'message': 'Student analytics not found'}, status=status.HTTP_404_NOT_FOUND)
 

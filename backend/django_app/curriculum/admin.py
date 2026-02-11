@@ -7,14 +7,15 @@ from .models import (
     StrategicSession, Lesson, ModuleMission,
     RecipeRecommendation, UserTrackProgress, UserModuleProgress,
     UserLessonProgress, UserMissionProgress, CurriculumActivity,
-    UserTrackEnrollment, UserContentProgress
+    UserTrackEnrollment, UserContentProgress,
+    UserLessonBookmark, CurriculumMentorFeedback,
 )
 
 
 @admin.register(CurriculumTrack)
 class CurriculumTrackAdmin(admin.ModelAdmin):
-    list_display = ['title', 'slug', 'order_number', 'is_active', 'created_at']
-    list_filter = ['is_active', 'order_number']
+    list_display = ['title', 'slug', 'tier', 'progression_mode', 'order_number', 'is_active', 'created_at']
+    list_filter = ['is_active', 'tier', 'progression_mode', 'order_number']
     search_fields = ['title', 'slug', 'description']
     readonly_fields = ['created_at', 'updated_at']
     ordering = ['order_number', 'title']
@@ -98,6 +99,25 @@ class UserMissionProgressAdmin(admin.ModelAdmin):
     raw_id_fields = ['user', 'module_mission']
     readonly_fields = ['updated_at']
     ordering = ['-updated_at']
+
+
+@admin.register(UserLessonBookmark)
+class UserLessonBookmarkAdmin(admin.ModelAdmin):
+    list_display = ['user', 'lesson', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['user__email', 'lesson__title']
+    raw_id_fields = ['user', 'lesson']
+    ordering = ['-created_at']
+
+
+@admin.register(CurriculumMentorFeedback)
+class CurriculumMentorFeedbackAdmin(admin.ModelAdmin):
+    list_display = ['mentor', 'learner', 'lesson', 'module', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['mentor__email', 'learner__email', 'comment_text']
+    raw_id_fields = ['mentor', 'learner', 'lesson', 'module']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
 
 
 @admin.register(CurriculumActivity)

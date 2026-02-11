@@ -50,8 +50,8 @@ export function getSettingsPath(user: User | null): string {
       return roleName?.toLowerCase().trim() === 'analyst'
     })
     
-    if (hasAnalystRole && user.uuid_id) {
-      return `/analyst/${user.uuid_id}/settings`
+    if (hasAnalystRole && user.id) {
+      return `/analyst/${user.id}/settings`
     }
 
     // Check for finance role - uses different path structure
@@ -60,8 +60,8 @@ export function getSettingsPath(user: User | null): string {
       return roleName?.toLowerCase().trim() === 'finance'
     })
     
-    if (hasFinanceRole && user.uuid_id) {
-      return `/finance/${user.uuid_id}/settings`
+    if (hasFinanceRole && user.id) {
+      return `/finance/${user.id}/settings`
     }
   }
 
@@ -84,8 +84,8 @@ export function getProfilePath(user: User | null): string {
       return roleName?.toLowerCase().trim() === 'analyst'
     })
     
-    if (hasAnalystRole && user.uuid_id) {
-      return `/analyst/${user.uuid_id}/settings?tab=profile`
+    if (hasAnalystRole && user.id) {
+      return `/analyst/${user.id}/settings?tab=profile`
     }
 
     // Check for finance role - uses different path structure
@@ -94,8 +94,8 @@ export function getProfilePath(user: User | null): string {
       return roleName?.toLowerCase().trim() === 'finance'
     })
     
-    if (hasFinanceRole && user.uuid_id) {
-      return `/finance/${user.uuid_id}/settings`
+    if (hasFinanceRole && user.id) {
+      return `/finance/${user.id}/settings`
     }
   }
 
@@ -121,7 +121,7 @@ export function isRoleDashboardPath(path: string, role: string): boolean {
   const roleMap: Record<string, string> = {
     'student': '/dashboard/student',
     'mentee': '/dashboard/student',
-    'mentor': '/mentor/dashboard',
+    'mentor': '/dashboard/mentor',
     'admin': '/dashboard/admin',
     'program_director': '/dashboard/director',
     'director': '/dashboard/director',
@@ -142,7 +142,7 @@ export function isRoleDashboardPath(path: string, role: string): boolean {
 export function getDashboardContextFromPath(pathname: string): string | null {
   const dashboardPatterns = [
     '/dashboard/student',
-    '/mentor/dashboard',
+    '/dashboard/mentor',
     '/dashboard/admin',
     '/dashboard/director',
     '/dashboard/sponsor',

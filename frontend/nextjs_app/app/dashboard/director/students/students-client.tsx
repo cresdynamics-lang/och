@@ -5,6 +5,7 @@ import { GraduationCap, Link, Search, Filter, UserPlus } from 'lucide-react'
 
 interface Student {
   id: string
+  uuid_id: string
   email: string
   first_name: string
   last_name: string
@@ -37,14 +38,14 @@ export function StudentsManagementClient() {
 
   const fetchStudents = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/users?role=student', {
+      const response = await fetch('http://localhost:8000/api/v1/director/students/', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
       })
       if (response.ok) {
         const data = await response.json()
-        setStudents(data.results || [])
+        setStudents(data.students || [])
       }
     } catch (error) {
       console.error('Failed to fetch students:', error)
@@ -53,7 +54,7 @@ export function StudentsManagementClient() {
 
   const fetchSponsors = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/users?role=sponsor_admin', {
+      const response = await fetch('http://localhost:8000/api/v1/users/?role=sponsor', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
@@ -73,9 +74,12 @@ export function StudentsManagementClient() {
     if (!selectedSponsor || selectedStudents.length === 0) return
 
     try {
-      const response = await fetch('/api/v1/director/students/link-sponsor', {
+      const response = await fetch('http://localhost:8000/api/v1/director/students/link-sponsor/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
         body: JSON.stringify({
           student_ids: selectedStudents,
           sponsor_id: selectedSponsor
@@ -152,7 +156,7 @@ export function StudentsManagementClient() {
                     checked={selectedStudents.length === filteredStudents.length && filteredStudents.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedStudents(filteredStudents.map(s => s.id))
+                        setSelectedStudents(filteredStudents.map(s => s.uuid_id))
                       } else {
                         setSelectedStudents([])
                       }
@@ -172,12 +176,12 @@ export function StudentsManagementClient() {
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
-                      checked={selectedStudents.includes(student.id)}
+                      checked={selectedStudents.includes(student.uuid_id)}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedStudents([...selectedStudents, student.id])
+                          setSelectedStudents([...selectedStudents, student.uuid_id])
                         } else {
-                          setSelectedStudents(selectedStudents.filter(id => id !== student.id))
+                          setSelectedStudents(selectedStudents.filter(id => id !== student.uuid_id))
                         }
                       }}
                       className="rounded border-och-steel/20"
@@ -234,7 +238,7 @@ export function StudentsManagementClient() {
                 >
                   <option value="">Choose a sponsor...</option>
                   {sponsors.map((sponsor) => (
-                    <option key={sponsor.id} value={sponsor.id}>
+                    <option key={sponsor.uuid_id} value={sponsor.uuid_id}>
                       {sponsor.first_name && sponsor.last_name 
                         ? `${sponsor.first_name} ${sponsor.last_name} (${sponsor.email})`
                         : sponsor.email

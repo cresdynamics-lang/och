@@ -6,16 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Loader2, Wand2, AlertCircle, CheckCircle } from 'lucide-react';
 import { recipesClient } from '@/services/recipesClient';
-
-interface Mission {
-  id: string;
-  title: string;
-  track_code: string;
-  instructions?: string;
-}
+import { type MissionTemplate } from '@/services/missionsClient';
 
 interface RecipeGeneratorProps {
-  missions: Mission[];
+  missions: MissionTemplate[];
   onRecipeGenerated?: () => void;
 }
 
@@ -40,13 +34,13 @@ export function RecipeGenerator({ missions, onRecipeGenerated }: RecipeGenerator
       }
 
       // Get track_code from mission, fallback to track_key or default
-      const trackCode = mission.track_code || mission.track_key || 'GENERAL';
+      const trackCode = (mission as any).track_code || mission.track_key || 'GENERAL';
 
       const recipe = await recipesClient.generateRecipe({
         track_code: trackCode,
         level: 'beginner', // Default level
         skill_code: (trackCode || 'general').toLowerCase() + '_skills',
-        goal_description: mission.instructions || mission.description || `Generate a recipe for ${mission.title}`,
+        goal_description: mission.description || `Generate a recipe for ${mission.title}`,
       });
 
       setGeneratedRecipes([recipe]);
@@ -87,7 +81,7 @@ export function RecipeGenerator({ missions, onRecipeGenerated }: RecipeGenerator
                 <option value="">Choose a mission to generate recipes for...</option>
                 {missions.map(mission => (
                   <option key={mission.id} value={mission.id}>
-                    {mission.title} {mission.track_code ? `(${mission.track_code})` : mission.track_key ? `(${mission.track_key})` : ''}
+                    {mission.title} {(mission as any).track_code ? `(${(mission as any).track_code})` : mission.track_key ? `(${mission.track_key})` : ''}
                   </option>
                 ))}
               </select>

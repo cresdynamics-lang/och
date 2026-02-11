@@ -111,20 +111,46 @@ interface SidebarProps {
 export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, reloadUser } = useAuth();
   const [trackProgress, setTrackProgress] = useState<UserTrackProgress | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  
+  // Refresh user data on mount to ensure we have latest track_key
+  useEffect(() => {
+    if (reloadUser && user?.id) {
+      // Only reload if we don't have track_key or it's still 'defender' (might be stale)
+      if (!user.track_key || user.track_key.toLowerCase() === 'defender') {
+        console.log('[EnhancedSidebar] Reloading user data to get latest track_key...');
+        reloadUser();
+      }
+    }
+  }, [reloadUser, user?.id]);
 
-  // Get track theme
-  const recommendedTrack = user?.recommended_track || '';
-  const trackKey = recommendedTrack.toLowerCase();
+  // Get track theme - check multiple locations for track data
+  const trackKey = (user?.track_key || 
+                    user?.recommended_track || 
+                    user?.role_specific_data?.student?.track_key ||
+                    '').toLowerCase();
+  
+  // Debug logging to see what track data we have
+  if (user && (!user.track_key || trackKey === 'defender')) {
+    console.log('[EnhancedSidebar] User track data:', {
+      track_key: user.track_key,
+      recommended_track: user.recommended_track,
+      role_specific_data: user.role_specific_data,
+      final_trackKey: trackKey,
+      user_id: user.id,
+      email: user.email
+    });
+  }
+  
   const theme = trackThemes[trackKey] || trackThemes.defender;
 
   // Fetch track progress
   useEffect(() => {
-    if (!user?.id || !recommendedTrack) {
+    if (!user?.id || !trackKey) {
       setLoadingProgress(false);
       return;
     }
@@ -153,7 +179,7 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
     };
 
     fetchProgress();
-  }, [user?.id, recommendedTrack]);
+  }, [user?.id, trackKey]);
 
   const mainNav = [
     { label: 'Control Center', icon: LayoutDashboard, href: '/dashboard/student' },
@@ -315,7 +341,7 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
       )}
 
       {/* ============ TRACK PROGRESS SECTION ============ */}
-      {!isCollapsed && recommendedTrack && (
+      {!isCollapsed && trackKey && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}

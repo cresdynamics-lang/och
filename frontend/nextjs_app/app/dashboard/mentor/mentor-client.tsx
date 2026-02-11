@@ -140,6 +140,11 @@ export default function MentorClient() {
   const upcomingSessions = sessions.length
 
   const atRiskMentees = useMemo(() => {
+    // CRITICAL: Ensure mentees is an array before calling slice/map
+    if (!mentees || !Array.isArray(mentees)) {
+      return []
+    }
+    
     const severity = (risk?: string) => (risk === 'high' ? 3 : risk === 'medium' ? 2 : 1)
     return mentees
       .slice()
@@ -201,7 +206,7 @@ export default function MentorClient() {
         <Card className="p-4">
           <div className="text-xs text-och-steel mb-1">At‑Risk Mentees</div>
           <div className="text-2xl font-bold text-white">
-            {mentees.filter(m => m.risk_level === 'high' || m.risk_level === 'medium').length}
+            {(mentees && Array.isArray(mentees) ? mentees.filter(m => m.risk_level === 'high' || m.risk_level === 'medium').length : 0)}
           </div>
           <div className="mt-2">
             <Link href="/dashboard/mentor/mentees">

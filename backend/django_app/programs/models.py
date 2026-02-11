@@ -269,7 +269,7 @@ class Enrollment(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name='enrollments')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enrollments', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enrollments', to_field='id', db_column='user_id')
     org = models.ForeignKey(
         'organizations.Organization',
         on_delete=models.SET_NULL,

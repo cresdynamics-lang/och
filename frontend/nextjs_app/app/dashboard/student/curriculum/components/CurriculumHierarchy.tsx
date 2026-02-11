@@ -57,8 +57,8 @@ export function CurriculumHierarchy({ currentTier, modules, onSelectLesson }: Cu
     'Foundations',
     'Beginner',
     'Intermediate',
-    'Mastery',
-    'Expert'
+    'Advanced',
+    'Mastery'
   ];
 
   const filteredModules = modules.filter(m => m.tier === selectedTier);
@@ -79,7 +79,7 @@ export function CurriculumHierarchy({ currentTier, modules, onSelectLesson }: Cu
             )}
           >
             <div className="text-[10px] uppercase tracking-widest font-bold mb-0.5 opacity-70">
-              Tier {tier}
+              {tierLabels[idx]} Level
             </div>
             <div className="text-sm font-bold tracking-wider">{tierLabels[idx]}</div>
           </button>

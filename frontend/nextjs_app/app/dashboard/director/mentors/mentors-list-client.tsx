@@ -356,95 +356,72 @@ export default function MentorsListClient() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                  {filteredMentors.map((mentor) => (
-                    <div
-                      key={mentor.id}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleMentorClick(mentor.id)
-                      }}
-                      className="cursor-pointer group"
-                    >
-                      <Card className="hover:bg-och-midnight/70 transition-all hover:scale-[1.02] hover:border-och-mint/30 h-full">
-                        <div>
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h3 className="text-lg font-semibold text-white mb-1">
-                              {mentor.name || mentor.email}
-                            </h3>
-                            <p className="text-sm text-och-steel">{mentor.email}</p>
-                          </div>
-                          <Badge
-                            variant={mentor.is_active && mentor.account_status === 'active' ? 'mint' : 'steel'}
-                          >
-                            {mentor.account_status || (mentor.is_active ? 'Active' : 'Inactive')}
-                          </Badge>
-                        </div>
-
-                        <div className="space-y-2">
-                          {mentor.mentor_specialties && mentor.mentor_specialties.length > 0 && (
-                            <div>
-                              <p className="text-xs text-och-steel mb-1">Specialties</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-och-steel/20">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Email</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Status</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Specialties</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Capacity</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Assignments</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-och-steel">Cohorts</th>
+                        <th className="text-right py-3 px-4 text-sm font-semibold text-och-steel">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredMentors.map((mentor) => (
+                        <tr
+                          key={mentor.id}
+                          onClick={() => handleMentorClick(mentor.id)}
+                          className="border-b border-och-steel/10 hover:bg-och-midnight/50 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3 px-4">
+                            <span className="font-medium text-white">{mentor.name || mentor.email}</span>
+                          </td>
+                          <td className="py-3 px-4 text-och-steel text-sm">{mentor.email}</td>
+                          <td className="py-3 px-4">
+                            <Badge
+                              variant={mentor.is_active && mentor.account_status === 'active' ? 'mint' : 'steel'}
+                            >
+                              {mentor.account_status || (mentor.is_active ? 'Active' : 'Inactive')}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4">
+                            {mentor.mentor_specialties && mentor.mentor_specialties.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
-                                {mentor.mentor_specialties.slice(0, 3).map((specialty, idx) => (
-                                  <Badge key={idx} variant="defender" className="text-xs">
-                                    {specialty}
-                                  </Badge>
+                                {mentor.mentor_specialties.slice(0, 2).map((s, idx) => (
+                                  <Badge key={idx} variant="defender" className="text-xs">{s}</Badge>
                                 ))}
-                                {mentor.mentor_specialties.length > 3 && (
-                                  <Badge variant="steel" className="text-xs">
-                                    +{mentor.mentor_specialties.length - 3}
-                                  </Badge>
+                                {mentor.mentor_specialties.length > 2 && (
+                                  <span className="text-och-steel text-xs">+{mentor.mentor_specialties.length - 2}</span>
                                 )}
                               </div>
-                            </div>
-                          )}
-
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-och-steel">Capacity</span>
-                            <span className="text-white font-medium">
-                              {mentor.mentor_capacity_weekly || 0} hours/week
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-och-steel">Active Assignments</span>
-                            <span className="text-white font-medium">{mentor.active_assignments || 0}</span>
-                          </div>
-
-                          {mentor.assigned_cohorts && mentor.assigned_cohorts.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-xs text-och-steel mb-2">Assigned Cohorts</p>
-                              <div className="space-y-1">
-                                {mentor.assigned_cohorts.slice(0, 3).map((cohort) => (
-                                  <div key={cohort.id} className="flex items-center justify-between text-xs">
-                                    <span className="text-och-steel truncate flex-1">{cohort.name}</span>
-                                    <Badge 
-                                      variant={cohort.role === 'primary' ? 'defender' : cohort.role === 'support' ? 'mint' : 'steel'} 
-                                      className="ml-2 text-xs"
-                                    >
-                                      {cohort.role}
-                                    </Badge>
-                                  </div>
-                                ))}
-                                {mentor.assigned_cohorts.length > 3 && (
-                                  <p className="text-xs text-och-steel">+{mentor.assigned_cohorts.length - 3} more</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="mt-4 pt-3 border-t border-och-steel/20">
-                            <span className="text-xs text-och-mint group-hover:text-och-mint/80">
-                              View Analytics →
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                    </div>
-                  ))}
+                            ) : (
+                              <span className="text-och-steel text-sm">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-white text-sm">{mentor.mentor_capacity_weekly ?? 0} hrs/wk</td>
+                          <td className="py-3 px-4 text-white text-sm">{mentor.active_assignments ?? 0}</td>
+                          <td className="py-3 px-4 text-och-steel text-sm max-w-[180px] truncate">
+                            {mentor.assigned_cohorts && mentor.assigned_cohorts.length > 0
+                              ? mentor.assigned_cohorts.map((c) => c.name).join(', ')
+                              : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleMentorClick(mentor.id)}
+                            >
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
 
                 {/* Pagination */}

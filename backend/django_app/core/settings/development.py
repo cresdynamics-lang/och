@@ -67,24 +67,28 @@ INSTALLED_APPS = INSTALLED_APPS + [
 ]
 
 # Use PostgreSQL for development (consistent with production)
-# TEMPORARILY USING SQLITE FOR LOCAL DEVELOPMENT
-# Override with environment variables if needed
-USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'true').lower() == 'true'  # Default to SQLite for local dev
+# DATABASES already configured in base.py with PostgreSQL
+# Override with USE_SQLITE=true environment variable if SQLite is needed for testing
+USE_SQLITE_FORCE = os.environ.get('USE_SQLITE', 'false').lower() == 'true'
 if USE_SQLITE_FORCE:
-    # Use SQLite for local development
+    # Use SQLite only if explicitly requested via environment variable
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-else:
-    # Use PostgreSQL configuration from base.py
-    pass  # DATABASES already configured in base.py
+# Otherwise, DATABASES from base.py (PostgreSQL) is used
+# Or set DATABASE_URL (see production.py) to override
+if not USE_SQLITE_FORCE and os.environ.get('DATABASE_URL'):
+    import dj_database_url
+    DATABASES = {'default': dj_database_url.config(default=os.environ.get('DATABASE_URL'), conn_max_age=600)}
 
-# Use SMTP backend with Resend for actual email sending
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Commented out - use for testing only
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Sends real emails via Resend
+# Use .env MAIL_* (SMTP) when MAIL_HOST is set; otherwise console for local testing
+if os.environ.get('MAIL_HOST'):
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Logging configuration for development
 LOGGING = {

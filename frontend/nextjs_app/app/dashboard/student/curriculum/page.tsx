@@ -26,6 +26,11 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { curriculumClient } from '@/services/curriculumClient';
 import Link from 'next/link';
+import {
+  BEGINNER_TRACKS_OVERVIEW,
+  BEGINNER_TRACK_CATEGORIES,
+  BEGINNER_TRACK_PLATFORM_OUTCOMES,
+} from '@/lib/beginnerTracksSpec';
 
 interface CurriculumTrack {
   id: string;
@@ -199,7 +204,7 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
 }
 
 export default function CurriculumHubPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [tracks, setTracks] = useState<CurriculumTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -248,7 +253,21 @@ export default function CurriculumHubPage() {
 
       } catch (err: any) {
         console.error('Failed to load tracks:', err);
-        setError('Failed to load curriculum tracks. Please try again.');
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to load curriculum tracks. Please try again.';
+        
+        if (err?.status === 404) {
+          errorMessage = 'Curriculum tracks endpoint not found. Please contact support.';
+        } else if (err?.status === 401 || err?.status === 403) {
+          errorMessage = 'Authentication required. Please log in again.';
+        } else if (err?.status === 0 || err?.message?.includes('fetch failed') || err?.message?.includes('Network')) {
+          errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
+        } else if (err?.message) {
+          errorMessage = `Error: ${err.message}`;
+        }
+        
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -261,18 +280,27 @@ export default function CurriculumHubPage() {
   const enrolledTracks = tracks.filter(track => track.user_enrollment.enrolled);
   const availableTracks = tracks.filter(track => !track.user_enrollment.enrolled);
 
-  if (loading) {
+  // Wait for auth to load before checking authentication
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-spin" />
-          <p className="text-slate-400">Loading Curriculum Hub...</p>
+          <p className="text-slate-400">{authLoading ? 'Loading...' : 'Loading Curriculum Hub...'}</p>
         </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
+  // Check for token even if isAuthenticated is false (might be loading)
+  const hasToken = typeof window !== 'undefined' && (
+    localStorage.getItem('access_token') ||
+    document.cookie.includes('access_token=')
+  );
+
+  // Only show login prompt if auth has finished loading AND there's no token
+  // If auth is still loading or token exists, allow access
+  if (!authLoading && !isAuthenticated && !hasToken) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <Card className="p-8 max-w-md text-center">
@@ -298,9 +326,23 @@ export default function CurriculumHubPage() {
           </div>
           <h2 className="text-2xl font-bold mb-2 text-white">Error Loading Tracks</h2>
           <p className="text-slate-400 mb-6">{error}</p>
-          <Button onClick={() => window.location.reload()} variant="outline">
-            Retry
-          </Button>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Retry
+            </Button>
+            <Button 
+              onClick={() => {
+                // Try reloading user data and then retry
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('access_token');
+                  window.location.href = '/login/student';
+                }
+              }} 
+              variant="ghost"
+            >
+              Log In Again
+            </Button>
+          </div>
         </Card>
       </div>
     );
@@ -343,6 +385,41 @@ export default function CurriculumHubPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        {/* Intermediate Level Tracks — spec-aligned intro */}
+        <Card className="p-6 bg-gradient-to-br from-indigo-500/10 via-slate-900/50 to-purple-500/10 border border-indigo-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <BookOpen className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-lg font-bold text-white">Intermediate Level Tracks</h2>
+            <Badge className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs">
+              First pathway after Foundations
+            </Badge>
+          </div>
+          <p className="text-sm text-slate-300 mb-2">
+            {BEGINNER_TRACKS_OVERVIEW.firstPathwayAfterFoundations}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.movement}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.introduces}{' '}
+            {BEGINNER_TRACKS_OVERVIEW.designPrinciples}
+          </p>
+          <p className="text-slate-400 text-xs mb-3">
+            {BEGINNER_TRACKS_OVERVIEW.purpose}
+          </p>
+          <blockquote className="border-l-2 border-indigo-500/50 pl-4 py-1 mb-4 text-indigo-200 font-medium text-sm">
+            &ldquo;{BEGINNER_TRACKS_OVERVIEW.tagline}&rdquo;
+          </blockquote>
+          <p className="text-xs text-slate-400 mb-3 font-medium">Five Beginner categories:</p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-slate-300 mb-4">
+            {BEGINNER_TRACK_CATEGORIES.map((cat) => (
+              <li key={cat.key} className="flex gap-2">
+                <span className="text-indigo-400 shrink-0">•</span>
+                <span><strong className="text-slate-200">{cat.name}</strong> — {cat.description}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-500">
+            Platform outcomes: {BEGINNER_TRACK_PLATFORM_OUTCOMES.join(' ')}
+          </p>
+        </Card>
 
         {/* Active Tracks */}
         {enrolledTracks.length > 0 && (

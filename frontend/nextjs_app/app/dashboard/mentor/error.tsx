@@ -30,7 +30,7 @@ export default function MentorDashboardError({
             Try again
           </Button>
           <Button
-            onClick={() => window.location.href = '/dashboard'}
+            onClick={() => window.location.href = '/dashboard/mentor'}
             variant="outline"
             className="flex-1"
           >

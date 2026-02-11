@@ -1,14 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { useTracks } from '@/hooks/usePrograms'
 
 export default function CreateMissionPage() {
   const router = useRouter()
+  const { tracks } = useTracks()
+  const trackList = useMemo(() => (Array.isArray(tracks) ? tracks : []), [tracks])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
@@ -149,14 +152,19 @@ export default function CreateMissionPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">Track ID</label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-white mb-2">Track (optional)</label>
+                  <select
                     value={formData.track_id}
                     onChange={(e) => setFormData({...formData, track_id: e.target.value})}
-                    placeholder="e.g., SOC_DEFENSE"
-                    className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white placeholder-och-steel/50 focus:border-och-mint focus:outline-none"
-                  />
+                    className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-mint focus:outline-none"
+                  >
+                    <option value="">Select a track (optional)</option>
+                    {trackList.map((t) => (
+                      <option key={t.id} value={String(t.id)}>
+                        {t.name} ({t.key})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
