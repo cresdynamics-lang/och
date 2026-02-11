@@ -222,6 +222,7 @@ export default function AIProfilerPage() {
   const [result, setResult] = useState<ProfilingResult | null>(null)
   const [blueprint, setBlueprint] = useState<OCHBlueprint | null>(null)
   const [loading, setLoading] = useState(true)
+  const [rejecting, setRejecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -567,15 +568,48 @@ export default function AIProfilerPage() {
     if (reloadUser) {
       await reloadUser()
     }
-    
+
     // Small delay to ensure state is updated
     await new Promise(resolve => setTimeout(resolve, 300))
-    
+
     // Redirect to dashboard with track recommendation (full page reload to ensure token is available)
     if (result?.primary_track) {
       window.location.href = `/dashboard/student?track=${result.primary_track.key}&welcome=true`
     } else {
       window.location.href = '/dashboard/student'
+    }
+  }
+
+  const handleRejectProfiling = async () => {
+    try {
+      setRejecting(true)
+
+      // Call Django endpoint to reset profiling_complete
+      const { apiGateway } = await import('@/services/apiGateway')
+      await apiGateway.post('/profiler/reset', {})
+      console.log('Profiling reset successfully')
+
+      // Refresh user auth state
+      if (reloadUser) {
+        await reloadUser()
+      }
+
+      // Reset all local state to start fresh
+      setSession(null)
+      setQuestions([])
+      setModuleProgress(null)
+      setCurrentModule(null)
+      setCurrentQuestionIndex(0)
+      setResponses({})
+      setResult(null)
+      setBlueprint(null)
+      setError(null)
+      setCurrentSection('welcome')
+      setRejecting(false)
+    } catch (err: any) {
+      console.error('Failed to reset profiling:', err)
+      setError('Failed to reset profiling. Please try again.')
+      setRejecting(false)
     }
   }
 
@@ -647,6 +681,8 @@ export default function AIProfilerPage() {
           result={result}
           blueprint={blueprint}
           onComplete={handleComplete}
+          onReject={handleRejectProfiling}
+          rejecting={rejecting}
         />
       )}
     </div>

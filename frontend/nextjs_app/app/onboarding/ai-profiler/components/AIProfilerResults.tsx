@@ -69,10 +69,13 @@ interface AIProfilerResultsProps {
   result: ProfilingResult
   blueprint?: OCHBlueprint | null
   onComplete: () => void
+  onReject: () => void
+  rejecting?: boolean
 }
 
-export default function AIProfilerResults({ result, blueprint, onComplete }: AIProfilerResultsProps) {
+export default function AIProfilerResults({ result, blueprint, onComplete, onReject, rejecting }: AIProfilerResultsProps) {
   const [showDetails, setShowDetails] = useState(false)
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false)
   const primaryRecommendation = result.recommendations[0]
   const otherRecommendations = result.recommendations.slice(1)
 
@@ -349,7 +352,7 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
             Start My OCH Journey
           </button>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <button
               onClick={() => setShowDetails(!showDetails)}
               className="text-gray-400 hover:text-white text-sm underline transition-colors"
@@ -360,6 +363,44 @@ export default function AIProfilerResults({ result, blueprint, onComplete }: AIP
             <p className="text-gray-500 text-xs">
               Assessment completed on {new Date(result.completed_at).toLocaleDateString()}
             </p>
+
+            {/* Reject / Redo Section */}
+            <div className="pt-4 border-t border-white/10 mt-4">
+              {!showRejectConfirm ? (
+                <button
+                  onClick={() => setShowRejectConfirm(true)}
+                  className="text-gray-500 hover:text-red-400 text-sm transition-colors"
+                >
+                  Not happy with the results? Retake assessment
+                </button>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 max-w-md mx-auto"
+                >
+                  <p className="text-white font-semibold mb-2">Retake Assessment?</p>
+                  <p className="text-gray-400 text-sm mb-4">
+                    This will clear your current results and let you redo the profiling from scratch. Your previous answers will not be saved.
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => setShowRejectConfirm(false)}
+                      className="px-5 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 text-sm font-medium transition-colors"
+                    >
+                      Keep Results
+                    </button>
+                    <button
+                      onClick={onReject}
+                      disabled={rejecting}
+                      className="px-5 py-2 rounded-lg bg-red-500/80 text-white hover:bg-red-500 text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {rejecting ? 'Resetting...' : 'Yes, Retake'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </div>
           </div>
         </motion.div>
 

@@ -981,6 +981,37 @@ def sync_fastapi_profiling(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reset_profiling(request):
+    """
+    POST /api/v1/profiler/reset
+    Reset profiling so the user can redo it.
+    Clears profiling_complete flag and session data.
+    """
+    user = request.user
+
+    user.profiling_complete = False
+    user.profiling_completed_at = None
+    user.profiling_session_id = None
+    user.save(update_fields=['profiling_complete', 'profiling_completed_at', 'profiling_session_id'])
+
+    # Clear any existing profiler sessions for this user
+    try:
+        from profiler.models import ProfilerSession
+        ProfilerSession.objects.filter(user=user).update(status='reset')
+    except Exception:
+        pass  # Model may not exist or may use different structure
+
+    logger.info(f"Profiling reset for user {user.id} ({user.email})")
+
+    return Response({
+        'status': 'reset',
+        'message': 'Profiling has been reset. You can now retake the assessment.',
+        'profiling_complete': False,
+    }, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_future_you_by_mentee(request, mentee_id):

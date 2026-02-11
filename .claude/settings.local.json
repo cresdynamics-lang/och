@@ -8,7 +8,19 @@
       "Bash(python manage.py shell:*)",
       "Bash(timeout 5 python manage.py runserver:*)",
       "Bash(python:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dir:*)",
+      "Bash(where:*)",
+      "Bash(export PGPASSWORD=\"brian001\")",
+      "Bash(\"C:/Program Files/PostgreSQL/17/bin/psql.exe\":*)",
+      "Bash(\"C:/Program Files/PostgreSQL/17/bin/psql.exe\" -h localhost -p 5432 -U postgres -c \"DROP DATABASE IF EXISTS ongozacyberhub;\")",
+      "Bash(\"C:/Program Files/PostgreSQL/17/bin/pg_restore.exe\":*)",
+      "Bash(\"C:/Program Files/PostgreSQL/17/bin/psql.exe\" -h localhost -p 5432 -U postgres -d ongozacyberhub -c \"SELECT column_name, data_type FROM information_schema.columns WHERE table_name=''audit_logs'' ORDER BY ordinal_position;\")",
+      "Bash(\"C:/Program Files/PostgreSQL/17/bin/psql.exe\" -h localhost -p 5432 -U postgres -d ongozacyberhub -c \"SELECT column_name, data_type FROM information_schema.columns WHERE table_name=''mfa_codes'' ORDER BY ordinal_position;\")",
+      "Bash(psql:*)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d ongozacyberhub -c \"SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_name IN \\(''device_trust'', ''user_sessions'', ''mfa_codes'', ''mfa_methods'', ''sso_connections'', ''audit_logs''\\) AND column_name = ''user_id'' ORDER BY table_name;\")",
+      "Bash(set:*)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\":*)"
     ]
   }
 }
