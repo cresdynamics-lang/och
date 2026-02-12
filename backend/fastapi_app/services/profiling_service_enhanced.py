@@ -28,6 +28,7 @@ from schemas.profiling_questions_enhanced import (
     ALL_PROFILING_QUESTIONS_ENHANCED, CATEGORY_WEIGHTS_ENHANCED,
     MIN_QUESTIONS_FOR_ASSESSMENT_ENHANCED
 )
+from services.gpt_profiler import gpt_profiler_service
 
 
 class EnhancedProfilingService:
@@ -49,9 +50,12 @@ class EnhancedProfilingService:
             "technical_exposure": [],
             "scenario_preference": [],
             "work_style": [],
-            "difficulty_selection": [],
+            # "difficulty_selection": [], # Removed per user request - difficulty selection question no longer shown
         }
         for q in self.questions:
+            # Skip difficulty_selection questions
+            if q.category == "difficulty_selection" or q.id == "difficulty_selection":
+                continue
             if q.category in modules:
                 modules[q.category].append(q.id)
         return modules
@@ -115,8 +119,12 @@ class EnhancedProfilingService:
             user_id=user_id,
             responses=[],
             started_at=datetime.utcnow(),
+            completed_at=None,
             scores=None,
-            recommended_track=None
+            recommended_track=None,
+            telemetry={},  # Initialize telemetry as empty dict
+            difficulty_verification=None,
+            reflection_responses=None
         )
         return session
 
@@ -150,7 +158,7 @@ class EnhancedProfilingService:
             "technical_exposure": "Technical Exposure",
             "scenario_preference": "Scenario Preferences",
             "work_style": "Work Style",
-            "difficulty_selection": "Difficulty Selection",
+            # "difficulty_selection": "Difficulty Selection", # Removed per user request
         }
         return category_to_module.get(category, "General")
 
@@ -220,7 +228,7 @@ class EnhancedProfilingService:
         ]
         
         # Get reflection responses
-        reflection = getattr(session, 'reflection_responses', {})
+        reflection = getattr(session, 'reflection_responses', None) or {}
         why_cyber = reflection.get("why_cyber", "")
         what_achieve = reflection.get("what_achieve", "")
         
@@ -284,11 +292,11 @@ class EnhancedProfilingService:
             # The actual creation should happen in Django after profiler completion
             logger.info(f"Value statement extracted for user {session.user_id}: {value_statement[:100]}...")
             
-            # Store value statement in session for Django to pick up
-            if not hasattr(session, 'portfolio_metadata'):
-                session.portfolio_metadata = {}
-            session.portfolio_metadata['value_statement'] = value_statement
-            session.portfolio_metadata['ready_for_portfolio'] = True
+            # Store value statement in session metadata
+            if not hasattr(session, 'telemetry'):
+                session.telemetry = {}
+            session.telemetry['value_statement'] = value_statement
+            session.telemetry['ready_for_portfolio'] = True
             
             return True
         except Exception as e:
@@ -737,7 +745,7 @@ class EnhancedProfilingService:
         Includes track recommendation, difficulty level, suggested starting point, and learning strategy.
         """
         primary_track = result.primary_track
-        difficulty_info = getattr(session, 'difficulty_verification', {})
+        difficulty_info = getattr(session, 'difficulty_verification', None) or {}
         selected_difficulty = difficulty_info.get('selected_difficulty', 'intermediate')
         value_statement = self.extract_value_statement(session)
         
@@ -1048,12 +1056,93 @@ class EnhancedProfilingService:
         primary_recommendation = recommendations[0]
         primary_track = OCH_TRACKS[primary_recommendation.track_key]
         secondary_track = OCH_TRACKS[recommendations[1].track_key] if len(recommendations) > 1 and recommendations[1].score >= 40 else None
-        
+
         session.recommended_track = primary_recommendation.track_key
         session.completed_at = datetime.utcnow()
+
+        # AI ENHANCEMENT: Generate personalized track descriptions
+        try:
+            logger.info("Enhancing recommendations with AI-powered personalization...")
+
+            # Convert responses to format expected by GPT service
+            response_data = [
+                {
+                    'question': self.question_map.get(r.question_id, {}).question if r.question_id in self.question_map else r.question_id,
+                    'answer': r.selected_option,
+                    'category': self.question_map.get(r.question_id, {}).category if r.question_id in self.question_map else 'unknown'
+                }
+                for r in session.responses
+            ]
+
+            # Convert tracks to format for GPT
+            available_tracks = [
+                {
+                    'key': track_key,
+                    'name': track_info.name,
+                    'description': track_info.description
+                }
+                for track_key, track_info in OCH_TRACKS.items()
+            ]
+
+            # Generate AI-powered enhancements
+            ai_recommendation = gpt_profiler_service.analyze_and_recommend(
+                responses=response_data,
+                available_tracks=available_tracks,
+                user_reflection=None
+            )
+
+            # Enhance primary recommendation with AI reasoning
+            if ai_recommendation.get('reasoning'):
+                primary_recommendation.reasoning.append(ai_recommendation['reasoning'])
+                logger.info(f"Added AI-generated reasoning to primary recommendation")
+
+            # Generate personalized descriptions for all tracks
+            personalized_descriptions = gpt_profiler_service.generate_personalized_descriptions(
+                responses=response_data,
+                tracks=available_tracks,
+                scores=scores
+            )
+
+            # Store personalized descriptions in session telemetry
+            if session.telemetry is None:
+                session.telemetry = {}
+            session.telemetry['ai_personalized_descriptions'] = personalized_descriptions
+            logger.info(f"Generated {len(personalized_descriptions)} personalized track descriptions")
+
+            # Generate Future-You persona
+            future_you_persona = gpt_profiler_service.generate_future_you_persona(
+                responses=response_data,
+                recommended_track=primary_recommendation.track_key,
+                track_info={'name': primary_track.name, 'description': primary_track.description}
+            )
+            session.telemetry['future_you_persona'] = future_you_persona
+            logger.info(f"Generated Future-You persona: {future_you_persona.get('name', 'N/A')}")
+
+            # Success confirmation
+            print(f"\n{'='*70}")
+            print(f"✅ AI ENHANCEMENT SUCCESSFUL")
+            print(f"{'='*70}")
+            print(f"Persona: {future_you_persona.get('name', 'N/A')}")
+            print(f"Archetype: {future_you_persona.get('archetype', 'N/A')}")
+            print(f"Personalized descriptions: {len(personalized_descriptions)}")
+            print(f"{'='*70}\n")
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            logger.error(f"AI enhancement failed (continuing with standard results): {e}")
+            logger.error(f"Full traceback:\n{error_details}")
+            # Continue without AI enhancements if GPT fails
+            # Print to console for debugging
+            print(f"\n{'='*70}")
+            print(f"⚠️ AI ENHANCEMENT ERROR")
+            print(f"{'='*70}")
+            print(f"Error: {e}")
+            print(f"Traceback:\n{error_details}")
+            print(f"{'='*70}\n")
         
         # Store telemetry data in session metadata
-        if not hasattr(session, 'telemetry'):
+        if session.telemetry is None:
             session.telemetry = {}
         
         # Calculate technical exposure score
@@ -1091,13 +1180,13 @@ class EnhancedProfilingService:
         ]
         session.telemetry['scenario_choices'] = scenario_responses
         
-        # Store difficulty selection
-        difficulty_responses = [
-            r for r in session.responses
-            if self.question_map.get(r.question_id, {}).category == "difficulty_selection"
-        ]
-        if difficulty_responses:
-            session.telemetry['difficulty_selection'] = difficulty_responses[0].selected_option
+        # Store difficulty selection (removed - difficulty_selection question no longer shown)
+        # difficulty_responses = [
+        #     r for r in session.responses
+        #     if self.question_map.get(r.question_id, {}).category == "difficulty_selection"
+        # ]
+        # if difficulty_responses:
+        #     session.telemetry['difficulty_selection'] = difficulty_responses[0].selected_option
         
         # Store track alignment percentages
         session.telemetry['track_alignment_percentages'] = scores
@@ -1111,6 +1200,11 @@ class EnhancedProfilingService:
         # Generate assessment summary
         assessment_summary = self._generate_assessment_summary(recommendations, deep_insights)
 
+        # Extract AI-generated data from telemetry
+        ai_data = session.telemetry or {}
+        future_you_persona = ai_data.get('future_you_persona')
+        personalized_descriptions = ai_data.get('ai_personalized_descriptions')
+
         result = ProfilingResult(
             user_id=session.user_id,
             session_id=session.id,
@@ -1119,7 +1213,12 @@ class EnhancedProfilingService:
             secondary_track=secondary_track,
             assessment_summary=assessment_summary,
             deep_insights=deep_insights,
-            completed_at=session.completed_at
+            completed_at=session.completed_at,
+            # AI-powered enhancements
+            future_you_persona=future_you_persona,
+            personalized_track_descriptions=personalized_descriptions,
+            ai_confidence=future_you_persona.get('confidence') if future_you_persona else None,
+            ai_reasoning=future_you_persona.get('career_vision') if future_you_persona else None
         )
 
         return result

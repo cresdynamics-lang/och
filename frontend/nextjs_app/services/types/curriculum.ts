@@ -12,7 +12,7 @@ export interface CurriculumTrack {
   name: string;
   description?: string;
   level: TrackLevel;
-  tier?: number; // Academic tier (0-9). Tier 2 = Beginner Tracks
+  tier?: number; // Academic tier (0-9). Tier 2 = Beginner Level, Tier 3 = Intermediate Level, Tier 4 = Advanced Level, Tier 5 = Mastery Level
   icon?: string;
   color?: string;
   estimated_duration_weeks?: number;
@@ -51,6 +51,7 @@ export interface CurriculumModuleList {
   mission_count: number;
   completion_percentage: number;
   is_locked: boolean;
+  mentor_notes?: string;
 }
 
 export interface CurriculumModuleDetail extends CurriculumModuleList {

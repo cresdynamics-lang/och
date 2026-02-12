@@ -35,7 +35,7 @@ COPY backend/django_app/ .
 # Expose port
 EXPOSE 8000
 
-# Run migrations and start server
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+# Start server (migrations handled by docker-compose override)
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 

@@ -204,6 +204,9 @@ def mission_dashboard(request):
         'recommended_recipes': recommended_recipes,
         'next_mission': str(next_mission) if next_mission else None,
         'foundations_complete': user.foundations_complete,
+        'tier_lock': tier_lock,
+        'user_tier': user_tier,
+        'coaching_eligibility': coaching_eligibility,
     }, status=status.HTTP_200_OK)
 
 
@@ -351,6 +354,33 @@ def save_subtask_progress(request, progress_id):
         'current_subtask': progress.current_subtask,
         'subtasks_progress': progress.subtasks_progress,
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_subtask_unlockable(request, progress_id, subtask_id):
+    """
+    GET /api/v1/mission-progress/{progress_id}/subtasks/{subtask_id}/unlockable
+    Check if a subtask can be unlocked based on dependencies.
+    """
+    user = request.user
+    
+    try:
+        progress = MissionProgress.objects.get(id=progress_id, user=user)
+    except MissionProgress.DoesNotExist:
+        return Response({'error': 'Progress not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Check unlockability
+    result = progress.check_subtask_unlockable(subtask_id)
+    
+    return Response({
+        'subtask_id': subtask_id,
+        'unlockable': result['unlockable'],
+        'reason': result.get('reason'),
+        'dependencies': result.get('dependencies', []),
+        'current_subtask': progress.current_subtask,
+        'subtasks_progress': progress.subtasks_progress,
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])

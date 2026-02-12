@@ -165,3 +165,8 @@ temp/
 docs1/
 # Large archive files
 *.tar.gz
+
+# Media files (videos are too large for GitHub)
+backend/django_app/media/lesson_videos/*.mp4
+backend/django_app/media/lesson_videos/*.webm
+backend/django_app/media/lesson_videos/*.avi

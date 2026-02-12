@@ -58,6 +58,11 @@ class ProfilingSession(BaseModel):
     suspicious_patterns: Optional[List[str]] = None
     anti_cheat_score: Optional[float] = None
     
+    # Telemetry and metadata (optional, added dynamically)
+    telemetry: Optional[Dict[str, Any]] = None
+    difficulty_verification: Optional[Dict[str, Any]] = None
+    reflection_responses: Optional[Dict[str, Any]] = None
+    
     class Config:
         arbitrary_types_allowed = True
 
@@ -95,6 +100,12 @@ class ProfilingResult(BaseModel):
     assessment_summary: str
     deep_insights: Optional[DeepInsights] = None
     completed_at: datetime
+
+    # AI-powered enhancements
+    future_you_persona: Optional[Dict[str, Any]] = None  # AI-generated Future-You persona
+    personalized_track_descriptions: Optional[Dict[str, str]] = None  # Track-specific personalized descriptions
+    ai_confidence: Optional[float] = None  # AI recommendation confidence (0-1)
+    ai_reasoning: Optional[str] = None  # AI's reasoning for the recommendation
 
 
 class ProfilingProgress(BaseModel):

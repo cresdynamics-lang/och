@@ -62,13 +62,9 @@ def requires_mfa(risk_score, user_role=None, user=None):
     """
     from django.conf import settings
 
-    # In development, skip MFA for ALL test users (including finance/admin)
-    if settings.DEBUG and user and user.email.endswith('@test.com'):
-        return False  # Skip MFA for ALL test users in development
-
-    # In development, skip MFA for OCH users (@och.com) if MFA is not explicitly enabled
-    if settings.DEBUG and user and user.email.endswith('@och.com') and not user.mfa_enabled:
-        return False  # Skip MFA for OCH users in development if MFA not enabled
+    # In development, skip MFA for all users unless they explicitly enabled it
+    if settings.DEBUG and user and not user.mfa_enabled:
+        return False
 
     # Role-based MFA requirement: mandatory for Finance/Finance Admin/Admin (when MFA enabled)
     if user_role in ['finance', 'finance_admin', 'admin'] and user and user.mfa_enabled:

@@ -30,11 +30,17 @@ export interface Tier2Status {
     quizzes_passed: number
     mini_missions_total: number
     mini_missions_completed: number
+    /** Minimum mini-missions required to complete (1 or 2, from track config) */
+    mini_missions_required?: number
     reflections_submitted: number
     mentor_approval: boolean
+    /** Whether this track requires mentor approval to complete (from track config) */
+    mentor_approval_required?: boolean
   }
   missing_requirements: string[]
   can_progress_to_tier3: boolean
+  /** sequential = unlock in order; flexible = all modules available */
+  progression_mode?: 'sequential' | 'flexible'
 }
 
 export const curriculumClient = {
@@ -48,7 +54,34 @@ export const curriculumClient = {
     if (params?.level) queryParams.append('level', params.level)
     
     const queryString = queryParams.toString()
-    return apiGateway.get(`/curriculum/tracks/${queryString ? `?${queryString}` : ''}`)
+    const url = `/curriculum/tracks/${queryString ? `?${queryString}` : ''}`
+    
+    try {
+      const response = await apiGateway.get(url)
+      // Handle both array and object responses
+      if (Array.isArray(response)) {
+        return response
+      }
+      // If response is an object with results or data property
+      if (response && typeof response === 'object') {
+        if (Array.isArray(response.results)) {
+          return response.results
+        }
+        if (Array.isArray(response.data)) {
+          return response.data
+        }
+        if (Array.isArray(response.tracks)) {
+          return response.tracks
+        }
+      }
+      // Fallback: return empty array if response format is unexpected
+      console.warn('Unexpected response format from /curriculum/tracks/', response)
+      return []
+    } catch (error: any) {
+      console.error('Error fetching curriculum tracks:', error)
+      // Re-throw to let the component handle it
+      throw error
+    }
   },
 
   /**
@@ -81,6 +114,21 @@ export const curriculumClient = {
    */
   async getMyProgress(): Promise<MyProgressResponse> {
     return apiGateway.get('/curriculum/my-progress/')
+  },
+
+  /**
+   * List curriculum modules (filterable by level / track)
+   * GET /curriculum/modules/?level=beginner&track=DEFENDER
+   */
+  async getModules(params?: { level?: string; track?: string }): Promise<CurriculumModuleList[]> {
+    const q = new URLSearchParams()
+    if (params?.level) q.append('level', params.level)
+    if (params?.track) q.append('track', params.track)
+    const qs = q.toString()
+    const response = await apiGateway.get(`/curriculum/modules/${qs ? `?${qs}` : ''}`)
+    if (Array.isArray(response)) return response
+    if (response && Array.isArray(response.results)) return response.results
+    return []
   },
 
   /**
@@ -132,11 +180,11 @@ export const curriculumClient = {
   },
 
   /**
-   * Tier 2 (Beginner Tracks) specific endpoints
+   * Beginner Tracks specific endpoints
    */
 
   /**
-   * Get Tier 2 track completion status
+   * Get Beginner level track completion status
    * GET /curriculum/tier2/tracks/{code}/status
    */
   async getTier2Status(trackCode: string): Promise<Tier2Status> {
@@ -204,7 +252,7 @@ export const curriculumClient = {
   },
 
   /**
-   * Complete Tier 2 and unlock Tier 3
+   * Complete Beginner level and unlock Intermediate level
    * POST /curriculum/tier2/tracks/{code}/complete
    */
   async completeTier2(trackCode: string): Promise<{
@@ -214,6 +262,219 @@ export const curriculumClient = {
     tier3_unlocked: boolean
   }> {
     return apiGateway.post(`/curriculum/tier2/tracks/${trackCode}/complete`)
+  },
+
+  /**
+   * Get Tier 2 mentor feedback (learner: my feedback; mentor: feedback I gave)
+   * GET /curriculum/tier2/tracks/{code}/feedback
+   */
+  async getTier2Feedback(trackCode: string): Promise<{ feedback: Array<{
+    id: number
+    comment_text: string
+    lesson_id: string | null
+    lesson_title: string | null
+    module_id: string | null
+    module_title: string | null
+    mentor_email?: string
+    learner_email?: string
+    created_at: string
+  }> }> {
+    return apiGateway.get(`/curriculum/tier2/tracks/${trackCode}/feedback`)
+  },
+
+  /**
+   * Mentor: add feedback for a learner
+   * POST /curriculum/tier2/tracks/{code}/feedback
+   */
+  async addTier2Feedback(trackCode: string, data: {
+    learner_id: string
+    lesson_id?: string
+    module_id?: string
+    comment_text: string
+  }): Promise<{ id: number; comment_text: string; created_at: string }> {
+    return apiGateway.post(`/curriculum/tier2/tracks/${trackCode}/feedback`, data)
+  },
+
+  /**
+   * Get sample mission report for viewing
+   * GET /curriculum/tier2/tracks/{code}/sample-report
+   */
+  async getTier2SampleReport(trackCode: string): Promise<{
+    title: string
+    description: string
+    sections: Array<{ heading: string; content: string }>
+    tip: string
+  }> {
+    return apiGateway.get(`/curriculum/tier2/tracks/${trackCode}/sample-report`)
+  },
+
+  /**
+   * Intermediate Tracks specific endpoints
+   */
+
+  /**
+   * Get Intermediate level track completion status
+   * GET /curriculum/tier3/tracks/{code}/status
+   */
+  async getTier3Status(trackCode: string): Promise<{
+    track_code: string
+    track_name: string
+    completion_percentage: number
+    is_complete: boolean
+    tier3_completion_requirements_met: boolean
+    requirements: {
+      mandatory_modules_total: number
+      mandatory_modules_completed: number
+      intermediate_missions_total: number
+      intermediate_missions_passed: number
+      mentor_approval: boolean
+      mentor_approval_required: boolean
+    }
+    missing_requirements: string[]
+    can_progress_to_tier4: boolean
+    tier4_unlocked: boolean
+    progression_mode?: 'sequential' | 'flexible'
+  }> {
+    return apiGateway.get(`/curriculum/tier3/tracks/${trackCode}/status`)
+  },
+
+  /**
+   * Complete Intermediate level and unlock Advanced level
+   * POST /curriculum/tier3/tracks/{code}/complete
+   */
+  async completeTier3(trackCode: string): Promise<{
+    success: boolean
+    message: string
+    completed_at: string
+    tier4_unlocked: boolean
+  }> {
+    return apiGateway.post(`/curriculum/tier3/tracks/${trackCode}/complete`)
+  },
+
+  /**
+   * Advanced Tracks specific endpoints
+   */
+
+  /**
+   * Get Advanced level track completion status
+   * GET /curriculum/tier4/tracks/{code}/status
+   */
+  async getTier4Status(trackCode: string): Promise<{
+    track_code: string
+    track_name: string
+    completion_percentage: number
+    is_complete: boolean
+    tier4_completion_requirements_met: boolean
+    requirements: {
+      mandatory_modules_total: number
+      mandatory_modules_completed: number
+      advanced_missions_total: number
+      advanced_missions_approved: number
+      feedback_cycles_complete: number
+      reflections_required: number
+      reflections_submitted: number
+      mentor_approval: boolean
+      mentor_approval_required: boolean
+    }
+    missing_requirements: string[]
+    can_progress_to_tier5: boolean
+    tier5_unlocked: boolean
+    progression_mode?: 'sequential' | 'flexible'
+  }> {
+    return apiGateway.get(`/curriculum/tier4/tracks/${trackCode}/status`)
+  },
+
+  /**
+   * Complete Advanced level and unlock Mastery level
+   * POST /curriculum/tier4/tracks/{code}/complete
+   */
+  async completeTier4(trackCode: string): Promise<{
+    success: boolean
+    message: string
+    completed_at: string
+    tier5_unlocked: boolean
+  }> {
+    return apiGateway.post(`/curriculum/tier4/tracks/${trackCode}/complete`)
+  },
+
+  /**
+   * Mastery Tracks specific endpoints
+   */
+
+  /**
+   * Get Mastery level track completion status
+   * GET /curriculum/tier5/tracks/{code}/status
+   */
+  async getTier5Status(trackCode: string): Promise<{
+    track_code: string
+    track_name: string
+    completion_percentage: number
+    is_complete: boolean
+    tier5_completion_requirements_met: boolean
+    requirements: {
+      mandatory_modules_total: number
+      mandatory_modules_completed: number
+      mastery_missions_total: number
+      mastery_missions_approved: number
+      capstone_total: number
+      capstone_approved: number
+      reflections_required: number
+      reflections_submitted: number
+      rubric_passed: boolean
+      mentor_approval: boolean
+      mentor_approval_required: boolean
+    }
+    missing_requirements: string[]
+    mastery_complete: boolean
+    progression_mode?: 'sequential' | 'flexible'
+  }> {
+    return apiGateway.get(`/curriculum/tier5/tracks/${trackCode}/status`)
+  },
+
+  /**
+   * Complete Mastery level
+   * POST /curriculum/tier5/tracks/{code}/complete
+   */
+  async completeTier5(trackCode: string): Promise<{
+    success: boolean
+    message: string
+    completed_at: string
+    mastery_achieved: boolean
+  }> {
+    return apiGateway.post(`/curriculum/tier5/tracks/${trackCode}/complete`)
+  },
+
+  /**
+   * Lesson bookmark: get status
+   * GET /curriculum/lessons/{id}/bookmark/
+   */
+  async getLessonBookmark(lessonId: string): Promise<{ bookmarked: boolean }> {
+    return apiGateway.get(`/curriculum/lessons/${lessonId}/bookmark/`)
+  },
+
+  /**
+   * Lesson bookmark: add
+   * POST /curriculum/lessons/{id}/bookmark/
+   */
+  async addLessonBookmark(lessonId: string): Promise<{ bookmarked: boolean; created?: boolean }> {
+    return apiGateway.post(`/curriculum/lessons/${lessonId}/bookmark/`)
+  },
+
+  /**
+   * Lesson bookmark: remove
+   * DELETE /curriculum/lessons/{id}/bookmark/
+   */
+  async removeLessonBookmark(lessonId: string): Promise<{ bookmarked: boolean; deleted?: boolean }> {
+    return apiGateway.delete(`/curriculum/lessons/${lessonId}/bookmark/`)
+  },
+
+  /**
+   * List bookmarks (optional track filter)
+   * GET /curriculum/bookmarks/?track_code=...
+   */
+  async getBookmarks(trackCode?: string): Promise<{ bookmarks: Array<{ lesson_id: string; lesson_title: string; module_title: string }> }> {
+    const url = trackCode ? `/curriculum/bookmarks/?track_code=${encodeURIComponent(trackCode)}` : '/curriculum/bookmarks/'
+    return apiGateway.get(url)
   },
 
   // ==================== TIER 6 - CROSS-TRACK PROGRAMS ====================

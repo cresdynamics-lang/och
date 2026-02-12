@@ -16,100 +16,170 @@ interface Lesson {
   duration_minutes?: number;
   order_index: number;
   status?: 'not_started' | 'in_progress' | 'completed';
+  trackName?: string;
+  trackSlug?: string;
+  moduleName?: string;
 }
 
-export default function CurriculumLearnPage() {
-  const trackSlug = typeof window !== 'undefined' ? localStorage.getItem('current_learning_track') || 'defender' : 'defender';
+const DJANGO_BASE = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
 
+/**
+ * Resolve a potentially-relative media URL to an absolute URL.
+ * e.g. /media/lesson_videos/abc.mp4 → http://localhost:8000/media/lesson_videos/abc.mp4
+ */
+function resolveVideoUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  // Relative path — prepend Django server
+  return `${DJANGO_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+/**
+ * Return embed URL for YouTube / Vimeo, or null if it's a direct video file.
+ * Handles: watch?v=, youtu.be/, /shorts/, /embed/
+ * Adds enablejsapi=1 so YouTube fires postMessage "ended" events.
+ */
+function getEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  // YouTube — all common patterns
+  const ytMatch = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
+  );
+  if (ytMatch) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `https://www.youtube.com/embed/${ytMatch[1]}?enablejsapi=1&origin=${encodeURIComponent(origin)}`;
+  }
+  // Vimeo
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  return null;
+}
+
+// Maps track_key (e.g. "DEFENDER_2", "offensive") → display info
+function trackInfoFromKey(trackKey: string): { slug: string; name: string } {
+  const k = (trackKey || '').toLowerCase();
+  if (k.includes('defender') || k.includes('cyberdef') || k.includes('socdef')) {
+    return { slug: 'defender', name: 'Defender' };
+  }
+  if (k.includes('offensive')) return { slug: 'offensive', name: 'Offensive' };
+  if (k.includes('grc')) return { slug: 'grc', name: 'GRC' };
+  if (k.includes('innovation')) return { slug: 'innovation', name: 'Innovation' };
+  if (k.includes('leadership')) return { slug: 'leadership', name: 'Leadership' };
+  return { slug: k, name: trackKey };
+}
+
+const TRACK_ORDER = ['defender', 'offensive', 'grc', 'innovation', 'leadership'];
+
+export default function CurriculumLearnPage() {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [currentLevel, setCurrentLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modules, setModules] = useState<any[]>([]);
+  // Tracks whether the current iframe video has been marked watched
+  const [iframeWatched, setIframeWatched] = useState(false);
 
-  const levelNames = {
-    beginner: 'Beginner Level (Tier 2)',
-    intermediate: 'Intermediate Level (Tier 3)',
-    advanced: 'Advanced Level (Tier 4)'
+  const levelNames: Record<string, string> = {
+    beginner: 'Beginner Level',
+    intermediate: 'Intermediate Level',
+    advanced: 'Advanced Level',
   };
 
-  const levelMap = {
-    beginner: 'beginner',
-    intermediate: 'intermediate',
-    advanced: 'advanced'
-  };
+  // Restore saved level on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('all_tracks_current_level') as 'beginner' | 'intermediate' | 'advanced';
+      if (saved && ['beginner', 'intermediate', 'advanced'].includes(saved)) {
+        setCurrentLevel(saved);
+      }
+    }
+  }, []);
 
-  // Load lessons from backend
   useEffect(() => {
     loadLessons();
-  }, [trackSlug, currentLevel]);
+  }, [currentLevel]);
+
+  // Reset iframe-watched flag whenever the current video changes
+  useEffect(() => {
+    setIframeWatched(false);
+  }, [currentVideoIndex]);
+
+  // Listen for YouTube postMessage "video ended" (state = 0)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.youtube.com') return;
+      try {
+        const data = JSON.parse(event.data);
+        // YouTube sends { event: 'onStateChange', info: 0 } when video ends
+        if (data.event === 'onStateChange' && data.info === 0) {
+          handleVideoComplete();
+        }
+      } catch {
+        // Non-JSON messages can be ignored
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVideoIndex, lessons]);
 
   const loadLessons = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch track data with modules
-      const trackData = await curriculumClient.getTrack(trackSlug);
+      // Fetch all modules at the current level (no per-track API calls needed)
+      const modules = await curriculumClient.getModules({ level: currentLevel });
 
-      // Filter modules for current level
-      const levelModules = trackData.modules?.filter((m: any) => m.level === levelMap[currentLevel]) || [];
-      setModules(levelModules);
-
-      // Get lessons from first module of current level
-      if (levelModules.length > 0) {
-        const moduleLessons = await curriculumClient.getLessons(levelModules[0].id);
-        // Filter for video lessons only
-        const videoLessons = moduleLessons.filter(l => l.lesson_type === 'video');
-        setLessons(videoLessons);
-
-        // Load saved video index for this level
-        const savedIndex = parseInt(localStorage.getItem(`${trackSlug}_${currentLevel}_index`) || '0');
-        setCurrentVideoIndex(Math.min(savedIndex, videoLessons.length - 1));
-      } else {
-        // No modules for this level, use demo data
-        setLessons([
-          {
-            id: `demo-${currentLevel}-1`,
-            title: `${levelNames[currentLevel]} - Introduction`,
-            content_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            lesson_type: 'video',
-            order_index: 1,
-            status: 'not_started'
-          },
-          {
-            id: `demo-${currentLevel}-2`,
-            title: `${levelNames[currentLevel]} - Core Concepts`,
-            content_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-            lesson_type: 'video',
-            order_index: 2,
-            status: 'not_started'
-          },
-          {
-            id: `demo-${currentLevel}-3`,
-            title: `${levelNames[currentLevel]} - Practical Application`,
-            content_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-            lesson_type: 'video',
-            order_index: 3,
-            status: 'not_started'
-          }
-        ]);
+      if (!modules || modules.length === 0) {
+        setLessons([]);
+        setLoading(false);
+        return;
       }
+
+      // Only fetch detail for modules that have lessons
+      const modulesWithContent = modules.filter((m: any) => m.lesson_count > 0);
+
+      const allLessonsPromises = modulesWithContent.map((module: any) =>
+        curriculumClient.getModule(module.id)
+          .then(moduleDetail => {
+            const trackInfo = trackInfoFromKey(module.track_key || '');
+            return (moduleDetail.lessons || []).map((l: any) => ({
+              ...l,
+              trackSlug: trackInfo.slug,
+              trackName: trackInfo.name,
+              moduleName: module.title,
+            }));
+          })
+          .catch(err => {
+            console.warn(`Failed to load lessons for module ${module.id}:`, err);
+            return [];
+          })
+      );
+
+      const allLessonsArrays = await Promise.all(allLessonsPromises);
+      const allLessons = allLessonsArrays.flat();
+
+      // Video lessons only (with a non-empty URL), sorted by track order then order_index
+      const videoLessons = allLessons
+        .filter((l: any) => l.lesson_type === 'video' && l.content_url)
+        .sort((a: any, b: any) => {
+          const ia = TRACK_ORDER.indexOf(a.trackSlug);
+          const ib = TRACK_ORDER.indexOf(b.trackSlug);
+          const rankA = ia === -1 ? 99 : ia;
+          const rankB = ib === -1 ? 99 : ib;
+          if (rankA !== rankB) return rankA - rankB;
+          return (a.order_index || 0) - (b.order_index || 0);
+        });
+
+      setLessons(videoLessons);
+
+      const savedIndex = parseInt(localStorage.getItem(`all_tracks_${currentLevel}_index`) || '0');
+      setCurrentVideoIndex(Math.min(savedIndex, Math.max(0, videoLessons.length - 1)));
     } catch (err: any) {
       console.error('Error loading lessons:', err);
       setError(err.message || 'Failed to load lessons');
-      // Fallback to demo data
-      setLessons([
-        {
-          id: `demo-${currentLevel}-1`,
-          title: `${levelNames[currentLevel]} - Introduction`,
-          content_url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-          lesson_type: 'video',
-          order_index: 1,
-          status: 'not_started'
-        }
-      ]);
+      setLessons([]);
     } finally {
       setLoading(false);
     }
@@ -121,135 +191,259 @@ export default function CurriculumLearnPage() {
     const lesson = lessons[currentVideoIndex];
     if (!lesson) return;
 
-    // Update local state
-    setLessons(prevLessons =>
-      prevLessons.map((l, index) =>
-        index === currentVideoIndex
-          ? { ...l, status: 'completed' as const }
-          : l
-      )
+    setLessons(prev =>
+      prev.map((l, i) => i === currentVideoIndex ? { ...l, status: 'completed' as const } : l)
     );
+    setIframeWatched(true);
 
-    // Only save to backend if this is a real lesson (not a demo)
-    if (!lesson.id.startsWith('demo-')) {
-      try {
-        await curriculumClient.updateLessonProgress(lesson.id, {
-          status: 'completed',
-          progress_percentage: 100,
-          time_spent_minutes: lesson.duration_minutes || 5
-        });
-        console.log('✓ Progress saved to backend');
-      } catch (err) {
-        console.error('Failed to save progress:', err);
-        // Local state already updated above
-      }
-    } else {
-      console.log('✓ Demo lesson completed (not saved to backend)');
+    try {
+      await curriculumClient.updateLessonProgress(lesson.id, {
+        status: 'completed',
+        progress_percentage: 100,
+        time_spent_minutes: lesson.duration_minutes || 5,
+      });
+    } catch (err) {
+      console.error('Failed to save progress:', err);
     }
 
-    // Save current index
-    localStorage.setItem(`${trackSlug}_${currentLevel}_index`, currentVideoIndex.toString());
+    localStorage.setItem(`all_tracks_${currentLevel}_index`, currentVideoIndex.toString());
   };
 
   const goToVideo = (index: number) => {
-    // Only allow going to lessons that are unlocked
     if (index === 0 || lessons[index - 1]?.status === 'completed') {
       setCurrentVideoIndex(index);
-      localStorage.setItem(`${trackSlug}_${currentLevel}_index`, index.toString());
+      localStorage.setItem(`all_tracks_${currentLevel}_index`, index.toString());
     }
   };
 
   const goToNextVideo = () => {
-    const nextIndex = currentVideoIndex + 1;
-    if (nextIndex < lessons.length) {
-      if (nextIndex === 0 || lessons[nextIndex - 1]?.status === 'completed') {
-        setCurrentVideoIndex(nextIndex);
-        localStorage.setItem(`${trackSlug}_${currentLevel}_index`, nextIndex.toString());
-      }
+    const next = currentVideoIndex + 1;
+    if (next < lessons.length && (next === 0 || lessons[next - 1]?.status === 'completed')) {
+      setCurrentVideoIndex(next);
+      localStorage.setItem(`all_tracks_${currentLevel}_index`, next.toString());
     }
   };
 
-  const isNextVideoUnlocked = () => {
-    const nextIndex = currentVideoIndex + 1;
-    if (nextIndex >= lessons.length) return false;
-    return nextIndex === 0 || lessons[nextIndex - 1]?.status === 'completed';
+  const isNextUnlocked = () => {
+    const next = currentVideoIndex + 1;
+    return next < lessons.length && (next === 0 || lessons[next - 1]?.status === 'completed');
   };
 
-  const areAllVideosCompleted = () => {
-    return lessons.every(lesson => lesson.status === 'completed');
+  const allCompleted = () => lessons.length > 0 && lessons.every(l => l.status === 'completed');
+
+  // Check if a specific track's videos are all completed
+  const isTrackCompleted = (trackSlug: string) => {
+    const trackLessons = lessons.filter(l => l.trackSlug === trackSlug);
+    return trackLessons.length > 0 && trackLessons.every(l => l.status === 'completed');
   };
 
-  const goToNextLevel = () => {
-    if (currentLevel === 'beginner') {
-      setCurrentLevel('intermediate');
-      localStorage.setItem(`${trackSlug}_current_level`, 'intermediate');
-    } else if (currentLevel === 'intermediate') {
-      setCurrentLevel('advanced');
-      localStorage.setItem(`${trackSlug}_current_level`, 'advanced');
-    }
+  // Get completion percentage for a specific track
+  const getTrackCompletionPercentage = (trackSlug: string) => {
+    const trackLessons = lessons.filter(l => l.trackSlug === trackSlug);
+    if (trackLessons.length === 0) return 0;
+    const completed = trackLessons.filter(l => l.status === 'completed').length;
+    return Math.round((completed / trackLessons.length) * 100);
+  };
+
+  const setLevel = (level: 'beginner' | 'intermediate' | 'advanced') => {
+    setCurrentLevel(level);
     setCurrentVideoIndex(0);
-    // loadLessons() will be called automatically by useEffect
+    localStorage.setItem('all_tracks_current_level', level);
   };
 
-  // Load saved level on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedLevel = localStorage.getItem(`${trackSlug}_current_level`) as 'beginner' | 'intermediate' | 'advanced';
-      if (savedLevel && ['beginner', 'intermediate', 'advanced'].includes(savedLevel)) {
-        setCurrentLevel(savedLevel);
-      }
-    }
-  }, [trackSlug]);
+  // Unique track slugs present in current lesson list
+  const activeTrackSlugs = [...new Set(lessons.map(l => l.trackSlug).filter(Boolean))];
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <Link href="/dashboard/student/curriculum" className="text-slate-400 hover:text-white mb-4 inline-flex items-center gap-2">
+          <Link
+            href="/dashboard/student/curriculum"
+            className="text-slate-400 hover:text-white mb-4 inline-flex items-center gap-2"
+          >
             <ChevronLeft className="w-4 h-4" />
             Back to Curriculum
           </Link>
+
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white capitalize">{trackSlug} Track</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">All Tracks</h1>
               <p className="text-slate-400">{levelNames[currentLevel]}</p>
             </div>
-            <Badge variant="outline" className="text-slate-300 border-slate-600">
-              Video {currentVideoIndex + 1} of {lessons.length}
-            </Badge>
+            {!loading && (
+              <Badge variant="outline" className="text-slate-300 border-slate-600">
+                Video {lessons.length > 0 ? currentVideoIndex + 1 : 0} of {lessons.length}
+              </Badge>
+            )}
           </div>
 
-          {/* Level Progress Indicator */}
+          {/* Level selector */}
           <div className="flex items-center gap-2 mt-4">
-            <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              currentLevel === 'beginner' ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-500 text-white'
-            }`}>
-              {currentLevel === 'beginner' ? '• Beginner' : '✓ Beginner'}
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-600" />
-            <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              currentLevel === 'intermediate' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
-              currentLevel === 'advanced' ? 'bg-blue-500 text-white' :
-              'bg-slate-800 text-slate-500'
-            }`}>
-              {currentLevel === 'intermediate' ? '• Intermediate' :
-               currentLevel === 'advanced' ? '✓ Intermediate' :
-               'Intermediate'}
-            </div>
-            <ChevronRight className="w-4 h-4 text-slate-600" />
-            <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-              currentLevel === 'advanced' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
-              'bg-slate-800 text-slate-500'
-            }`}>
-              {currentLevel === 'advanced' ? '• Advanced' : 'Advanced'}
+            {(['beginner', 'intermediate', 'advanced'] as const).map((level, i, arr) => (
+              <div key={level} className="flex items-center gap-2">
+                <button
+                  onClick={() => setLevel(level)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                    currentLevel === level
+                      ? level === 'beginner'
+                        ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                        : level === 'intermediate'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  {currentLevel === level ? `• ${level.charAt(0).toUpperCase() + level.slice(1)}` : level.charAt(0).toUpperCase() + level.slice(1)}
+                </button>
+                {i < arr.length - 1 && <ChevronRight className="w-4 h-4 text-slate-600" />}
+              </div>
+            ))}
+          </div>
+
+          {/* Track pills — show which tracks have content at this level */}
+          <div className="mt-4">
+            <p className="text-slate-400 text-sm mb-2">Tracks with content</p>
+            <div className="flex flex-wrap gap-2">
+              {TRACK_ORDER.map(slug => {
+                const displayNames: Record<string, string> = {
+                  defender: 'Defender', offensive: 'Offensive', grc: 'GRC',
+                  innovation: 'Innovation', leadership: 'Leadership',
+                };
+                const hasContent = activeTrackSlugs.includes(slug);
+                const isCurrent = currentVideo?.trackSlug === slug;
+                const completionPct = hasContent ? getTrackCompletionPercentage(slug) : 0;
+                return (
+                  <div
+                    key={slug}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                      isCurrent
+                        ? 'bg-och-orange border-och-orange text-white'
+                        : hasContent
+                        ? 'bg-slate-700 border-slate-500 text-slate-300'
+                        : 'bg-slate-900 border-slate-700 text-slate-600'
+                    }`}
+                  >
+                    {displayNames[slug] || slug}
+                    {!hasContent && !loading && (
+                      <span className="ml-1 text-xs opacity-60">— no content</span>
+                    )}
+                    {hasContent && completionPct > 0 && (
+                      <span className="ml-2 text-xs opacity-75">({completionPct}%)</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {/* Track-specific mission unlocks */}
+          {!loading && activeTrackSlugs.length > 0 && (
+            <div className="mt-4">
+              <div className="flex flex-wrap gap-2">
+                {activeTrackSlugs.map(slug => {
+                  if (!isTrackCompleted(slug)) return null;
+                  const displayNames: Record<string, string> = {
+                    defender: 'Defender', offensive: 'Offensive', grc: 'GRC',
+                    innovation: 'Innovation', leadership: 'Leadership',
+                  };
+                  return (
+                    <Link
+                      key={slug}
+                      href={`/dashboard/student/missions?track=${slug}&tier=${currentLevel}`}
+                    >
+                      <Button
+                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-sm"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        {displayNames[slug]} Missions
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Video Player Section */}
-          <div className="lg:col-span-2">
+        <div className="grid lg:grid-cols-4 gap-6">
+          {/* Sidebar: Learning Path */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <Card className="p-4 bg-slate-900/50 border-slate-700 sticky top-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Learning Path</h3>
+              {loading ? (
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-16 bg-slate-800 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : lessons.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  No video lessons for this level
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+                  {lessons.map((lesson, index) => {
+                    const isCompleted = lesson.status === 'completed';
+                    const isCurrent = index === currentVideoIndex;
+                    const isUnlocked = index === 0 || lessons[index - 1]?.status === 'completed';
+
+                    return (
+                      <button
+                        key={lesson.id}
+                        onClick={() => goToVideo(index)}
+                        disabled={!isUnlocked}
+                        className={`w-full text-left p-3 rounded-lg transition-all ${
+                          isCurrent
+                            ? 'bg-blue-500/20 border border-blue-500/30'
+                            : isCompleted
+                            ? 'bg-green-500/10 border border-green-500/20 hover:bg-green-500/20'
+                            : isUnlocked
+                            ? 'bg-slate-800 border border-slate-600 hover:bg-slate-700'
+                            : 'bg-slate-900 border border-slate-700 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
+                            isCompleted ? 'bg-green-500 text-white'
+                            : isCurrent ? 'bg-blue-500 text-white'
+                            : isUnlocked ? 'bg-slate-600 text-slate-300'
+                            : 'bg-slate-700 text-slate-500'
+                          }`}>
+                            {isCompleted ? (
+                              <CheckCircle className="w-3 h-3" />
+                            ) : isUnlocked ? (
+                              index + 1
+                            ) : (
+                              <Lock className="w-3 h-3" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${
+                              isCurrent ? 'text-blue-400'
+                              : isCompleted ? 'text-green-400'
+                              : isUnlocked ? 'text-white'
+                              : 'text-slate-500'
+                            }`}>
+                              {lesson.title}
+                            </p>
+                            {lesson.trackName && (
+                              <p className="text-xs text-slate-500 truncate">{lesson.trackName}</p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Video Player */}
+          <div className="lg:col-span-3 order-1 lg:order-2">
             {loading ? (
               <Card className="p-6 bg-slate-900/50 border-slate-700">
                 <div className="flex items-center justify-center h-96">
@@ -265,27 +459,87 @@ export default function CurriculumLearnPage() {
               </Card>
             ) : !currentVideo ? (
               <Card className="p-6 bg-slate-900/50 border-slate-700">
-                <div className="flex items-center justify-center h-96 text-slate-400">
-                  No lessons available for this level
+                <div className="flex flex-col items-center justify-center h-96 text-center gap-3">
+                  <p className="text-slate-400 text-lg font-medium">No lessons yet</p>
+                  <p className="text-slate-500 text-sm max-w-sm">
+                    No video lessons have been added for the <span className="text-white">{levelNames[currentLevel]}</span> yet.
+                    A director needs to create modules and add video lessons.
+                  </p>
                 </div>
               </Card>
             ) : (
               <Card className="p-6 bg-slate-900/50 border-slate-700">
                 <div className="mb-4">
-                  <h2 className="text-xl font-semibold text-white mb-2">{currentVideo.title}</h2>
-                  <div className="aspect-video bg-slate-800 rounded-lg overflow-hidden">
-                    <video
-                      key={currentVideo.id} // Force re-render when video changes
-                      src={currentVideo.content_url}
-                      controls
-                      className="w-full h-full"
-                      onEnded={handleVideoComplete}
-                    />
+                  <h2 className="text-xl font-semibold text-white mb-1">{currentVideo.title}</h2>
+                  {currentVideo.trackName && (
+                    <p className="text-sm text-slate-400 mb-3">
+                      {currentVideo.trackName} Track
+                      {currentVideo.moduleName ? ` • ${currentVideo.moduleName}` : ''}
+                    </p>
+                  )}
+                  <div className="bg-slate-800 rounded-lg overflow-hidden">
+                    {(() => {
+                      const embedUrl = getEmbedUrl(currentVideo.content_url);
+                      const resolvedUrl = resolveVideoUrl(currentVideo.content_url);
+                      if (embedUrl) {
+                        // YouTube / Vimeo → iframe + "Mark as Watched" button
+                        const isWatched = iframeWatched || lessons[currentVideoIndex]?.status === 'completed';
+                        return (
+                          <>
+                            <div className="aspect-video w-full">
+                              <iframe
+                                key={currentVideo.id}
+                                src={embedUrl}
+                                className="w-full h-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                title={currentVideo.title}
+                              />
+                            </div>
+                            {/* Manual completion bar — iframes don't fire onEnded */}
+                            <div className="flex justify-end items-center px-4 py-2 bg-slate-900/80 border-t border-slate-700">
+                              {isWatched ? (
+                                <span className="flex items-center gap-1.5 text-green-400 text-sm font-medium">
+                                  <CheckCircle className="w-4 h-4" />
+                                  Marked as Watched
+                                </span>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  onClick={handleVideoComplete}
+                                  className="text-sm border-green-500/40 text-green-400 hover:bg-green-500/10"
+                                >
+                                  Mark as Watched
+                                </Button>
+                              )}
+                            </div>
+                          </>
+                        );
+                      }
+                      if (!resolvedUrl) {
+                        return (
+                          <div className="aspect-video flex items-center justify-center text-slate-500 text-sm">
+                            No video URL configured for this lesson
+                          </div>
+                        );
+                      }
+                      // Direct video file (mp4, webm, etc.)
+                      return (
+                        <div className="aspect-video">
+                          <video
+                            key={currentVideo.id}
+                            src={resolvedUrl}
+                            controls
+                            className="w-full h-full"
+                            onEnded={handleVideoComplete}
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                {/* Navigation */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mt-4">
                   <Button
                     variant="outline"
                     disabled={currentVideoIndex === 0}
@@ -296,38 +550,27 @@ export default function CurriculumLearnPage() {
                     Previous
                   </Button>
 
-                  {/* Show different button based on completion state */}
-                  {areAllVideosCompleted() ? (
-                    <div className="flex gap-2">
-                      {currentLevel !== 'advanced' ? (
-                        <Button
-                          onClick={goToNextLevel}
-                          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
-                        >
-                          Next Level: {currentLevel === 'beginner' ? 'Intermediate' : 'Advanced'}
+                  {allCompleted() ? (
+                    currentLevel !== 'advanced' ? (
+                      <Button
+                        onClick={() => setLevel(currentLevel === 'beginner' ? 'intermediate' : 'advanced')}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        Next Level: {currentLevel === 'beginner' ? 'Intermediate' : 'Advanced'}
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <Link href="/dashboard/student/missions">
+                        <Button className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
+                          Start Missions
                           <ChevronRight className="w-4 h-4" />
                         </Button>
-                      ) : (
-                        <Link href="/dashboard/student/missions">
-                          <Button className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
-                            Start Missions
-                            <ChevronRight className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                      )}
-                    </div>
-                  ) : currentVideoIndex === lessons.length - 1 && lessons[currentVideoIndex]?.status === 'completed' ? (
-                    <Button
-                      onClick={handleVideoComplete}
-                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                    >
-                      Complete & Continue
-                      <CheckCircle className="w-4 h-4" />
-                    </Button>
+                      </Link>
+                    )
                   ) : (
                     <Button
                       variant="outline"
-                      disabled={!isNextVideoUnlocked()}
+                      disabled={!isNextUnlocked()}
                       onClick={goToNextVideo}
                       className="flex items-center gap-2"
                     >
@@ -338,76 +581,6 @@ export default function CurriculumLearnPage() {
                 </div>
               </Card>
             )}
-          </div>
-
-          {/* Video List Sidebar */}
-          <div className="lg:col-span-1">
-            <Card className="p-4 bg-slate-900/50 border-slate-700">
-              <h3 className="text-lg font-semibold text-white mb-4">Learning Path</h3>
-              {loading ? (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-16 bg-slate-800 rounded-lg animate-pulse" />
-                  ))}
-                </div>
-              ) : lessons.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  No lessons available
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {lessons.map((lesson, index) => {
-                  const isCompleted = lesson.status === 'completed';
-                  const isCurrent = index === currentVideoIndex;
-                  const isUnlocked = index === 0 || lessons[index - 1]?.status === 'completed';
-
-                  return (
-                    <button
-                      key={lesson.id}
-                      onClick={() => goToVideo(index)}
-                      disabled={!isUnlocked}
-                      className={`w-full text-left p-3 rounded-lg transition-all ${
-                        isCurrent
-                          ? 'bg-blue-500/20 border border-blue-500/30'
-                          : isCompleted
-                          ? 'bg-green-500/10 border border-green-500/20 hover:bg-green-500/20'
-                          : isUnlocked
-                          ? 'bg-slate-800 border border-slate-600 hover:bg-slate-700'
-                          : 'bg-slate-900 border border-slate-700 cursor-not-allowed opacity-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                          isCompleted
-                            ? 'bg-green-500 text-white'
-                            : isCurrent
-                            ? 'bg-blue-500 text-white'
-                            : isUnlocked
-                            ? 'bg-slate-600 text-slate-300'
-                            : 'bg-slate-700 text-slate-500'
-                        }`}>
-                          {isCompleted ? (
-                            <CheckCircle className="w-3 h-3" />
-                          ) : isUnlocked ? (
-                            index + 1
-                          ) : (
-                            <Lock className="w-3 h-3" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${
-                            isCurrent ? 'text-blue-400' : isCompleted ? 'text-green-400' : isUnlocked ? 'text-white' : 'text-slate-500'
-                          }`}>
-                            {lesson.title}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-                </div>
-              )}
-            </Card>
           </div>
         </div>
       </div>

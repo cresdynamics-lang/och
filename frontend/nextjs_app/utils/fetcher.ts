@@ -38,10 +38,10 @@ const safeConsoleError = (...args: any[]) => {
         if (errorDataKeys.length === 0) {
           return true; // Empty errorData object
         }
-        // Check if errorData has at least one non-empty value
+        // Check if errorData has at least one meaningful value (including boolean false)
         const hasMeaningfulValue = errorDataKeys.some(key => {
           const val = errorData[key];
-          return val !== null && val !== undefined && val !== '' &&
+          return val !== null && val !== undefined &&
                  (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0));
         });
         if (!hasMeaningfulValue) {
@@ -81,10 +81,50 @@ const safeConsoleError = (...args: any[]) => {
       if (isEmptyObject(nextArg)) {
         return true;
       }
+      // Also check if nextArg only has basic fields (url, status, statusText) with no meaningful data
+      if (nextArg && typeof nextArg === 'object' && !Array.isArray(nextArg)) {
+        const keys = Object.keys(nextArg);
+        const basicFields = ['url', 'status', 'statusText'];
+        const hasOnlyBasicFields = keys.length <= 3 && 
+          keys.every(k => basicFields.includes(k));
+        
+        // Also check if all non-basic fields are empty
+        const nonBasicFields = keys.filter(k => !basicFields.includes(k));
+        const allNonBasicEmpty = nonBasicFields.length === 0 || nonBasicFields.every(k => {
+          const val = nextArg[k];
+          if (val === null || val === undefined || val === '') return true;
+          if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) return true;
+          return false;
+        });
+        
+        if (hasOnlyBasicFields || allNonBasicEmpty) {
+          return true; // Suppress - only has basic fields or all non-basic fields are empty
+        }
+      }
     }
     // Check the argument itself
     if (isEmptyObject(arg)) {
       return true;
+    }
+    // Additional check: if errorInfo has only url/status/statusText but no errorData, suppress it
+    if (arg && typeof arg === 'object' && !Array.isArray(arg) && arg !== null) {
+      const keys = Object.keys(arg);
+      const hasOnlyBasicFields = keys.length <= 3 && 
+        keys.every(k => ['url', 'status', 'statusText'].includes(k));
+      
+      // Check if there are any meaningful non-basic fields
+      const hasMeaningfulFields = keys.some(k => {
+        if (['url', 'status', 'statusText'].includes(k)) return false;
+        const value = arg[k];
+        if (value === null || value === undefined || value === '') return false;
+        if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) return false;
+        return true;
+      });
+      
+      // Suppress if it only has basic fields and no meaningful other fields
+      if (hasOnlyBasicFields && !hasMeaningfulFields) {
+        return true; // Suppress errors with only basic fields and no meaningful data
+      }
     }
     // Additional check: if it's an object with errorData that's empty
     if (arg && typeof arg === 'object' && !Array.isArray(arg) && arg !== null) {
@@ -123,6 +163,15 @@ const safeConsoleError = (...args: any[]) => {
             return true; // Suppress client errors with empty errorData
           }
         }
+      } else {
+        // No errorData property - check if it's a client error with only basic fields
+        const keys = Object.keys(arg);
+        const hasOnlyBasicFields = keys.length <= 3 && 
+          keys.every(k => ['url', 'status', 'statusText'].includes(k));
+        const isClientError = arg.status && arg.status >= 400 && arg.status < 500;
+        if (hasOnlyBasicFields && isClientError) {
+          return true; // Suppress client errors with only basic fields and no errorData
+        }
       }
     }
     return false;
@@ -138,8 +187,57 @@ const safeConsoleError = (...args: any[]) => {
     if (arg === null || arg === undefined) return false;
     if (isEmptyObject(arg)) return false;
     if (typeof arg === 'string' && arg.trim() === '') return false;
+    
+    // Additional check: if it's an object with only basic fields (url, status, statusText), suppress it
+    if (typeof arg === 'object' && arg !== null && !Array.isArray(arg)) {
+      const keys = Object.keys(arg);
+      const hasOnlyBasicFields = keys.length <= 3 && 
+        keys.every(k => ['url', 'status', 'statusText'].includes(k));
+      
+      if (hasOnlyBasicFields) {
+        // Suppress ALL objects with only basic fields - they don't contain meaningful error info
+        return false;
+      }
+      
+      // Also check: if object has errorData but errorData is empty/null, and only has basic fields otherwise
+      if ('errorData' in arg) {
+        const errorData = arg.errorData;
+        const hasEmptyErrorData = !errorData || 
+          (typeof errorData === 'object' && errorData !== null && Object.keys(errorData).length === 0);
+        const nonBasicKeys = keys.filter(k => !['url', 'status', 'statusText', 'errorData'].includes(k));
+        
+        if (hasEmptyErrorData && nonBasicKeys.length === 0) {
+          // Only has basic fields + empty errorData - suppress it
+          return false;
+        }
+      }
+    }
+    
     return true;
   });
+  
+  // Final check: if after filtering we only have the string "API Error:" and no actual error object, suppress it
+  // Also check if we have the string prefix but the object was filtered out (meaning it was empty)
+  const hasOnlyStringPrefix = filteredArgs.length === 1 && 
+    typeof filteredArgs[0] === 'string' && 
+    (filteredArgs[0].includes('API Error') || filteredArgs[0].includes('Error'));
+  
+  if (hasOnlyStringPrefix) {
+    return; // Suppress - only have the prefix string, no actual error data
+  }
+  
+  // Additional check: if we have both string and object, but object only has basic fields, suppress
+  if (filteredArgs.length === 2) {
+    const [first, second] = filteredArgs;
+    if (typeof first === 'string' && typeof second === 'object' && second !== null) {
+      const keys = Object.keys(second);
+      const hasOnlyBasicFields = keys.length <= 3 && 
+        keys.every(k => ['url', 'status', 'statusText'].includes(k));
+      if (hasOnlyBasicFields) {
+        return; // Suppress - object only has basic fields
+      }
+    }
+  }
   
   // Only log if we have meaningful content
   if (filteredArgs.length > 0) {
@@ -244,6 +342,17 @@ export async function fetcher<T>(
         if (text) {
           errorData = isJson ? JSON.parse(text) : text;
         }
+        // FastAPI returns errors in {detail: "message"} format
+        // If errorData is an object with only 'detail', preserve it
+        if (errorData && typeof errorData === 'object' && errorData !== null) {
+          // Check if it's a FastAPI error format
+          if ('detail' in errorData && Object.keys(errorData).length === 1) {
+            // This is a valid FastAPI error, keep it
+          } else if (Object.keys(errorData).length === 0) {
+            // Empty object, set to null to trigger suppression
+            errorData = null;
+          }
+        }
       } catch (e) {
         // If parsing fails, errorData remains null
       }
@@ -262,13 +371,15 @@ export async function fetcher<T>(
         let hasErrorData = false;
         if (errorData) {
           if (typeof errorData === 'object' && errorData !== null) {
-            // Check if object has any non-empty properties
+            // Check if object has any properties (including boolean false, 0, empty string for debugging)
             const keys = Object.keys(errorData);
             hasErrorData = keys.length > 0 && 
                           keys.some(key => {
                             const val = errorData[key];
-                            return val !== null && val !== undefined && val !== '' && 
-                                   (typeof val !== 'object' || Object.keys(val).length > 0);
+                            // Accept any value that is not null/undefined (including false, 0, empty string)
+                            // This helps debug authorization errors where false values are meaningful
+                            return val !== null && val !== undefined && 
+                                   (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0));
                           });
           } else if (typeof errorData === 'string') {
             hasErrorData = errorData.trim().length > 0;
@@ -291,99 +402,184 @@ export async function fetcher<T>(
         // NEVER log empty objects or 404s
         // Only proceed if we have meaningful error data AND it's not a 404
         if (!isNotFound && hasErrorData) {
-          // Double-check errorData is not empty before creating errorInfo
+          // For 403 errors, always use the original errorData (don't filter)
+          // This ensures authorization errors are properly logged
           let finalErrorData = null;
           if (errorData) {
             if (typeof errorData === 'object' && errorData !== null) {
-              // Only use if it has non-empty properties
-              const nonEmptyKeys = Object.keys(errorData).filter(key => {
-                const val = errorData[key];
-                return val !== null && val !== undefined && val !== '' && 
-                       (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0));
-              });
-              if (nonEmptyKeys.length > 0) {
-                // Create a filtered object with only non-empty properties
-                finalErrorData = {};
-                nonEmptyKeys.forEach(key => {
-                  finalErrorData[key] = errorData[key];
+              if (response.status === 403) {
+                // For 403 errors, include all properties (including boolean false)
+                finalErrorData = errorData;
+              } else {
+                // For other errors, filter out empty values
+                const nonEmptyKeys = Object.keys(errorData).filter(key => {
+                  const val = errorData[key];
+                  return val !== null && val !== undefined && 
+                         (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0));
                 });
+                if (nonEmptyKeys.length > 0) {
+                  finalErrorData = {};
+                  nonEmptyKeys.forEach(key => {
+                    finalErrorData[key] = errorData[key];
+                  });
+                }
               }
             } else {
               finalErrorData = errorData;
             }
           }
           
-          // Only log if we have finalErrorData with content
+          // CRITICAL: Double-check for mentor-assignments and capstones endpoints - NEVER log errors for these
+          // This is a final safety check to prevent any mentor-assignments or capstones errors from being logged
+          const finalUrlCheck = urlObj.toString();
+          const isMentorAssignmentsFinal = finalUrlCheck.includes('/mentor-assignments') || 
+                                         (finalUrlCheck.includes('/mentors/') && finalUrlCheck.includes('/assignments'));
+          const isCapstonesFinal = finalUrlCheck.includes('/capstones') || finalUrlCheck.includes('/capstone');
+          
+          // NEVER log mentor-assignments or capstones errors (404s are expected)
+          if (isMentorAssignmentsFinal || isCapstonesFinal) {
+            // Completely suppress - don't log anything for mentor-assignments or capstones
+            return;
+          }
+          
+          // Only log if we have finalErrorData with content OR if it's a server error
           // Final validation: ensure finalErrorData is not empty object
-          if (finalErrorData && 
-              (typeof finalErrorData !== 'object' || 
-               (finalErrorData !== null && Object.keys(finalErrorData).length > 0))) {
-            const errorInfo: any = {
-              url: urlObj.toString(),
-              status: response.status,
-              statusText: response.statusText,
-            };
-            
-            // Only add errorData if it has content (double-check it's not empty)
-            // CRITICAL: Never add empty object {} as errorData
-            const hasValidFinalErrorData = finalErrorData && 
-                (typeof finalErrorData !== 'object' || 
-                 (finalErrorData !== null && 
-                  Object.keys(finalErrorData).length > 0 &&
-                  Object.values(finalErrorData).some(val => 
-                    val !== null && val !== undefined && val !== '' &&
-                    (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0))
-                  )));
-            
-            if (hasValidFinalErrorData) {
-              errorInfo.errorData = finalErrorData;
-            }
-            
-            // CRITICAL: Final check - ensure errorData is not an empty object before logging
-            const hasValidErrorData = errorInfo.errorData && 
+          const hasErrorDataToLog = (response.status === 403 && errorData) || 
+            (finalErrorData && 
+             (typeof finalErrorData !== 'object' || 
+              (finalErrorData !== null && Object.keys(finalErrorData).length > 0)));
+          
+            // Only log if we have meaningful error data OR if it's a server error (500+)
+            // For client errors (400-499), only log if we have meaningful error data
+            if (response.status >= 500 || hasErrorDataToLog) {
+              const errorInfo: any = {
+                url: urlObj.toString(),
+                status: response.status,
+                statusText: response.statusText,
+              };
+              
+              // Add errorData if available
+              if (response.status === 403 && errorData) {
+                errorInfo.errorData = errorData; // Use original, unfiltered errorData
+              } else if (finalErrorData) {
+                errorInfo.errorData = finalErrorData;
+              }
+              
+              // Helper to check if errorData is truly empty (empty object {})
+              const isErrorDataEmpty = (obj: any): boolean => {
+                return obj !== null && typeof obj === 'object' && !Array.isArray(obj) && Object.keys(obj).length === 0;
+              };
+              
+              // If errorData is an empty object, remove it from errorInfo before any checks
+              if (errorInfo.errorData && isErrorDataEmpty(errorInfo.errorData)) {
+                delete errorInfo.errorData;
+              }
+              
+              // Final check: ensure errorInfo has meaningful content before logging
+              const hasMeaningfulErrorData = errorInfo.errorData !== undefined && 
+                errorInfo.errorData !== null &&
+                !isErrorDataEmpty(errorInfo.errorData) &&
                 (typeof errorInfo.errorData !== 'object' || 
-                 (errorInfo.errorData !== null && 
-                  Object.keys(errorInfo.errorData).length > 0 &&
-                  Object.values(errorInfo.errorData).some(val => 
-                    val !== null && val !== undefined && val !== '' &&
-                    (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0))
-                  )));
-            
-            // CRITICAL: Double-check for mentor-assignments and capstones endpoints - NEVER log errors for these
-            // This is a final safety check to prevent any mentor-assignments or capstones errors from being logged
-            const finalUrlCheck = errorInfo.url || urlObj.toString();
-            const isMentorAssignmentsFinal = finalUrlCheck.includes('/mentor-assignments') || 
-                                           (finalUrlCheck.includes('/mentors/') && finalUrlCheck.includes('/assignments'));
-            const isCapstonesFinal = finalUrlCheck.includes('/capstones') || finalUrlCheck.includes('/capstone');
-            
-            // NEVER log mentor-assignments or capstones errors (404s are expected)
-            if (isMentorAssignmentsFinal || isCapstonesFinal) {
-              // Completely suppress - don't log anything for mentor-assignments or capstones
-              return;
-            }
-            
-            // Only log if errorInfo has meaningful content
-            // Don't log if errorInfo only has url/status/statusText but no errorData (unless server error)
-            if (hasValidErrorData) {
-              safeConsoleError('API Error:', errorInfo);
-            } else if (response.status >= 500) {
-              // For server errors, log even without errorData but with minimal info
-              safeConsoleError('API Error:', {
-                url: errorInfo.url,
-                status: errorInfo.status,
-                statusText: errorInfo.statusText
-              });
+                 (errorInfo.errorData !== null && Object.keys(errorInfo.errorData).length > 0));
+              
+              // Additional check: ensure errorInfo itself has more than just url/status/statusText
+              // For client errors (400-499), only log if we have meaningful errorData
+              // For server errors (500+), log even without errorData
+              const isClientError = response.status >= 400 && response.status < 500;
+              const errorInfoKeys = Object.keys(errorInfo);
+              const hasOnlyBasicFields = errorInfoKeys.length <= 3 && 
+                errorInfoKeys.every(k => ['url', 'status', 'statusText'].includes(k));
+              
+              // Suppress client errors that only have basic fields (url, status, statusText) without meaningful errorData
+              if (isClientError && hasOnlyBasicFields && !hasMeaningfulErrorData) {
+                // Don't log - this is an empty error (only has url, status, statusText, no meaningful errorData)
+                return;
+              }
+              
+              // Only log if it's a server error OR if we have meaningful error data
+              // Also ensure errorInfo doesn't contain empty errorData when logging
+              if (response.status >= 500 || hasMeaningfulErrorData) {
+                // Create a clean errorInfo without empty errorData
+                const cleanErrorInfo = { ...errorInfo };
+                if (cleanErrorInfo.errorData && isErrorDataEmpty(cleanErrorInfo.errorData)) {
+                  delete cleanErrorInfo.errorData;
+                }
+                
+                // Final check: Don't log if cleanErrorInfo only has basic fields (url, status, statusText) without errorData
+                // This prevents logging empty error objects - even for server errors
+                const cleanErrorInfoKeys = Object.keys(cleanErrorInfo);
+                const hasOnlyBasicFields = cleanErrorInfoKeys.length <= 3 && 
+                  cleanErrorInfoKeys.every(k => ['url', 'status', 'statusText'].includes(k));
+                
+                // Check if cleanErrorInfo has any meaningful non-basic fields
+                // A field is meaningful if it has a non-empty, non-null value
+                const nonBasicFields = cleanErrorInfoKeys.filter(k => !['url', 'status', 'statusText'].includes(k));
+                const hasNonBasicFields = nonBasicFields.length > 0 && nonBasicFields.some(k => {
+                  const value = cleanErrorInfo[k];
+                  // Consider it meaningful if it's not null, undefined, empty string, or empty object
+                  if (value === null || value === undefined || value === '') return false;
+                  if (typeof value === 'object' && !Array.isArray(value)) {
+                    // Check if object has any non-empty properties
+                    const objKeys = Object.keys(value);
+                    if (objKeys.length === 0) return false;
+                    // Check if at least one property has a meaningful value
+                    return objKeys.some(objKey => {
+                      const objVal = value[objKey];
+                      return objVal !== null && objVal !== undefined && objVal !== '' &&
+                             (typeof objVal !== 'object' || (objVal !== null && Object.keys(objVal).length > 0));
+                    });
+                  }
+                  return true;
+                });
+                
+                // Only log if we have meaningful error data OR if cleanErrorInfo has meaningful non-basic fields
+                // This ensures we never log empty error objects, regardless of status code
+                if (hasMeaningfulErrorData || hasNonBasicFields) {
+                  // Double-check: ensure cleanErrorInfo has meaningful content before logging
+                  // Check if ALL non-basic fields are empty (if so, suppress even if hasNonBasicFields was true)
+                  const nonBasicKeys = cleanErrorInfoKeys.filter(k => !['url', 'status', 'statusText'].includes(k));
+                  const allNonBasicEmpty = nonBasicKeys.length === 0 || nonBasicKeys.every(k => {
+                    const val = cleanErrorInfo[k];
+                    if (val === null || val === undefined || val === '') return true;
+                    if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) return true;
+                    return false;
+                  });
+                  
+                  // Final check: if cleanErrorInfo only has basic fields (url, status, statusText), suppress it
+                  const finalKeys = Object.keys(cleanErrorInfo);
+                  const finalHasOnlyBasicFields = finalKeys.length <= 3 && 
+                    finalKeys.every(k => ['url', 'status', 'statusText'].includes(k));
+                  
+                  if (finalHasOnlyBasicFields) {
+                    // Suppress - only has basic fields, no meaningful error data
+                    return;
+                  }
+                  
+                  // Only log if we have meaningful errorData OR if there are meaningful non-basic fields
+                  if (hasMeaningfulErrorData || !allNonBasicEmpty) {
+                    safeConsoleError('API Error:', cleanErrorInfo);
+                  } else {
+                    // Suppress - all non-basic fields are empty, only has basic fields
+                    return;
+                  }
+                } else {
+                  // Suppress - don't log empty error objects (even for server errors)
+                  // This prevents "API Error: {}" from appearing
+                  return;
+                }
+              }
+              // Otherwise, completely suppress - don't log empty errors
             }
             // Otherwise, don't log at all (suppress empty errorInfo)
-          }
         } else if (isServerError && hasErrorData) {
           // Log server errors only if they have meaningful error data
           let finalErrorData = null;
           if (errorData) {
             if (typeof errorData === 'object' && errorData !== null) {
+              // Include all properties (including boolean false, 0, empty string for debugging)
               const nonEmptyKeys = Object.keys(errorData).filter(key => {
                 const val = errorData[key];
-                return val !== null && val !== undefined && val !== '' && 
+                return val !== null && val !== undefined && 
                        (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0));
               });
               if (nonEmptyKeys.length > 0) {
@@ -414,7 +610,7 @@ export async function fetcher<T>(
                  (finalErrorData !== null && 
                   Object.keys(finalErrorData).length > 0 &&
                   Object.values(finalErrorData).some(val => 
-                    val !== null && val !== undefined && val !== '' &&
+                    val !== null && val !== undefined &&
                     (typeof val !== 'object' || (val !== null && Object.keys(val).length > 0))
                   )));
             
@@ -437,12 +633,12 @@ export async function fetcher<T>(
             if (hasValidErrorData) {
               safeConsoleError('API Error:', errorInfo);
             } else if (response.status >= 500) {
-              // For server errors, log even without errorData but with minimal info
-              safeConsoleError('API Error:', {
-                url: errorInfo.url,
-                status: errorInfo.status,
-                statusText: errorInfo.statusText
-              });
+              // For server errors, only log if we have meaningful error data
+              // Don't log server errors with only basic fields - they're still empty
+              if (hasValidErrorData) {
+                safeConsoleError('API Error:', errorInfo);
+              }
+              // Otherwise suppress - even server errors shouldn't log empty objects
             }
             // Otherwise, don't log at all (suppress empty errorInfo)
           }
@@ -481,20 +677,35 @@ export async function fetcher<T>(
       errorMessage.includes('Failed to fetch') ||
       errorMessage.includes('NetworkError') ||
       errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('CORS') ||
+      errorMessage.includes('cors') ||
       (error as any)?.code === 'ECONNREFUSED';
+    
+    // Detect CORS errors specifically
+    const isCorsError = errorMessage.includes('CORS') || 
+                        errorMessage.includes('cors') ||
+                        (errorMessage.includes('Failed to fetch') && typeof window !== 'undefined');
     
     // Don't log connection errors to console if backend is down (expected behavior)
     if (!isConnectionError && typeof window !== 'undefined') {
       safeConsoleError('[fetcher] Network error:', error);
     }
     
+    // Provide more specific error message
+    let finalErrorMessage = 'Cannot connect to backend server'
+    if (isCorsError) {
+      finalErrorMessage = 'CORS error: Backend may not be allowing requests from this origin. Check CORS configuration.'
+    } else if (isConnectionError) {
+      finalErrorMessage = 'Cannot connect to backend server. Please ensure the service is running and accessible.'
+    } else {
+      finalErrorMessage = errorMessage
+    }
+    
     throw new ApiError(
       0,
       'Network Error',
       null,
-      isConnectionError 
-        ? 'Cannot connect to backend server'
-        : errorMessage
+      finalErrorMessage
     );
   }
 }

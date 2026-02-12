@@ -50,6 +50,7 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         related_name='audit_logs',
+        to_field='uuid_id',
     )
     api_key = models.ForeignKey(
         'APIKey',

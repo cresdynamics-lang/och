@@ -1660,8 +1660,8 @@ ALL_PROFILING_QUESTIONS_ENHANCED = (
     CYBER_APTITUDE_QUESTIONS +
     TECHNICAL_EXPOSURE_QUESTIONS +
     SCENARIO_PREFERENCE_QUESTIONS +
-    WORK_STYLE_QUESTIONS +
-    DIFFICULTY_SELECTION_QUESTIONS
+    WORK_STYLE_QUESTIONS
+    # DIFFICULTY_SELECTION_QUESTIONS removed per user request - difficulty selection question no longer shown
 )
 
 # Enhanced scoring weights for Tier-0 requirements

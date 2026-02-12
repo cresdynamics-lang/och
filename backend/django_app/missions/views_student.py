@@ -165,13 +165,14 @@ def list_student_missions(request):
     status_filter = request.query_params.get('status', 'all')
     difficulty_filter = request.query_params.get('difficulty', 'all')
     track_filter = request.query_params.get('track', 'all')
+    tier_filter = request.query_params.get('tier', 'all')
     search = request.query_params.get('search', '').strip()
     recommended = request.query_params.get('recommended', 'false').lower() == 'true'
     urgent = request.query_params.get('urgent', 'false').lower() == 'true'
-    
+
     # Base queryset - only active missions
     missions = Mission.objects.filter(is_active=True)
-    
+
     # Apply profiler-based difficulty filtering if no explicit filter
     if difficulty_filter == 'all':
         try:
@@ -186,9 +187,12 @@ def list_student_missions(request):
     else:
         # Apply explicit difficulty filter
         missions = missions.filter(difficulty=difficulty_filter)
-    
+
     if track_filter != 'all':
-        missions = missions.filter(track_key=track_filter)
+        missions = missions.filter(track__isnull=False, track=track_filter)
+
+    if tier_filter != 'all':
+        missions = missions.filter(tier__isnull=False, tier=tier_filter)
     
     if search:
         missions = missions.filter(
@@ -259,6 +263,8 @@ def list_student_missions(request):
             'estimated_time_minutes': mission.estimated_duration_min,
             'competency_tags': mission.skills_tags or [],
             'track_key': mission.track_id,
+            'track': mission.track,
+            'tier': mission.tier,
             'requirements': {},
             'is_locked': is_locked,
             'lock_reason': lock_reason,
@@ -391,6 +397,8 @@ def get_mission_detail(request, mission_id):
         'estimated_time_minutes': mission.estimated_duration_min,
         'competency_tags': mission.skills_tags or [],
         'track_key': mission.track_id,
+        'track': mission.track,
+        'tier': mission.tier,
         'requirements': {},
         'status': submission.status,
         'submission': {

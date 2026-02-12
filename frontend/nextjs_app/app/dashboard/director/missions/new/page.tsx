@@ -1,19 +1,39 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { useTracks } from '@/hooks/usePrograms'
+import { apiGateway } from '@/services/apiGateway'
+
+interface CurriculumTrack {
+  id: string
+  slug: string
+  name: string
+  code: string
+}
 
 export default function CreateMissionPage() {
   const router = useRouter()
-  const { tracks } = useTracks()
-  const trackList = useMemo(() => (Array.isArray(tracks) ? tracks : []), [tracks])
+  const [tracks, setTracks] = useState<CurriculumTrack[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetchTracks()
+  }, [])
+
+  const fetchTracks = async () => {
+    try {
+      const data = await apiGateway.get('/curriculum/tracks/') as any
+      const trackList = data?.results || data?.data || data || []
+      setTracks(trackList)
+    } catch (error) {
+      console.error('Failed to fetch tracks:', error)
+    }
+  }
   
   const [formData, setFormData] = useState({
     title: '',
@@ -159,9 +179,9 @@ export default function CreateMissionPage() {
                     className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-mint focus:outline-none"
                   >
                     <option value="">Select a track (optional)</option>
-                    {trackList.map((t) => (
+                    {tracks.map((t) => (
                       <option key={t.id} value={String(t.id)}>
-                        {t.name} ({t.key})
+                        {t.name} ({t.slug})
                       </option>
                     ))}
                   </select>

@@ -37,6 +37,9 @@ export default function StudentClient() {
       return;
     }
 
+    // Mark as checked immediately to prevent re-runs
+    hasCheckedRef.current = true;
+
     // Check if user is a student/mentee
     const userRoles = user?.roles || [];
     const isStudent = userRoles.some((r: any) => {
@@ -47,7 +50,6 @@ export default function StudentClient() {
     if (!isStudent) {
       console.log('StudentClient: User is not a student/mentee, allowing access without checks');
       setCheckingProfiling(false);
-      hasCheckedRef.current = true;
       return;
     }
 
@@ -66,11 +68,8 @@ export default function StudentClient() {
           const freshUser = await djangoClient.auth.getCurrentUser();
           currentProfilingComplete = freshUser?.profiling_complete ?? false;
           console.log('StudentClient: Fresh profiling_complete =', currentProfilingComplete);
-          
-          // Also trigger a background refresh of the auth state
-          if (reloadUser) {
-            reloadUser();
-          }
+
+          // Don't call reloadUser here - it causes infinite loops
         } catch (err) {
           console.log('StudentClient: Failed to fetch fresh user, using cached data');
         }
@@ -113,12 +112,7 @@ export default function StudentClient() {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('foundations_complete') === 'true') {
           console.log('✅ Foundations just completed (URL param) - allowing access');
-          // Refresh user state in background
-          if (reloadUser) {
-            reloadUser().catch(console.error);
-          }
           setCheckingFoundations(false);
-          hasCheckedRef.current = true;
           return;
         }
 
@@ -138,7 +132,6 @@ export default function StudentClient() {
         if (currentFoundationsComplete) {
           console.log('✅ Foundations already completed (Django confirmed)');
           setCheckingFoundations(false);
-          hasCheckedRef.current = true;
           return;
         }
 
@@ -151,7 +144,6 @@ export default function StudentClient() {
             // Don't redirect to profiler - we already confirmed profiling is complete above
             // Just allow access to dashboard
             setCheckingFoundations(false);
-            hasCheckedRef.current = true;
             return;
           }
 
@@ -162,13 +154,6 @@ export default function StudentClient() {
             return;
           }
 
-          // If complete but user flag not updated, refresh user
-          if (foundationsStatus.is_complete && !currentFoundationsComplete) {
-            if (reloadUser) {
-              reloadUser().catch(console.error);
-            }
-          }
-
           console.log('✅ Foundations completed');
         } catch (foundationsError) {
           console.error('⚠️ Failed to check foundations status:', foundationsError);
@@ -176,12 +161,10 @@ export default function StudentClient() {
         }
 
         setCheckingFoundations(false);
-        hasCheckedRef.current = true;
       } catch (error: any) {
         console.error('❌ Failed to check Foundations status:', error);
         // On error, allow access but log it
         setCheckingFoundations(false);
-        hasCheckedRef.current = true;
       }
     };
 

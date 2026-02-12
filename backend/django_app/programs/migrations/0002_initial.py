@@ -87,6 +87,63 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
+        migrations.CreateModel(
+            name='Cohort',
+            fields=[
+                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('name', models.CharField(max_length=200)),
+                ('start_date', models.DateField()),
+                ('end_date', models.DateField()),
+                ('mode', models.CharField(choices=[('onsite', 'Onsite'), ('virtual', 'Virtual'), ('hybrid', 'Hybrid')], default='virtual', max_length=20)),
+                ('seat_cap', models.IntegerField(validators=[django.core.validators.MinValueValidator(1)])),
+                ('mentor_ratio', models.FloatField(default=0.1, validators=[django.core.validators.MinValueValidator(0.0), django.core.validators.MaxValueValidator(1.0)], help_text='Mentors per student ratio')),
+                ('calendar_id', models.UUIDField(blank=True, null=True)),
+                ('calendar_template_id', models.UUIDField(blank=True, help_text='Reference to calendar template used', null=True)),
+                ('seat_pool', models.JSONField(blank=True, default=dict, help_text='Seat pool breakdown: {paid: count, scholarship: count, sponsored: count}')),
+                ('status', models.CharField(choices=[('draft', 'Draft'), ('active', 'Active'), ('running', 'Running'), ('closing', 'Closing'), ('closed', 'Closed')], default='draft', max_length=20)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                'db_table': 'cohorts',
+                'ordering': ['-start_date'],
+            },
+        ),
+        migrations.CreateModel(
+            name='CalendarEvent',
+            fields=[
+                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('type', models.CharField(choices=[('orientation', 'Orientation'), ('mentorship', 'Mentorship'), ('session', 'Session'), ('project_review', 'Project Review'), ('submission', 'Submission'), ('holiday', 'Holiday'), ('closure', 'Closure')], max_length=20)),
+                ('title', models.CharField(max_length=200)),
+                ('description', models.TextField(blank=True)),
+                ('start_ts', models.DateTimeField()),
+                ('end_ts', models.DateTimeField()),
+                ('timezone', models.CharField(default='UTC', help_text='Timezone for the event', max_length=50)),
+                ('location', models.CharField(blank=True, max_length=200)),
+                ('link', models.URLField(blank=True)),
+                ('milestone_id', models.UUIDField(blank=True, help_text='Reference to milestone if this is a milestone event', null=True)),
+                ('completion_tracked', models.BooleanField(default=False, help_text='Whether completion is tracked for this event')),
+                ('status', models.CharField(choices=[('scheduled', 'Scheduled'), ('done', 'Done'), ('cancelled', 'Cancelled')], default='scheduled', max_length=20)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                'db_table': 'calendar_events',
+                'ordering': ['start_ts'],
+            },
+        ),
+        migrations.CreateModel(
+            name='Certificate',
+            fields=[
+                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('file_uri', models.URLField(blank=True)),
+                ('issued_at', models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                'db_table': 'certificates',
+                'ordering': ['-issued_at'],
+            },
+        ),
         migrations.AddField(
             model_name='cohort',
             name='coordinator',
@@ -96,16 +153,6 @@ class Migration(migrations.Migration):
             model_name='calendarevent',
             name='cohort',
             field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='calendar_events', to='programs.cohort'),
-        ),
-        migrations.AddField(
-            model_name='directorcohortdashboard',
-            name='cohort',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='director_dashboards', to='programs.cohort'),
-        ),
-        migrations.AddField(
-            model_name='directorcohortdashboard',
-            name='director',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='director_cohort_dashboards', to=settings.AUTH_USER_MODEL),
         ),
         migrations.CreateModel(
             name='Enrollment',
@@ -267,18 +314,6 @@ class Migration(migrations.Migration):
                 'db_table': 'waitlist',
                 'ordering': ['position', 'added_at'],
             },
-        ),
-        migrations.AddIndex(
-            model_name='directorcohortdashboard',
-            index=models.Index(fields=['director', 'cohort'], name='idx_director_cohort'),
-        ),
-        migrations.AddIndex(
-            model_name='directorcohortdashboard',
-            index=models.Index(fields=['updated_at'], name='idx_cohort_dashboard_updated'),
-        ),
-        migrations.AlterUniqueTogether(
-            name='directorcohortdashboard',
-            unique_together={('director', 'cohort')},
         ),
         migrations.AddConstraint(
             model_name='enrollment',

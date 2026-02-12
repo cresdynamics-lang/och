@@ -248,11 +248,16 @@ class LessonSerializer(serializers.ModelSerializer):
     """Serializer for lessons."""
     is_completed = serializers.SerializerMethodField()
     user_progress = serializers.SerializerMethodField()
-    
+    module = serializers.PrimaryKeyRelatedField(
+        queryset=CurriculumModule.objects.all(),
+        write_only=True,
+        required=False,
+    )
+
     class Meta:
         model = Lesson
         fields = [
-            'id', 'title', 'description', 'content_url', 'lesson_type',
+            'id', 'module', 'title', 'description', 'content_url', 'lesson_type',
             'duration_minutes', 'order_index', 'is_required',
             'is_completed', 'user_progress', 'created_at'
         ]
@@ -322,8 +327,11 @@ class RecipeRecommendationSerializer(serializers.ModelSerializer):
 
 class CurriculumModuleListSerializer(serializers.ModelSerializer):
     """List serializer for curriculum modules (minimal data)."""
-    lesson_count = serializers.IntegerField(read_only=True)
+    lesson_count = serializers.SerializerMethodField()
     mission_count = serializers.IntegerField(read_only=True)
+
+    def get_lesson_count(self, obj):
+        return obj.lessons.count()
     completion_percentage = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
     estimated_time_minutes = serializers.IntegerField(source='estimated_duration_minutes', read_only=True)
@@ -334,7 +342,7 @@ class CurriculumModuleListSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'track_key', 'order_index',
             'level', 'entitlement_tier', 'is_core', 'is_required',
             'estimated_time_minutes', 'lesson_count', 'mission_count',
-            'completion_percentage', 'is_locked'
+            'completion_percentage', 'is_locked', 'mentor_notes'
         ]
         read_only_fields = ['id']
     
@@ -368,6 +376,10 @@ class CurriculumModuleDetailSerializer(serializers.ModelSerializer):
     user_progress = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
     estimated_time_minutes = serializers.IntegerField(source='estimated_duration_minutes', read_only=True)
+    lesson_count = serializers.SerializerMethodField()
+
+    def get_lesson_count(self, obj):
+        return obj.lessons.count()
     
     class Meta:
         model = CurriculumModule
@@ -414,7 +426,8 @@ class CurriculumTrackListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CurriculumTrack
         fields = [
-            'id', 'code', 'name', 'description', 'tier',
+            'id', 'code', 'slug', 'name', 'title', 'description',
+            'level', 'tier', 'order_number', 'thumbnail_url',
             'icon', 'color', 'estimated_duration_weeks',
             'module_count', 'lesson_count', 'mission_count',
             'is_active', 'user_progress'
@@ -445,7 +458,8 @@ class CurriculumTrackDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = CurriculumTrack
         fields = [
-            'id', 'code', 'name', 'description', 'tier',
+            'id', 'code', 'slug', 'name', 'title', 'description',
+            'level', 'tier', 'order_number', 'thumbnail_url',
             'icon', 'color', 'program_track_id',
             'estimated_duration_weeks', 'module_count', 'lesson_count',
             'mission_count', 'is_active', 'modules',
@@ -636,7 +650,7 @@ class CurriculumActivitySerializer(serializers.ModelSerializer):
 
 class LessonProgressUpdateSerializer(serializers.Serializer):
     """Serializer for updating lesson progress."""
-    lesson_id = serializers.UUIDField()
+    lesson_id = serializers.UUIDField(required=False)  # Optional - comes from URL pk
     status = serializers.ChoiceField(choices=['not_started', 'in_progress', 'completed'])
     progress_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
     time_spent_minutes = serializers.IntegerField(required=False, min_value=0)

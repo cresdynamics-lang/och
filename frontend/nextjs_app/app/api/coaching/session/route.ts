@@ -125,6 +125,39 @@ interface StudentState {
   complexity?: number;
 }
 
+// Helper function to map track_key to track_code
+function getTrackCode(trackKey: string | null | undefined): string {
+  if (!trackKey) return 'SOCDEFENSE'; // Default fallback
+  
+  const trackKeyLower = trackKey.toLowerCase();
+  const trackCodeMap: Record<string, string> = {
+    'defender': 'SOCDEFENSE',
+    'offensive': 'OFFENSIVE',
+    'grc': 'GRC',
+    'innovation': 'INNOVATION',
+    'leadership': 'LEADERSHIP'
+  };
+  
+  return trackCodeMap[trackKeyLower] || 'SOCDEFENSE';
+}
+
+// Helper function to get track display name from track_code
+function getTrackDisplayName(trackCode: string | null | undefined): string {
+  if (!trackCode) return 'your track';
+  
+  const trackCodeUpper = trackCode.toUpperCase();
+  // Map track codes to display names
+  const trackCodeToName: Record<string, string> = {
+    'SOCDEFENSE': 'SOCDEFENSE',
+    'OFFENSIVE': 'OFFENSIVE',
+    'GRC': 'GRC',
+    'INNOVATION': 'INNOVATION',
+    'LEADERSHIP': 'LEADERSHIP'
+  };
+  
+  return trackCodeToName[trackCodeUpper] || trackCode;
+}
+
 async function getStudentState(userId: string, accessToken: string = ''): Promise<StudentState> {
   try {
     // Fetch data from Django PostgreSQL APIs
@@ -133,6 +166,12 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
     if (accessToken) {
       authHeaders['Authorization'] = `Bearer ${accessToken}`;
     }
+    
+    // Fetch user data to get track_key
+    const userResponse = await fetch(`${djangoApiUrl}/api/v1/users/${userId}`, { headers: authHeaders }).catch(() => ({ ok: false }));
+    const userData = userResponse && userResponse.ok ? await userResponse.json() : null;
+    const userTrackKey = userData?.track_key || userData?.recommended_track || null;
+    const defaultTrackCode = getTrackCode(userTrackKey);
 
     const [
       analyticsResponse,
@@ -184,11 +223,17 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
       1
     );
 
+    // Determine track_code from multiple sources, with user track_key as priority
+    const finalTrackCode = trackData?.track_code || 
+                          getTrackCode(userTrackKey) ||
+                          getTrackCode(profilerData?.recommended_track?.track_id) ||
+                          defaultTrackCode;
+
     return {
       analytics: analyticsData || {
         total_missions_completed: completedMissions,
         average_score: missionData.length > 0 ? missionData.reduce((sum: number, m: any) => sum + (m.score || 0), 0) / missionData.length : 0,
-        track_code: trackData?.track_code || 'SOCDEFENSE',
+        track_code: finalTrackCode,
         circle_level: trackData?.circle_level || 1
       },
       recipe_coverage: {
@@ -198,7 +243,7 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
         recipes: recipeData
       },
       track_progress: trackData || {
-        track_code: 'SOCDEFENSE',
+        track_code: finalTrackCode,
         circle_level: 1,
         progress_percentage: 0
       },
@@ -215,18 +260,33 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
         helpful_votes_received: 0
       },
       mentorship_status: mentorshipData || [],
-      track_code: trackData?.track_code || profilerData?.recommended_track?.track_id || 'SOCDEFENSE',
+      track_code: finalTrackCode,
       circle_level: trackData?.circle_level || 1,
       complexity: complexity
     };
   } catch (error) {
     console.error('Error fetching student state from Django:', error);
+    // Try to get user track_key even in error case
+    let fallbackTrackCode = 'SOCDEFENSE';
+    try {
+      const djangoApiUrl = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
+      const userResponse = await fetch(`${djangoApiUrl}/api/v1/users/${userId}`, { 
+        headers: { 'Content-Type': 'application/json' } 
+      }).catch(() => null);
+      if (userResponse && userResponse.ok) {
+        const userData = await userResponse.json();
+        fallbackTrackCode = getTrackCode(userData?.track_key || userData?.recommended_track);
+      }
+    } catch (e) {
+      // Ignore errors, use default
+    }
+    
     // Return mock data as fallback
     return {
       analytics: {
         total_missions_completed: 0,
         average_score: 0,
-        track_code: 'SOCDEFENSE',
+        track_code: fallbackTrackCode,
         circle_level: 1
       },
       recipe_coverage: {
@@ -236,7 +296,7 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
         recipes: []
       },
       track_progress: {
-        track_code: 'SOCDEFENSE',
+        track_code: fallbackTrackCode,
         circle_level: 1,
         progress_percentage: 0
       },
@@ -253,7 +313,7 @@ async function getStudentState(userId: string, accessToken: string = ''): Promis
         helpful_votes_received: 0
       },
       mentorship_status: [],
-      track_code: 'SOCDEFENSE',
+      track_code: fallbackTrackCode,
       circle_level: 1,
       complexity: 0.5
     };
@@ -554,10 +614,55 @@ export async function POST(request: NextRequest) {
       const missionsDone = studentState.mission_stats?.completed || 0;
       const recipesPercent = studentState.recipe_coverage?.percentage?.toFixed(0) || '0';
       const trackCode = studentState.track_code || 'your track';
+      const trackDisplayName = getTrackDisplayName(studentState.track_code || null);
+      const circleLevel = studentState.circle_level || 1;
+      
+      // Dynamic encouragement messages based on track and level
+      const encouragementMessages: Record<string, Record<number, string>> = {
+        'SOCDEFENSE': {
+          1: "Every expert defender started by learning the basics. Keep building your defense skills!",
+          2: "You're strengthening your defensive capabilities. Stay vigilant!",
+          3: "Your defensive expertise is growing. Keep protecting systems!",
+          4: "You're becoming a master defender. Excellence in defense awaits!",
+          5: "You're an elite defender. Your skills protect organizations daily!"
+        },
+        'OFFENSIVE': {
+          1: "Every ethical hacker started with curiosity. Keep exploring safely!",
+          2: "Your offensive skills are developing. Think like an attacker!",
+          3: "You're mastering penetration testing. Keep finding vulnerabilities!",
+          4: "You're becoming a red team expert. Your skills are in high demand!",
+          5: "You're an elite offensive security specialist. Keep pushing boundaries!"
+        },
+        'GRC': {
+          1: "Every compliance expert started by understanding frameworks. Keep learning!",
+          2: "Your GRC knowledge is expanding. Governance matters!",
+          3: "You're mastering risk management. Keep ensuring compliance!",
+          4: "You're becoming a GRC leader. Your expertise guides organizations!",
+          5: "You're an elite GRC professional. Your strategic thinking shapes security!"
+        },
+        'INNOVATION': {
+          1: "Every innovator started with an idea. Keep creating!",
+          2: "Your innovation skills are growing. Build something amazing!",
+          3: "You're mastering security innovation. Keep pushing boundaries!",
+          4: "You're becoming a security innovator. Your creations protect millions!",
+          5: "You're an elite security innovator. Your innovations shape the future!"
+        },
+        'LEADERSHIP': {
+          1: "Every leader started by learning. Keep developing your leadership skills!",
+          2: "Your leadership capabilities are expanding. Lead with purpose!",
+          3: "You're mastering cybersecurity leadership. Keep inspiring teams!",
+          4: "You're becoming a security executive. Your vision drives change!",
+          5: "You're an elite cybersecurity leader. Your leadership transforms organizations!"
+        }
+      };
+      
+      const encouragement = encouragementMessages[trackCode]?.[circleLevel] || 
+                           encouragementMessages[trackCode]?.[1] || 
+                           "Every expert was once a beginner. Keep going!";
 
       parsedAdvice = {
         greeting: "Welcome back to your cybersecurity journey!",
-        diagnosis: `You're on the ${trackCode} track. ${missionsDone} mission${missionsDone !== 1 ? 's' : ''} completed, recipe coverage at ${recipesPercent}%.`,
+        diagnosis: `You're on the ${trackDisplayName} track. ${missionsDone} mission${missionsDone !== 1 ? 's' : ''} completed, recipe coverage at ${recipesPercent}%.`,
         priorities: [
           {
             priority: 'high',
@@ -568,13 +673,13 @@ export async function POST(request: NextRequest) {
           },
           {
             priority: 'medium',
-            action: 'Explore recipes for your track',
-            reason: `Recipes reinforce the concepts needed for ${trackCode}`,
+            action: `Explore recipes for your ${trackDisplayName} track`,
+            reason: `Recipes reinforce the concepts needed for ${trackDisplayName}`,
             recipes: [],
             deadline: null
           }
         ],
-        encouragement: "Every expert was once a beginner. Keep going!",
+        encouragement: encouragement,
         actions: [
           { type: 'send_nudge', target: 'missions', payload: {} },
           { type: 'send_nudge', target: 'recipes', payload: {} }

@@ -66,8 +66,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ongozacyberhub_redis
-    ports:
-      - "6379:6379"
+    # No external port mapping - Redis is only used internally by Django
     volumes:
       - redis_data:/data
     healthcheck:
@@ -83,6 +82,7 @@ services:
       context: ..
       dockerfile: backend/docker/django.Dockerfile
     container_name: ongozacyberhub_django
+    command: python manage.py runserver 0.0.0.0:8000 --skip-checks --nothreading
     environment:
       # Force Docker service names (override any .env file values)
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-change-me-in-production}

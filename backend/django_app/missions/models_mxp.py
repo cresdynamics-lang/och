@@ -98,6 +98,11 @@ class MissionProgress(models.Model):
     subtask_scores = models.JSONField(default=dict, blank=True, help_text='Mentor scores per subtask: {subtask_id: score}')
     mentor_recommended_recipes = models.JSONField(default=list, blank=True, help_text='Recipes recommended by mentor: [recipe_id or slug]')
     mentor_reviewed_at = models.DateTimeField(null=True, blank=True, help_text='When mentor completed review')
+    # Mastery-level enhancements
+    presentation_submitted = models.BooleanField(default=False, help_text='Presentation has been submitted (Mastery/Capstone)')
+    presentation_url = models.URLField(blank=True, null=True, max_length=500, help_text='URL to presentation (video, slides, etc.)')
+    mentor_feedback_audio_url = models.URLField(blank=True, null=True, max_length=500, help_text='URL to mentor audio feedback')
+    mentor_feedback_video_url = models.URLField(blank=True, null=True, max_length=500, help_text='URL to mentor video feedback')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -110,6 +115,69 @@ class MissionProgress(models.Model):
             models.Index(fields=['user', 'final_status']),
         ]
         unique_together = [['mission', 'user']]
+    
+    def check_subtask_unlockable(self, subtask_id):
+        """
+        Check if a subtask can be unlocked based on dependencies.
+        
+        Args:
+            subtask_id: The ID or order_index of the subtask to check
+            
+        Returns:
+            dict: {
+                'unlockable': bool,
+                'reason': str (if not unlockable),
+                'dependencies': list of subtask IDs that must be completed first
+            }
+        """
+        if not self.mission.subtasks:
+            return {'unlockable': True, 'reason': None, 'dependencies': []}
+        
+        # Find the subtask in the mission's subtasks array
+        subtask = None
+        for st in self.mission.subtasks:
+            if isinstance(st, dict):
+                # Check by id or order_index
+                if st.get('id') == subtask_id or st.get('order_index') == subtask_id:
+                    subtask = st
+                    break
+        
+        if not subtask:
+            return {'unlockable': False, 'reason': 'Subtask not found', 'dependencies': []}
+        
+        # Check if subtask has dependencies
+        dependencies = subtask.get('dependencies', [])
+        if not dependencies:
+            return {'unlockable': True, 'reason': None, 'dependencies': []}
+        
+        # Check if all dependencies are completed
+        completed_subtasks = self.subtasks_progress or {}
+        missing_dependencies = []
+        
+        for dep_id in dependencies:
+            # Check if dependency subtask is completed
+            dep_completed = False
+            for st_id, st_progress in completed_subtasks.items():
+                if isinstance(st_progress, dict):
+                    # Match by id or order_index
+                    if (str(st_id) == str(dep_id) or 
+                        st_progress.get('subtask_id') == dep_id or
+                        st_progress.get('order_index') == dep_id):
+                        if st_progress.get('completed', False):
+                            dep_completed = True
+                            break
+            
+            if not dep_completed:
+                missing_dependencies.append(dep_id)
+        
+        if missing_dependencies:
+            return {
+                'unlockable': False,
+                'reason': f'Complete subtasks {missing_dependencies} first',
+                'dependencies': missing_dependencies
+            }
+        
+        return {'unlockable': True, 'reason': None, 'dependencies': []}
     
     def __str__(self):
         return f"Progress: {self.mission.code} by {self.user.email} ({self.status})"

@@ -14,7 +14,8 @@ from .models import (
     CurriculumTrack, CurriculumLevel, CurriculumModule, CurriculumContent,
     StrategicSession, UserTrackEnrollment, UserContentProgress, Lesson, ModuleMission,
     RecipeRecommendation, UserTrackProgress, UserModuleProgress,
-    UserLessonProgress, UserMissionProgress, CurriculumActivity
+    UserLessonProgress, UserMissionProgress, CurriculumActivity,
+    UserLessonBookmark, CurriculumMentorFeedback,
 )
 from .serializers import (
     CurriculumTrackListSerializer, CurriculumTrackDetailSerializer,
@@ -451,7 +452,47 @@ class LessonViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(module_id=module_id)
         
         return queryset.order_by('order_index')
-    
+
+    @action(detail=False, methods=['post'], url_path='upload-video')
+    def upload_video(self, request):
+        """
+        POST /curriculum/lessons/upload-video/
+        Accepts a video file upload, saves to media/lesson_videos/, returns the URL.
+        Used by the director module management UI.
+        """
+        video_file = request.FILES.get('video')
+        if not video_file:
+            return Response({'error': 'No file provided. Send file as "video" field.'}, status=400)
+
+        # Validate file type
+        allowed_types = ('video/mp4', 'video/webm', 'video/ogg', 'video/avi', 'video/mov',
+                         'video/quicktime', 'video/x-msvideo', 'video/mpeg')
+        if video_file.content_type and video_file.content_type not in allowed_types:
+            return Response(
+                {'error': f'Unsupported file type: {video_file.content_type}. Allowed: mp4, webm, ogg, avi, mov'},
+                status=400,
+            )
+
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+        import os, uuid as uuid_lib
+        from django.conf import settings as django_settings
+
+        # Use a unique filename to avoid collisions
+        ext = os.path.splitext(video_file.name)[1].lower() or '.mp4'
+        unique_name = f"{uuid_lib.uuid4().hex}{ext}"
+        save_path = f"lesson_videos/{unique_name}"
+
+        path = default_storage.save(save_path, ContentFile(video_file.read()))
+        url = request.build_absolute_uri(f"{django_settings.MEDIA_URL}{path}")
+
+        return Response({
+            'url': url,
+            'filename': unique_name,
+            'original_name': video_file.name,
+            'size_bytes': video_file.size,
+        }, status=201)
+
     @action(detail=True, methods=['post'])
     def progress(self, request, pk=None):
         """Update lesson progress."""
@@ -722,7 +763,7 @@ class Tier2TrackStatusView(APIView):
         if track.tier != 2:
             return Response({
                 'error': 'not_tier2',
-                'message': 'This endpoint is only for Tier 2 (Beginner) tracks'
+                'message': 'This endpoint is only for Beginner level tracks'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         progress, _ = UserTrackProgress.objects.get_or_create(
@@ -755,9 +796,11 @@ class Tier2TrackStatusView(APIView):
             is_required=True
         ).count()
         
+        min_missions_required = getattr(track, 'tier2_mini_missions_required', 1)
         return Response({
             'track_code': track.code,
             'track_name': track.name,
+            'progression_mode': getattr(track, 'progression_mode', 'sequential'),
             'completion_percentage': float(progress.completion_percentage),
             'is_complete': is_complete,
             'tier2_completion_requirements_met': progress.tier2_completion_requirements_met,
@@ -772,11 +815,443 @@ class Tier2TrackStatusView(APIView):
                 'quizzes_passed': progress.tier2_quizzes_passed,
                 'mini_missions_total': mini_missions,
                 'mini_missions_completed': progress.tier2_mini_missions_completed,
+                'mini_missions_required': min_missions_required,
                 'reflections_submitted': progress.tier2_reflections_submitted,
                 'mentor_approval': progress.tier2_mentor_approval,
+                'mentor_approval_required': getattr(track, 'tier2_require_mentor_approval', False),
             },
             'missing_requirements': missing,
             'can_progress_to_tier3': is_complete,
+        })
+
+
+class Tier3TrackStatusView(APIView):
+    """
+    GET /curriculum/tier3/tracks/{code}/status
+    Get Tier 3 (Intermediate) track completion status and requirements.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        """Get Tier 3 track completion status and requirements."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True)
+        if track.tier != 3:
+            return Response({
+                'error': 'not_tier3',
+                'message': 'This endpoint is only for Intermediate level tracks'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier3_completion()
+        mandatory_modules = CurriculumModule.objects.filter(
+            track=track,
+            is_required=True,
+            is_active=True
+        ).order_by('order_index')
+        mandatory_completed = UserModuleProgress.objects.filter(
+            user=user,
+            module__in=mandatory_modules,
+            status='completed'
+        ).count()
+        required_mission_count = ModuleMission.objects.filter(
+            module__track=track,
+            module__is_required=True,
+            is_required=True
+        ).values_list('mission_id', flat=True).distinct().count()
+        missions_passed = 0
+        if required_mission_count > 0:
+            try:
+                from missions.models_mxp import MissionProgress
+                missions_passed = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=ModuleMission.objects.filter(
+                        module__track=track,
+                        module__is_required=True,
+                        is_required=True
+                    ).values_list('mission_id', flat=True).distinct(),
+                    final_status='pass'
+                ).count()
+            except ImportError:
+                pass
+        return Response({
+            'track_code': track.code,
+            'track_name': track.name,
+            'progression_mode': getattr(track, 'progression_mode', 'sequential'),
+            'completion_percentage': float(progress.completion_percentage),
+            'is_complete': is_complete,
+            'tier3_completion_requirements_met': progress.tier3_completion_requirements_met,
+            'requirements': {
+                'mandatory_modules_total': mandatory_modules.count(),
+                'mandatory_modules_completed': mandatory_completed,
+                'intermediate_missions_total': required_mission_count,
+                'intermediate_missions_passed': missions_passed,
+                'mentor_approval': progress.tier3_mentor_approval,
+                'mentor_approval_required': getattr(track, 'tier3_require_mentor_approval', False),
+            },
+            'missing_requirements': missing,
+            'can_progress_to_tier4': is_complete,
+            'tier4_unlocked': progress.tier4_unlocked,
+        })
+
+
+class Tier3CompleteView(APIView):
+    """POST /curriculum/tier3/tracks/{code}/complete - Complete Tier 3 and unlock Tier 4"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, code):
+        """Complete Tier 3 and unlock Tier 4."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=3)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier3_completion()
+        if not is_complete:
+            return Response({
+                'error': 'requirements_not_met',
+                'message': 'All Intermediate level requirements must be met before completion (mandatory modules, all missions passed, reflections, mentor approval if required).',
+                'missing_requirements': missing
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress.completed_at = timezone.now()
+        progress.completion_percentage = 100
+        progress.tier4_unlocked = True
+        progress.save(update_fields=['completed_at', 'completion_percentage', 'tier4_unlocked'])
+        CurriculumActivity.objects.create(
+            user=user,
+            activity_type='tier3_completed',
+            track=track,
+            points_awarded=750,
+            metadata={'tier': 3, 'track': track.code}
+        )
+        return Response({
+            'success': True,
+            'message': 'Intermediate Track completed successfully. You can now access Advanced Tracks.',
+            'completed_at': progress.completed_at.isoformat(),
+            'tier4_unlocked': True,
+        })
+
+
+class Tier4TrackStatusView(APIView):
+    """
+    GET /curriculum/tier4/tracks/{code}/status
+    Get Tier 4 (Advanced) track completion status and requirements.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        """Get Tier 4 track completion status and requirements."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True)
+        if track.tier != 4:
+            return Response({
+                'error': 'not_tier4',
+                'message': 'This endpoint is only for Advanced level tracks'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier4_completion()
+        mandatory_modules = CurriculumModule.objects.filter(
+            track=track,
+            is_required=True,
+            is_active=True
+        ).order_by('order_index')
+        mandatory_completed = UserModuleProgress.objects.filter(
+            user=user,
+            module__in=mandatory_modules,
+            status='completed'
+        ).count()
+        required_mission_count = 0
+        missions_approved = 0
+        feedback_cycles_complete = 0
+        reflections_submitted = 0
+        reflections_required = 0
+        try:
+            from missions.models_mxp import MissionProgress
+            from missions.models import Mission
+            required_mission_ids = list(
+                ModuleMission.objects.filter(
+                    module__track=track,
+                    module__is_required=True,
+                    is_required=True
+                ).values_list('mission_id', flat=True).distinct()
+            )
+            if not required_mission_ids:
+                # Match by track code (e.g., 'DEFENDER_4') or track name
+                track_code_lower = track.code.lower() if hasattr(track, 'code') else None
+                track_match = None
+                if track_code_lower:
+                    if 'defender' in track_code_lower:
+                        track_match = 'defender'
+                    elif 'offensive' in track_code_lower:
+                        track_match = 'offensive'
+                    elif 'grc' in track_code_lower:
+                        track_match = 'grc'
+                    elif 'innovation' in track_code_lower:
+                        track_match = 'innovation'
+                    elif 'leadership' in track_code_lower:
+                        track_match = 'leadership'
+                
+                advanced_missions = Mission.objects.filter(
+                    tier='advanced',
+                    is_active=True
+                )
+                
+                if track_match:
+                    advanced_missions = advanced_missions.filter(track=track_match)
+                elif track_code_lower:
+                    advanced_missions = advanced_missions.filter(track_id__icontains=track_code_lower)
+                
+                required_mission_ids = list(advanced_missions.values_list('id', flat=True))
+            required_mission_count = len(required_mission_ids)
+            if required_mission_ids:
+                missions_approved = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass',
+                    status='approved'
+                ).count()
+                feedback_cycles_complete = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    mentor_reviewed_at__isnull=False
+                ).count()
+                reflections_required = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True
+                ).count()
+                reflections_submitted = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True,
+                    reflection_submitted=True
+                ).count()
+        except ImportError:
+            pass
+        return Response({
+            'track_code': track.code,
+            'track_name': track.name,
+            'progression_mode': getattr(track, 'progression_mode', 'sequential'),
+            'completion_percentage': float(progress.completion_percentage),
+            'is_complete': is_complete,
+            'tier4_completion_requirements_met': progress.tier4_completion_requirements_met,
+            'requirements': {
+                'mandatory_modules_total': mandatory_modules.count(),
+                'mandatory_modules_completed': mandatory_completed,
+                'advanced_missions_total': required_mission_count,
+                'advanced_missions_approved': missions_approved,
+                'feedback_cycles_complete': feedback_cycles_complete,
+                'reflections_required': reflections_required,
+                'reflections_submitted': reflections_submitted,
+                'mentor_approval': progress.tier4_mentor_approval,
+                'mentor_approval_required': getattr(track, 'tier4_require_mentor_approval', False),
+            },
+            'missing_requirements': missing,
+            'can_progress_to_tier5': is_complete,
+            'tier5_unlocked': progress.tier5_unlocked,
+        })
+
+
+class Tier4CompleteView(APIView):
+    """POST /curriculum/tier4/tracks/{code}/complete - Complete Tier 4 and unlock Tier 5"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, code):
+        """Complete Tier 4 and unlock Tier 5."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=4)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier4_completion()
+        if not is_complete:
+            return Response({
+                'error': 'requirements_not_met',
+                'message': 'All Advanced level requirements must be met before completion (mandatory modules, all advanced missions approved, feedback cycles complete, final reflection submitted, mentor approval if required).',
+                'missing_requirements': missing
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress.completed_at = timezone.now()
+        progress.completion_percentage = 100
+        progress.tier5_unlocked = True
+        progress.save(update_fields=['completed_at', 'completion_percentage', 'tier5_unlocked'])
+        CurriculumActivity.objects.create(
+            user=user,
+            activity_type='tier4_completed',
+            track=track,
+            points_awarded=1000,
+            metadata={'tier': 4, 'track': track.code}
+        )
+        return Response({
+            'success': True,
+            'message': 'Advanced Track completed successfully. You can now access Mastery Tracks.',
+            'completed_at': progress.completed_at.isoformat(),
+            'tier5_unlocked': True,
+        })
+
+
+class Tier5TrackStatusView(APIView):
+    """
+    GET /curriculum/tier5/tracks/{code}/status
+    Get Tier 5 (Mastery) track completion status and requirements.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        """Get Tier 5 track completion status and requirements."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True)
+        if track.tier != 5:
+            return Response({
+                'error': 'not_tier5',
+                'message': 'This endpoint is only for Mastery level tracks'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier5_completion()
+        mandatory_modules = CurriculumModule.objects.filter(
+            track=track,
+            is_required=True,
+            is_active=True
+        ).order_by('order_index')
+        mandatory_completed = UserModuleProgress.objects.filter(
+            user=user,
+            module__in=mandatory_modules,
+            status='completed'
+        ).count()
+        required_mission_count = 0
+        mastery_missions_approved = 0
+        capstone_approved = 0
+        capstone_total = 0
+        reflections_submitted = 0
+        reflections_required = 0
+        rubric_passed = True
+        try:
+            from missions.models_mxp import MissionProgress
+            from missions.models import Mission
+            required_mission_ids = list(
+                ModuleMission.objects.filter(
+                    module__track=track,
+                    module__is_required=True,
+                    is_required=True
+                ).values_list('mission_id', flat=True).distinct()
+            )
+            if not required_mission_ids:
+                track_code_lower = track.code.lower() if hasattr(track, 'code') else None
+                track_match = None
+                if track_code_lower:
+                    if 'defender' in track_code_lower:
+                        track_match = 'defender'
+                    elif 'offensive' in track_code_lower:
+                        track_match = 'offensive'
+                    elif 'grc' in track_code_lower:
+                        track_match = 'grc'
+                    elif 'innovation' in track_code_lower:
+                        track_match = 'innovation'
+                    elif 'leadership' in track_code_lower:
+                        track_match = 'leadership'
+                
+                mastery_missions = Mission.objects.filter(
+                    tier='mastery',
+                    is_active=True
+                )
+                
+                if track_match:
+                    mastery_missions = mastery_missions.filter(track=track_match)
+                elif track_code_lower:
+                    mastery_missions = mastery_missions.filter(track_id__icontains=track_code_lower)
+                
+                required_mission_ids = list(mastery_missions.values_list('id', flat=True))
+            required_mission_count = len(required_mission_ids)
+            if required_mission_ids:
+                mastery_missions_approved = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    final_status='pass',
+                    status='approved'
+                ).count()
+                capstone_missions = Mission.objects.filter(
+                    id__in=required_mission_ids,
+                    mission_type='capstone',
+                    is_active=True
+                )
+                capstone_ids = list(capstone_missions.values_list('id', flat=True)) if capstone_missions.exists() else []
+                capstone_total = len(capstone_ids)
+                capstone_approved = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=capstone_ids,
+                    final_status='pass',
+                    status='approved'
+                ).count() if capstone_ids else 0
+                reflections_required = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True
+                ).count()
+                reflections_submitted = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    reflection_required=True,
+                    reflection_submitted=True
+                ).count()
+                # Check rubric scores (70% threshold)
+                low_scores = MissionProgress.objects.filter(
+                    user=user,
+                    mission_id__in=required_mission_ids,
+                    mentor_score__lt=70
+                ).exists()
+                rubric_passed = not low_scores
+        except ImportError:
+            pass
+        return Response({
+            'track_code': track.code,
+            'track_name': track.name,
+            'progression_mode': getattr(track, 'progression_mode', 'sequential'),
+            'completion_percentage': float(progress.completion_percentage),
+            'is_complete': is_complete,
+            'tier5_completion_requirements_met': progress.tier5_completion_requirements_met,
+            'requirements': {
+                'mandatory_modules_total': mandatory_modules.count(),
+                'mandatory_modules_completed': mandatory_completed,
+                'mastery_missions_total': required_mission_count,
+                'mastery_missions_approved': mastery_missions_approved,
+                'capstone_total': capstone_total,
+                'capstone_approved': capstone_approved,
+                'reflections_required': reflections_required,
+                'reflections_submitted': reflections_submitted,
+                'rubric_passed': rubric_passed,
+                'mentor_approval': progress.tier5_mentor_approval,
+                'mentor_approval_required': getattr(track, 'tier5_require_mentor_approval', False),
+            },
+            'missing_requirements': missing,
+            'mastery_complete': is_complete,
+        })
+
+
+class Tier5CompleteView(APIView):
+    """POST /curriculum/tier5/tracks/{code}/complete - Complete Tier 5 (Mastery)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, code):
+        """Complete Tier 5 and mark Mastery achieved."""
+        user = request.user
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=5)
+        progress, _ = UserTrackProgress.objects.get_or_create(user=user, track=track)
+        is_complete, missing = progress.check_tier5_completion()
+        if not is_complete:
+            return Response({
+                'error': 'requirements_not_met',
+                'message': 'All Mastery level requirements must be met before completion (all mastery missions approved, capstone approved, reflections complete, mastery completion rubric passed, mentor approval if required).',
+                'missing_requirements': missing
+            }, status=status.HTTP_400_BAD_REQUEST)
+        progress.completed_at = timezone.now()
+        progress.completion_percentage = 100
+        progress.save(update_fields=['completed_at', 'completion_percentage'])
+        CurriculumActivity.objects.create(
+            user=user,
+            activity_type='tier5_completed',
+            track=track,
+            points_awarded=1500,
+            metadata={'tier': 5, 'track': track.code}
+        )
+        return Response({
+            'success': True,
+            'message': 'Mastery Track completed successfully. You have achieved Mastery level in this track.',
+            'completed_at': progress.completed_at.isoformat(),
+            'mastery_achieved': True,
         })
 
 
@@ -938,7 +1413,7 @@ class Tier2CompleteView(APIView):
         if not is_complete:
             return Response({
                 'error': 'requirements_not_met',
-                'message': 'All Tier 2 requirements must be met before completion',
+                'message': 'All Beginner level requirements must be met before completion',
                 'missing_requirements': missing
             }, status=status.HTTP_400_BAD_REQUEST)
         
@@ -958,7 +1433,7 @@ class Tier2CompleteView(APIView):
         
         return Response({
             'success': True,
-            'message': 'Tier 2 (Beginner Track) completed successfully. You can now access Tier 3 (Intermediate Tracks).',
+            'message': 'Beginner Track completed successfully. You can now access Intermediate Tracks.',
             'completed_at': progress.completed_at.isoformat(),
             'tier3_unlocked': True,
         })
@@ -1084,7 +1559,7 @@ class Tier2CompleteView(APIView):
         if not is_complete:
             return Response({
                 'error': 'requirements_not_met',
-                'message': 'All Tier 2 requirements must be met before completion',
+                'message': 'All Beginner level requirements must be met before completion',
                 'missing_requirements': missing
             }, status=status.HTTP_400_BAD_REQUEST)
         
@@ -1105,11 +1580,194 @@ class Tier2CompleteView(APIView):
         
         return Response({
             'success': True,
-            'message': 'Tier 2 (Beginner Track) completed successfully. You can now access Tier 3 (Intermediate Tracks).',
+            'message': 'Beginner Track completed successfully. You can now access Intermediate Tracks.',
             'completed_at': progress.completed_at.isoformat(),
             'tier3_unlocked': True,
         })
 
+
+class LessonBookmarkView(APIView):
+    """
+    GET /curriculum/lessons/<lesson_id>/bookmark/ — list bookmark status (or user's bookmarks for track).
+    POST /curriculum/lessons/<lesson_id>/bookmark/ — add bookmark.
+    DELETE /curriculum/lessons/<lesson_id>/bookmark/ — remove bookmark.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, lesson_id=None):
+        if lesson_id:
+            lesson = get_object_or_404(Lesson, id=lesson_id)
+            bookmarked = UserLessonBookmark.objects.filter(user=request.user, lesson=lesson).exists()
+            return Response({'bookmarked': bookmarked})
+        # List: ?track_code= optional filter
+        qs = UserLessonBookmark.objects.filter(user=request.user).select_related('lesson', 'lesson__module')
+        track_code = request.query_params.get('track_code')
+        if track_code:
+            qs = qs.filter(lesson__module__track__code=track_code)
+        return Response({
+            'bookmarks': [
+                {'lesson_id': str(b.lesson_id), 'lesson_title': b.lesson.title, 'module_title': b.lesson.module.title}
+                for b in qs[:100]
+            ],
+        })
+
+    def post(self, request, lesson_id):
+        lesson = get_object_or_404(Lesson, id=lesson_id)
+        _, created = UserLessonBookmark.objects.get_or_create(user=request.user, lesson=lesson)
+        return Response({'bookmarked': True, 'created': created}, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+    def delete(self, request, lesson_id):
+        lesson = get_object_or_404(Lesson, id=lesson_id)
+        deleted, _ = UserLessonBookmark.objects.filter(user=request.user, lesson=lesson).delete()
+        return Response({'bookmarked': False, 'deleted': deleted > 0}, status=status.HTTP_200_OK)
+
+
+class Tier2MentorFeedbackView(APIView):
+    """
+    GET /curriculum/tier2/tracks/<code>/feedback/ — learner: list feedback for me; mentor: list feedback given for track.
+    POST /curriculum/tier2/tracks/<code>/feedback/ — mentor: add feedback (learner_id, lesson_id or module_id, comment_text).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=2)
+        user = request.user
+        # Check if mentor (has mentor role) — simple check via user profile or role
+        from users.models import UserRole
+        is_mentor = UserRole.objects.filter(user=user, role__name='mentor', is_active=True).exists()
+        if is_mentor:
+            qs = CurriculumMentorFeedback.objects.filter(
+                mentor=user,
+                lesson__module__track=track
+            ).select_related('learner', 'lesson', 'module').order_by('-created_at')
+        else:
+            qs = CurriculumMentorFeedback.objects.filter(
+                learner=user,
+                lesson__module__track=track
+            ).select_related('mentor', 'lesson', 'module').order_by('-created_at')
+        return Response({
+            'feedback': [
+                {
+                    'id': f.id,
+                    'comment_text': f.comment_text,
+                    'lesson_id': str(f.lesson_id) if f.lesson_id else None,
+                    'lesson_title': f.lesson.title if f.lesson else None,
+                    'module_id': str(f.module_id) if f.module_id else None,
+                    'module_title': f.module.title if f.module else None,
+                    'mentor_email': f.mentor.email if is_mentor else None,
+                    'learner_email': f.learner.email if not is_mentor else None,
+                    'created_at': f.created_at.isoformat(),
+                }
+                for f in qs[:50]
+            ],
+        })
+
+    def post(self, request, code):
+        track = get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=2)
+        from users.models import UserRole
+        if not UserRole.objects.filter(user=request.user, role__name='mentor', is_active=True).exists():
+            return Response({'error': 'Mentor role required'}, status=status.HTTP_403_FORBIDDEN)
+        learner_id = request.data.get('learner_id')
+        lesson_id = request.data.get('lesson_id')
+        module_id = request.data.get('module_id')
+        comment_text = (request.data.get('comment_text') or '').strip()
+        if not comment_text or not learner_id:
+            return Response(
+                {'error': 'learner_id and comment_text are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        learner = get_object_or_404(User, id=learner_id)
+        lesson = get_object_or_404(Lesson, id=lesson_id, module__track=track) if lesson_id else None
+        module = get_object_or_404(CurriculumModule, id=module_id, track=track) if module_id else None
+        if not lesson and not module:
+            return Response(
+                {'error': 'One of lesson_id or module_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        fb = CurriculumMentorFeedback.objects.create(
+            mentor=request.user,
+            learner=learner,
+            lesson=lesson,
+            module=module,
+            comment_text=comment_text,
+        )
+        return Response({
+            'id': fb.id,
+            'comment_text': fb.comment_text,
+            'created_at': fb.created_at.isoformat(),
+        }, status=status.HTTP_201_CREATED)
+
+
+class Tier2SampleMissionReportView(APIView):
+    """
+    GET /curriculum/tier2/tracks/<code>/sample-report/ — return a sample mission report for viewing.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, code):
+        get_object_or_404(CurriculumTrack, code=code, is_active=True, tier=2)
+        return Response({
+            'title': 'Sample Beginner Mission Report',
+            'description': 'Example of what a completed mini-mission report looks like.',
+            'sections': [
+                {'heading': 'Objective', 'content': 'Demonstrate understanding of core concepts from this track.'},
+                {'heading': 'Approach', 'content': 'Outline the steps you took and tools or methods used.'},
+                {'heading': 'Findings', 'content': 'Summary of results or artifacts produced.'},
+                {'heading': 'Reflection', 'content': 'What you learned and how it connects to the next level.'},
+            ],
+            'tip': 'Your actual mini-mission submissions will be reviewed by your mentor.',
+        })
+
+
+class Tier2CohortProgressView(APIView):
+    """
+    GET /curriculum/tier2/cohort-progress/?cohort_id=<uuid> — aggregated Tier 2 progress for a cohort (enterprise).
+    No PII; only counts and completion rates.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        cohort_id = request.query_params.get('cohort_id')
+        if not cohort_id:
+            return Response({'error': 'cohort_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        # Resolve cohort to user set (programs.Enrollment or similar)
+        try:
+            from programs.models import Enrollment
+            enrollments = Enrollment.objects.filter(cohort_id=cohort_id).values_list('user_id', flat=True)
+            user_ids = list(enrollments)
+        except Exception:
+            user_ids = []
+        if not user_ids:
+            return Response({
+                'cohort_id': cohort_id,
+                'total_learners': 0,
+                'by_track': {},
+                'completion_rate': 0,
+            })
+        progress_qs = UserTrackProgress.objects.filter(
+            user__in=user_ids,
+            track__tier=2,
+            track__is_active=True,
+        ).select_related('track')
+        by_track = {}
+        users_completed = set()
+        for p in progress_qs:
+            key = p.track.code
+            if key not in by_track:
+                by_track[key] = {'started': 0, 'completed': 0}
+            by_track[key]['started'] += 1
+            if p.completed_at:
+                by_track[key]['completed'] += 1
+                users_completed.add(p.user_id)
+        total = len(user_ids)
+        return Response({
+            'cohort_id': cohort_id,
+            'total_learners': total,
+            'by_track': by_track,
+            'completion_rate': round(100.0 * len(users_completed) / total, 1) if total else 0,
+        })
 
 
 # ============================================================================
@@ -1463,9 +2121,16 @@ class CurriculumTracksView(APIView):
     def get(self, request):
         from .serializers import CurriculumTrackSerializer
 
-        tracks = CurriculumTrack.objects.filter(is_active=True).prefetch_related('levels')
-        serializer = CurriculumTrackSerializer(tracks, many=True, context={'request': request})
-        return Response(serializer.data)
+        try:
+            tracks = CurriculumTrack.objects.filter(is_active=True).prefetch_related('levels')
+            serializer = CurriculumTrackSerializer(tracks, many=True, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Error in CurriculumTracksView: {e}', exc_info=True)
+            # Return empty array instead of 500 error if there's a serialization issue
+            return Response([], status=status.HTTP_200_OK)
 
 
 class CurriculumTrackDetailView(APIView):

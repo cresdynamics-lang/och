@@ -59,7 +59,6 @@ export const djangoClient = {
      */
     async getCurrentUser(): Promise<User & { roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] }> {
       const response = await apiGateway.get<{ user: any; roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] }>('/auth/me');
-      console.log('getCurrentUser response:', response);
       
       // Backend returns: { user: {...}, roles: [...], consent_scopes: [...], entitlements: [...] }
       // We need to merge roles into the user object
@@ -71,7 +70,13 @@ export const djangoClient = {
         entitlements: response.entitlements || userData.entitlements || [],
       };
       
-      console.log('Merged user with roles:', mergedUser);
+      // Debug logging for track_key
+      if (mergedUser.track_key) {
+        console.log('[djangoClient] User track_key:', mergedUser.track_key, 'for user:', mergedUser.email);
+      } else {
+        console.warn('[djangoClient] User missing track_key:', mergedUser.email, 'Available fields:', Object.keys(mergedUser));
+      }
+      
       return mergedUser as User & { roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] };
     },
 

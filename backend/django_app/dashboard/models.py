@@ -54,6 +54,12 @@ class PortfolioItem(models.Model):
     summary = models.TextField(blank=True, null=True)
     item_type = models.CharField(max_length=50, default='mission', choices=[
         ('mission', 'Mission'),
+        ('mission_report', 'Mission Report'),
+        ('strategy_document', 'Strategy Document'),
+        ('script_tool', 'Script/Tool'),
+        ('grc_framework', 'GRC Framework'),
+        ('leadership_brief', 'Leadership Decision Brief'),
+        ('capstone_result', 'Capstone Result'),
         ('reflection', 'Reflection'),
         ('certification', 'Certification'),
         ('github', 'GitHub'),

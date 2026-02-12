@@ -181,7 +181,7 @@ def upload_file_to_storage(file, submission_id: str, content_type: str = None) -
     return url
 
 
-def generate_presigned_upload_url(file_name: str, content_type: str = None) -> dict:
+def generate_presigned_upload_url(identifier: str, filename: str, content_type: str = None) -> dict:
     """
     Generate a presigned URL for direct file upload.
 
@@ -189,6 +189,14 @@ def generate_presigned_upload_url(file_name: str, content_type: str = None) -> d
     object store in production. For now it returns a simple
     structure suitable for frontend integration without
     breaking the API.
+    
+    Args:
+        identifier: Unique identifier for the upload
+        filename: Name of the file to upload
+        content_type: Optional MIME type
+        
+    Returns:
+        Dictionary with url and fields for presigned upload
     """
     logger.warning(
         "generate_presigned_upload_url is using a placeholder implementation; "
@@ -197,7 +205,7 @@ def generate_presigned_upload_url(file_name: str, content_type: str = None) -> d
     return {
         "url": "https://storage.example.com/upload",
         "fields": {
-            "key": file_name,
+            "key": filename,
             "Content-Type": content_type or "application/octet-stream",
         },
     }

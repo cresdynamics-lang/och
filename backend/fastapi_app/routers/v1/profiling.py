@@ -555,8 +555,8 @@ async def get_enhanced_profiling_questions(user_id: int = Depends(get_current_us
             "cyber_aptitude": "Cyber Aptitude (logic, patterns, reasoning)",
             "technical_exposure": "Technical Exposure (experience scoring)",
             "scenario_preference": "Scenario Preferences (choose-your-path)",
-            "work_style": "Work Style & Behavioral Profile",
-            "difficulty_selection": "Difficulty Level Self-Selection"
+            "work_style": "Work Style & Behavioral Profile"
+            # "difficulty_selection": "Difficulty Level Self-Selection" # Removed per user request
         },
         "questions": questions,
         "total_questions": sum(len(qs) for qs in questions.values())
@@ -662,7 +662,7 @@ async def complete_enhanced_profiling_session(
 ):
     """
     Complete an enhanced profiling session and generate comprehensive results.
-    Uses the enhanced 7-module profiling system.
+    Uses the enhanced 7-module profiling system + GPT analysis.
     """
     session = _active_sessions.get(session_id)
     if not session:
@@ -690,7 +690,55 @@ async def complete_enhanced_profiling_session(
         return result
 
     try:
+        # Get algorithmic result first
         result = enhanced_profiling_service.complete_session(session)
+        
+        # Enhance with GPT analysis
+        try:
+            from services.gpt_profiler import gpt_profiler_service
+            import requests
+            import os
+            
+            # Fetch tracks from Django DB
+            django_api_url = os.getenv('DJANGO_API_URL', 'http://localhost:8000')
+            tracks_response = requests.get(f"{django_api_url}/api/v1/programs/tracks/", timeout=5)
+            
+            if tracks_response.status_code == 200:
+                db_tracks = tracks_response.json()
+                
+                # Format responses for GPT
+                formatted_responses = [
+                    {
+                        "question": enhanced_profiling_service.question_map.get(r.question_id, {}).question if hasattr(enhanced_profiling_service.question_map.get(r.question_id), 'question') else "N/A",
+                        "answer": r.selected_option
+                    }
+                    for r in session.responses
+                ]
+                
+                # Get reflection
+                reflection = getattr(session, 'reflection_responses', None) or {}
+                
+                # Get GPT recommendation
+                gpt_result = gpt_profiler_service.analyze_and_recommend(
+                    formatted_responses,
+                    db_tracks,
+                    reflection
+                )
+                
+                # Override primary track with GPT recommendation if confidence is high
+                if gpt_result.get('confidence', 0) > 0.75 and gpt_result.get('recommended_track'):
+                    recommended_key = gpt_result['recommended_track']
+                    if recommended_key in OCH_TRACKS:
+                        result.primary_track = OCH_TRACKS[recommended_key]
+                        session.recommended_track = recommended_key
+                        
+                        # Add GPT insights to assessment summary
+                        result.assessment_summary = f"{gpt_result.get('personalized_message', '')}\n\n{result.assessment_summary}\n\nAI Analysis: {gpt_result.get('reasoning', '')}"
+                        
+                        logger.info(f"GPT recommended track '{recommended_key}' with confidence {gpt_result.get('confidence')}")
+        except Exception as gpt_error:
+            logger.warning(f"GPT enhancement failed, using algorithmic result: {gpt_error}")
+            # Continue with algorithmic result
 
         # Mark session as completed
         session.completed_at = result.completed_at
