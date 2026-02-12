@@ -23,6 +23,19 @@ interface ProfilingResult {
   }
   assessment_summary: string
   completed_at: string
+  // AI-powered enhancements
+  future_you_persona?: {
+    name: string
+    archetype: string
+    projected_skills: string[]
+    strengths: string[]
+    career_vision: string
+    confidence: number
+    track: string
+  }
+  personalized_track_descriptions?: Record<string, string>
+  ai_confidence?: number
+  ai_reasoning?: string
 }
 
 interface OCHBlueprint {
@@ -75,7 +88,7 @@ interface AIProfilerResultsProps {
 
 export default function AIProfilerResults({ result, blueprint, onComplete, onReject, rejecting }: AIProfilerResultsProps) {
   const [showDetails, setShowDetails] = useState(false)
-  const [showRejectConfirm, setShowRejectConfirm] = useState(false)
+  // Removed showRejectConfirm state - retake now happens immediately without confirmation
   const primaryRecommendation = result.recommendations[0]
   const otherRecommendations = result.recommendations.slice(1)
 
@@ -144,8 +157,15 @@ export default function AIProfilerResults({ result, blueprint, onComplete, onRej
           </div>
 
           <p className="text-gray-300 text-lg text-center mb-6">
-            {result.primary_track.description}
+            {result.personalized_track_descriptions?.[result.primary_track.key] || result.primary_track.description}
           </p>
+          {result.personalized_track_descriptions?.[result.primary_track.key] && (
+            <div className="text-center mb-6">
+              <span className="inline-block bg-purple-500/20 text-purple-300 text-xs px-3 py-1 rounded-full">
+                ✨ AI-Personalized for You
+              </span>
+            </div>
+          )}
 
           {/* Focus Areas */}
           <div className="mb-6">
@@ -188,6 +208,70 @@ export default function AIProfilerResults({ result, blueprint, onComplete, onRej
             </ul>
           </div>
         </motion.div>
+
+        {/* Future-You Persona (AI-Generated) */}
+        {result.future_you_persona && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.55 }}
+            className="bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 rounded-xl p-6 mb-8"
+          >
+            <div className="text-center mb-4">
+              <div className="inline-block bg-purple-500/20 rounded-full px-4 py-1 mb-3">
+                <span className="text-purple-300 text-xs font-semibold uppercase tracking-wide">AI-Powered Insight</span>
+              </div>
+              <h3 className="text-white font-bold text-2xl mb-2">Meet Your Future-You</h3>
+              <p className="text-purple-200 text-lg font-semibold">{result.future_you_persona.name}</p>
+              <p className="text-gray-300 text-sm mt-1">{result.future_you_persona.archetype}</p>
+            </div>
+
+            <div className="bg-black/20 rounded-lg p-4 mb-4">
+              <p className="text-gray-200 text-center italic leading-relaxed">
+                "{result.future_you_persona.career_vision}"
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Projected Skills */}
+              <div>
+                <h4 className="text-white font-semibold mb-2 text-sm">Skills You'll Master</h4>
+                <div className="flex flex-wrap gap-2">
+                  {result.future_you_persona.projected_skills.map((skill, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-purple-500/30 text-purple-100 px-3 py-1 rounded-full text-xs font-medium"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Key Strengths */}
+              <div>
+                <h4 className="text-white font-semibold mb-2 text-sm">Your Key Strengths</h4>
+                <ul className="space-y-1">
+                  {result.future_you_persona.strengths.map((strength, idx) => (
+                    <li key={idx} className="text-gray-300 text-sm flex items-start">
+                      <span className="text-purple-400 mr-2">✓</span>
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="text-center mt-4">
+              <div className="inline-flex items-center bg-white/10 rounded-full px-4 py-2">
+                <span className="text-gray-400 text-xs mr-2">AI Confidence:</span>
+                <span className="text-white font-bold text-sm">
+                  {Math.round((result.future_you_persona.confidence || 0) * 100)}%
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Assessment Summary */}
         <motion.div
@@ -353,53 +437,20 @@ export default function AIProfilerResults({ result, blueprint, onComplete, onRej
           </button>
 
           <div className="space-y-3">
-            <button
-              onClick={() => setShowDetails(!showDetails)}
-              className="text-gray-400 hover:text-white text-sm underline transition-colors"
-            >
-              {showDetails ? 'Hide Details' : 'View Detailed Analysis'}
-            </button>
-
             <p className="text-gray-500 text-xs">
               Assessment completed on {new Date(result.completed_at).toLocaleDateString()}
             </p>
 
             {/* Reject / Redo Section */}
             <div className="pt-4 border-t border-white/10 mt-4">
-              {!showRejectConfirm ? (
-                <button
-                  onClick={() => setShowRejectConfirm(true)}
-                  className="text-gray-500 hover:text-red-400 text-sm transition-colors"
-                >
-                  Not happy with the results? Retake assessment
-                </button>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 max-w-md mx-auto"
-                >
-                  <p className="text-white font-semibold mb-2">Retake Assessment?</p>
-                  <p className="text-gray-400 text-sm mb-4">
-                    This will clear your current results and let you redo the profiling from scratch. Your previous answers will not be saved.
-                  </p>
-                  <div className="flex gap-3 justify-center">
-                    <button
-                      onClick={() => setShowRejectConfirm(false)}
-                      className="px-5 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 text-sm font-medium transition-colors"
-                    >
-                      Keep Results
-                    </button>
-                    <button
-                      onClick={onReject}
-                      disabled={rejecting}
-                      className="px-5 py-2 rounded-lg bg-red-500/80 text-white hover:bg-red-500 text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                      {rejecting ? 'Resetting...' : 'Yes, Retake'}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
+              <button
+                onClick={onReject}
+                disabled={rejecting}
+                className="w-full py-3 px-6 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-red-300 hover:text-red-200 font-medium transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>🔄</span>
+                <span>{rejecting ? 'Resetting...' : 'Not happy with the results? Retake Assessment'}</span>
+              </button>
             </div>
           </div>
         </motion.div>

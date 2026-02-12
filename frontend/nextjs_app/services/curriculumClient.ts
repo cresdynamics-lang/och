@@ -117,6 +117,21 @@ export const curriculumClient = {
   },
 
   /**
+   * List curriculum modules (filterable by level / track)
+   * GET /curriculum/modules/?level=beginner&track=DEFENDER
+   */
+  async getModules(params?: { level?: string; track?: string }): Promise<CurriculumModuleList[]> {
+    const q = new URLSearchParams()
+    if (params?.level) q.append('level', params.level)
+    if (params?.track) q.append('track', params.track)
+    const qs = q.toString()
+    const response = await apiGateway.get(`/curriculum/modules/${qs ? `?${qs}` : ''}`)
+    if (Array.isArray(response)) return response
+    if (response && Array.isArray(response.results)) return response.results
+    return []
+  },
+
+  /**
    * Get module details
    * GET /curriculum/modules/{id}/
    */

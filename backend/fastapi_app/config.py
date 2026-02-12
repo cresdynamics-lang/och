@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file (same as Django does)
 # Priority: 1) Project root, 2) backend/django_app (for compatibility), 3) backend/fastapi_app (legacy), 4) backend (legacy)
-BASE_DIR = Path(__file__).resolve().parent.parent  # backend/fastapi_app
-PROJECT_ROOT = BASE_DIR.parent.parent  # /home/caleb/kiptoo/och/ongozaCyberHub
+BASE_DIR = Path(__file__).resolve().parent  # backend/fastapi_app
+PROJECT_ROOT = BASE_DIR.parent.parent  # project root (och)
 
 # Try loading from project root first (primary location - matches Django)
 root_env = PROJECT_ROOT / '.env'

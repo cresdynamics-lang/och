@@ -101,6 +101,12 @@ class ProfilingResult(BaseModel):
     deep_insights: Optional[DeepInsights] = None
     completed_at: datetime
 
+    # AI-powered enhancements
+    future_you_persona: Optional[Dict[str, Any]] = None  # AI-generated Future-You persona
+    personalized_track_descriptions: Optional[Dict[str, str]] = None  # Track-specific personalized descriptions
+    ai_confidence: Optional[float] = None  # AI recommendation confidence (0-1)
+    ai_reasoning: Optional[str] = None  # AI's reasoning for the recommendation
+
 
 class ProfilingProgress(BaseModel):
     """Current progress in profiling session."""

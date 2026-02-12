@@ -76,7 +76,12 @@ director_router.register(r'reports', DirectorReportsViewSet, basename='director-
 director_router.register(r'advanced-analytics', DirectorAdvancedAnalyticsViewSet, basename='director-advanced-analytics')
 director_router.register(r'certificates', DirectorCertificateViewSet, basename='director-certificates')
 
+from programs.track_api import get_tracks_for_profiler
+
 urlpatterns = [
+    # Profiler API - tracks for GPT analysis
+    path('api/v1/programs/tracks/', get_tracks_for_profiler, name='profiler-tracks'),
+    
     # Legacy director dashboard endpoint (kept for backward compatibility)
     path('programs/director/dashboard/', director_dashboard, name='director-dashboard'),
     

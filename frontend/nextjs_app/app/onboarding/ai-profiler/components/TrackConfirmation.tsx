@@ -66,7 +66,8 @@ export default function TrackConfirmation({
   }
 
   const handleDecline = () => {
-    setShowOtherTracks(true)
+    // Call parent's onDecline to restart profiling from beginning
+    onDecline()
   }
 
   const handleSelectOtherTrack = (trackKey: string) => {
@@ -223,7 +224,7 @@ export default function TrackConfirmation({
               className="flex-1 sm:flex-none px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold text-lg transition-all border-2 border-white/20 flex items-center justify-center gap-2"
             >
               <XCircle className="w-6 h-6" />
-              Choose Different Track
+              Retake Assessment
             </motion.button>
           </div>
 

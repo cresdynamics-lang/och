@@ -88,6 +88,19 @@ interface ProfilingResult {
   next_steps: string[]
   assessment_summary: string
   completed_at: string
+  // AI-powered enhancements
+  future_you_persona?: {
+    name: string
+    archetype: string
+    projected_skills: string[]
+    strengths: string[]
+    career_vision: string
+    confidence: number
+    track: string
+  }
+  personalized_track_descriptions?: Record<string, string>
+  ai_confidence?: number
+  ai_reasoning?: string
 }
 
 // Mock data for AI Profiler when API is not available
@@ -395,16 +408,33 @@ export default function AIProfilerPage() {
         const { djangoClient } = await import('@/services/djangoClient')
         const freshUser = await djangoClient.auth.getCurrentUser()
         console.log('[AIProfiler] Django profiling_complete:', freshUser?.profiling_complete)
-        
-        // If Django says profiling is complete, redirect to dashboard
-        if (freshUser?.profiling_complete === true) {
-          console.log('✅ Django says profiling complete - redirecting to dashboard')
-          window.location.href = '/dashboard/student'
-          return
+        console.log('[AIProfiler] Current section:', currentSection)
+        console.log('[AIProfiler] Has result:', !!result)
+
+        // If Django says profiling is complete AND we don't have results loaded, fetch and show results
+        if (freshUser?.profiling_complete === true && !result) {
+          console.log('✅ Profiling complete - loading results...')
+          try {
+            const { apiGateway } = await import('@/services/apiGateway')
+            const resultsResponse = await apiGateway.get(`/profiler/me/results`)
+            if (resultsResponse && resultsResponse.profiling_result) {
+              setResult(resultsResponse.profiling_result)
+              setBlueprint(resultsResponse.och_blueprint)
+              setCurrentSection('results')
+              setLoading(false)
+              console.log('✅ Loaded completed profiling results')
+              return
+            }
+          } catch (resultsError) {
+            console.error('[AIProfiler] Failed to load results:', resultsError)
+            // If results can't be loaded, redirect to dashboard
+            window.location.href = '/dashboard/student'
+            return
+          }
         }
-        
-        // Django says not complete - user should be here, proceed with profiling
-        console.log('[AIProfiler] Django says profiling not complete - proceeding')
+
+        // Django says not complete OR we're viewing results - allow user to stay
+        console.log('[AIProfiler] Allowing profiler access - profiling_complete:', freshUser?.profiling_complete, 'viewing results:', currentSection === 'results' || !!result)
       } catch (djangoError) {
         console.error('[AIProfiler] Failed to check Django status:', djangoError)
         // Continue with FastAPI check as fallback
@@ -641,19 +671,22 @@ export default function AIProfilerPage() {
             if (!currentSessionId || progressData.session_id === currentSessionId || !progressData.session_id) {
               if (progressData.responses && Object.keys(progressData.responses).length > 0) {
                 setResponses(progressData.responses)
-                const savedIndex = progressData.currentQuestionIndex || 0
-                const validIndex = Math.min(savedIndex, allQuestions.length - 1)
-                setCurrentQuestionIndex(validIndex)
-                
+
+                // Calculate correct index from number of answered questions
+                // This prevents corruption from saved index
+                const answeredCount = Object.keys(progressData.responses).length
+                const correctIndex = Math.min(answeredCount, allQuestions.length - 1)
+                setCurrentQuestionIndex(correctIndex)
+
                 // Calculate percentage from restored responses
                 const restoredPercentage = allQuestions.length > 0
-                  ? Math.round((Object.keys(progressData.responses).length / allQuestions.length) * 100)
+                  ? Math.round((answeredCount / allQuestions.length) * 100)
                   : 0
                 setProgressPercentage(restoredPercentage)
                 
                 console.log('[AIProfiler] Restored progress from localStorage:', {
                   responsesCount: Object.keys(progressData.responses).length,
-                  currentIndex: validIndex,
+                  currentIndex: correctIndex,
                   percentage: `${restoredPercentage}%`
                 })
                 
@@ -760,18 +793,20 @@ export default function AIProfilerPage() {
       if (saved) {
         const progressData = JSON.parse(saved)
         if (progressData.responses && Object.keys(progressData.responses).length > 0) {
+          const answeredCount = Object.keys(progressData.responses).length
+          const correctIndex = Math.min(answeredCount, questions.length - 1)
+          const correctPercentage = questions.length > 0
+            ? Math.round((answeredCount / questions.length) * 100)
+            : 0
+
           console.log('[AIProfiler] Restoring saved progress:', {
-            responsesCount: Object.keys(progressData.responses).length,
-            currentIndex: progressData.currentQuestionIndex,
-            percentage: progressData.progressPercentage
+            responsesCount: answeredCount,
+            currentIndex: correctIndex,
+            percentage: correctPercentage
           })
           setResponses(progressData.responses)
-          if (progressData.currentQuestionIndex !== undefined && questions.length > 0) {
-            setCurrentQuestionIndex(Math.min(progressData.currentQuestionIndex, questions.length - 1))
-          }
-          if (progressData.progressPercentage !== undefined) {
-            setProgressPercentage(progressData.progressPercentage)
-          }
+          setCurrentQuestionIndex(correctIndex)
+          setProgressPercentage(correctPercentage)
         }
       }
     } catch (error) {
@@ -912,7 +947,7 @@ export default function AIProfilerPage() {
       let finalResult: ProfilingResult
       
       // Complete profiling session in FastAPI (enhanced engine under the hood)
-      const resultResponse = await fastapiClient.profiling.completeSession(session.session_id)
+      const resultResponse = await fastapiClient.profiling.completeEnhancedSession(session.session_id)
       
       // Transform API response to match our interface
       const transformedResult: ProfilingResult = {
@@ -928,7 +963,12 @@ export default function AIProfilerPage() {
         development_areas: resultResponse.development_areas || [],
         next_steps: resultResponse.next_steps || [],
         assessment_summary: resultResponse.assessment_summary,
-        completed_at: resultResponse.completed_at
+        completed_at: resultResponse.completed_at,
+        // AI-powered enhancements
+        future_you_persona: resultResponse.future_you_persona,
+        personalized_track_descriptions: resultResponse.personalized_track_descriptions,
+        ai_confidence: resultResponse.ai_confidence,
+        ai_reasoning: resultResponse.ai_reasoning
       }
       
       finalResult = transformedResult
@@ -974,12 +1014,37 @@ export default function AIProfilerPage() {
         // User can still proceed, sync can happen later
       }
       
-      // Show track confirmation screen instead of results directly
+      // Show results directly with AI-powered insights
       // Clear saved progress on completion
       localStorage.removeItem('profiling_progress')
       console.log('[AIProfiler] Profiling completed - cleared saved progress')
-      
-      setCurrentSection('track-confirmation')
+
+      // Sync to Django in the background
+      try {
+        const { apiGateway } = await import('@/services/apiGateway')
+        await apiGateway.post('/profiler/sync-fastapi', {
+          user_id: user?.id?.toString(),
+          session_id: resultResponse.session_id,
+          completed_at: resultResponse.completed_at,
+          primary_track: resultResponse.primary_track.key,
+          recommendations: resultResponse.recommendations.map(rec => ({
+            track_key: rec.track_key,
+            score: rec.score,
+            confidence_level: rec.confidence_level
+          }))
+        })
+        console.log('✅ Results synced to Django')
+
+        // Refresh user state
+        if (reloadUser) {
+          await reloadUser()
+        }
+      } catch (syncError: any) {
+        console.warn('⚠️ Background sync failed (non-critical):', syncError)
+        // Continue anyway - user can proceed with viewing results
+      }
+
+      setCurrentSection('results')
       setLoading(false)
     } catch (err: any) {
       setError(err.message || 'Failed to complete profiling')
@@ -1031,9 +1096,43 @@ export default function AIProfilerPage() {
     }
   }
 
-  const handleTrackDecline = () => {
-    // Already handled in TrackConfirmation component
-    // This allows user to select a different track
+  const handleTrackDecline = async () => {
+    // Restart profiling from the beginning instead of manual track selection
+    try {
+      setLoading(true)
+
+      // Call Django endpoint to reset profiling_complete
+      const { apiGateway } = await import('@/services/apiGateway')
+      await apiGateway.post('/profiler/reset', {})
+      console.log('Profiling reset - restarting from beginning')
+
+      // Refresh user auth state
+      if (reloadUser) {
+        await reloadUser()
+      }
+
+      // Clear saved progress from localStorage
+      localStorage.removeItem('profiling_progress')
+      console.log('[AIProfiler] Cleared saved progress from localStorage')
+
+      // Reset all local state to start fresh
+      setSession(null)
+      setQuestions([])
+      setModuleProgress(null)
+      setCurrentModule(null)
+      setCurrentQuestionIndex(0)
+      setResponses({})
+      setResult(null)
+      setBlueprint(null)
+      setError(null)
+      setProgressPercentage(0)
+      setCurrentSection('welcome')
+      setLoading(false)
+    } catch (err: any) {
+      console.error('Failed to reset profiling:', err)
+      setError('Failed to restart profiling. Please try again.')
+      setLoading(false)
+    }
   }
 
   const handleComplete = async () => {
@@ -1045,11 +1144,11 @@ export default function AIProfilerPage() {
     // Small delay to ensure state is updated
     await new Promise(resolve => setTimeout(resolve, 300))
 
-    // Redirect to dashboard with track recommendation (full page reload to ensure token is available)
+    // Use Next.js router instead of full page reload
     if (result?.primary_track) {
-      window.location.href = `/dashboard/student?track=${result.primary_track.key}&welcome=true`
+      router.push(`/dashboard/student?track=${result.primary_track.key}&welcome=true`)
     } else {
-      window.location.href = '/dashboard/student'
+      router.push('/dashboard/student')
     }
   }
 
@@ -1067,6 +1166,10 @@ export default function AIProfilerPage() {
         await reloadUser()
       }
 
+      // Clear saved progress from localStorage
+      localStorage.removeItem('profiling_progress')
+      console.log('[AIProfiler] Cleared saved progress from localStorage')
+
       // Reset all local state to start fresh
       setSession(null)
       setQuestions([])
@@ -1077,6 +1180,7 @@ export default function AIProfilerPage() {
       setResult(null)
       setBlueprint(null)
       setError(null)
+      setProgressPercentage(0)
       setCurrentSection('welcome')
       setRejecting(false)
     } catch (err: any) {
@@ -1087,12 +1191,19 @@ export default function AIProfilerPage() {
   }
 
   const currentQuestion = questions[currentQuestionIndex]
+
+  // Calculate progress based on ANSWERED questions, not current question index
+  const answeredCount = Object.keys(responses).length
+  const calculatedPercentage = questions.length > 0
+    ? Math.round((answeredCount / questions.length) * 100)
+    : 0
+
   const progress = session?.progress || {
     session_id: session?.session_id || '',
-    current_question: currentQuestionIndex + 1,
+    current_question: answeredCount + 1,
     total_questions: questions.length,
-    progress_percentage: questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0,
-    estimated_time_remaining: (questions.length - currentQuestionIndex - 1) * 120
+    progress_percentage: calculatedPercentage,
+    estimated_time_remaining: (questions.length - answeredCount) * 120
   }
 
   if (loading && currentSection !== 'results') {

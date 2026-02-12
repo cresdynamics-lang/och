@@ -28,7 +28,7 @@ function getRoleDisplayName(role: string | null): string {
 // Helper function to get track display name and color
 function getTrackInfo(user: any): { name: string; bgClass: string; hoverClass: string } {
   // Get track from user object - check multiple possible locations
-  const trackKey = user?.track_key || 
+  const trackKey = user?.track_key ||
                    user?.role_specific_data?.student?.track_key ||
                    user?.role_specific_data?.student?.track_name?.toLowerCase() ||
                    null
@@ -62,8 +62,10 @@ function getTrackInfo(user: any): { name: string; bgClass: string; hoverClass: s
   }
 
   // Normalize track key (handle case variations)
-  const normalizedKey = trackKey?.toLowerCase() || 'defender'
-  return trackMap[normalizedKey] || trackMap['defender']
+  const normalizedKey = trackKey?.toLowerCase() || null
+  return normalizedKey && trackMap[normalizedKey]
+    ? trackMap[normalizedKey]
+    : { name: 'No Track', bgClass: 'bg-gray-500', hoverClass: 'hover:bg-gray-500/20' }
 }
 
 export function UserProfileDropdown() {

@@ -20,7 +20,12 @@
       "Bash(psql:*)",
       "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d ongozacyberhub -c \"SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_name IN \\(''device_trust'', ''user_sessions'', ''mfa_codes'', ''mfa_methods'', ''sso_connections'', ''audit_logs''\\) AND column_name = ''user_id'' ORDER BY table_name;\")",
       "Bash(set:*)",
-      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\":*)"
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\":*)",
+      "Bash(pip install:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=core.settings.development python:*)",
+      "Bash(choco install:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell:*)"
     ]
   }
 }

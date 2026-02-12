@@ -1,17 +1,36 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { apiGateway } from '@/services/apiGateway'
 
-export default function CreateTrackPage() {
+interface Track {
+  id: string
+  code: string
+  slug: string
+  name: string
+  title: string
+  description: string
+  level: string
+  tier: number
+  order_number: number
+  thumbnail_url: string
+  is_active: boolean
+}
+
+export default function EditTrackPage() {
   const router = useRouter()
+  const params = useParams()
+  const slug = params.slug as string
+
   const [loading, setLoading] = useState(false)
+  const [fetchLoading, setFetchLoading] = useState(true)
   const [error, setError] = useState('')
+  const [track, setTrack] = useState<Track | null>(null)
 
   const [formData, setFormData] = useState({
     code: '',
@@ -22,8 +41,42 @@ export default function CreateTrackPage() {
     level: 'beginner',
     tier: 2,
     order_number: 1,
-    thumbnail_url: ''
+    thumbnail_url: '',
+    is_active: true
   })
+
+  useEffect(() => {
+    fetchTrack()
+  }, [slug])
+
+  const fetchTrack = async () => {
+    try {
+      setFetchLoading(true)
+      const foundTrack = await apiGateway.get(`/curriculum/tracks/${slug}/`) as Track
+
+      setTrack(foundTrack)
+      setFormData({
+        code: foundTrack.code,
+        slug: foundTrack.slug,
+        name: foundTrack.name,
+        title: foundTrack.title,
+        description: foundTrack.description || '',
+        level: foundTrack.level,
+        tier: foundTrack.tier,
+        order_number: foundTrack.order_number,
+        thumbnail_url: foundTrack.thumbnail_url || '',
+        is_active: foundTrack.is_active
+      })
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        setError('Track not found')
+      } else {
+        setError('Failed to fetch track')
+      }
+    } finally {
+      setFetchLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,16 +94,41 @@ export default function CreateTrackPage() {
         tier: formData.tier,
         order_number: formData.order_number,
         thumbnail_url: formData.thumbnail_url || '',
-        is_active: true
+        is_active: formData.is_active
       }
 
-      await apiGateway.post('/curriculum/tracks/', payload)
-      router.push('/dashboard/director/modules')
+      await apiGateway.put(`/curriculum/tracks/${slug}/`, payload)
+      router.push('/dashboard/director/tracks')
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Failed to create track')
+      setError(err?.response?.data?.detail || err?.message || 'Failed to update track')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (fetchLoading) {
+    return (
+      <RouteGuard>
+        <DirectorLayout>
+          <Card className="p-12 text-center">
+            <p className="text-och-steel">Loading track...</p>
+          </Card>
+        </DirectorLayout>
+      </RouteGuard>
+    )
+  }
+
+  if (error && !track) {
+    return (
+      <RouteGuard>
+        <DirectorLayout>
+          <Card className="p-12 text-center border-och-orange/50">
+            <p className="text-och-orange mb-4">{error}</p>
+            <Button onClick={() => router.back()} variant="outline">Go Back</Button>
+          </Card>
+        </DirectorLayout>
+      </RouteGuard>
+    )
   }
 
   return (
@@ -58,8 +136,8 @@ export default function CreateTrackPage() {
       <DirectorLayout>
         <div className="max-w-2xl mx-auto space-y-6">
           <div>
-            <h1 className="text-3xl font-bold text-white">Create Curriculum Track</h1>
-            <p className="text-och-steel">Create a new curriculum track (Defender, Offensive, GRC, Innovation, Leadership)</p>
+            <h1 className="text-3xl font-bold text-white">Edit Track</h1>
+            <p className="text-och-steel">Update curriculum track details</p>
           </div>
 
           <Card className="p-6">
@@ -187,6 +265,19 @@ export default function CreateTrackPage() {
                 />
               </div>
 
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                  className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint focus:ring-2"
+                />
+                <label htmlFor="is_active" className="ml-2 text-sm text-white">
+                  Track is Active
+                </label>
+              </div>
+
               <div className="flex gap-4 pt-4">
                 <Button
                   type="button"
@@ -201,7 +292,7 @@ export default function CreateTrackPage() {
                   variant="defender"
                   disabled={loading}
                 >
-                  {loading ? 'Creating...' : 'Create Curriculum Track'}
+                  {loading ? 'Updating...' : 'Update Track'}
                 </Button>
               </div>
             </form>

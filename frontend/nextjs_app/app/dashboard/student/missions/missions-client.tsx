@@ -70,12 +70,14 @@ export default function MissionsClient() {
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filtersInitialized, setFiltersInitialized] = useState(false)
 
   // Filters
   const [filters, setFilters] = useState({
     status: 'all',
     difficulty: 'all',
     track: 'all',
+    tier: 'all',
     search: '',
   })
 
@@ -87,6 +89,24 @@ export default function MissionsClient() {
     hasNext: false,
     hasPrevious: false,
   })
+
+  // Initialize filters from URL params
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !filtersInitialized) {
+      const params = new URLSearchParams(window.location.search)
+      const trackParam = params.get('track')
+      const tierParam = params.get('tier')
+      const statusParam = params.get('status')
+
+      setFilters(prev => ({
+        ...prev,
+        track: trackParam || 'all',
+        tier: tierParam || 'all',
+        status: statusParam || 'all',
+      }))
+      setFiltersInitialized(true)
+    }
+  }, [filtersInitialized])
 
   // Load missions from API
   const loadMissions = async () => {
@@ -108,7 +128,8 @@ export default function MissionsClient() {
       // Apply filters
       if (filters.status !== 'all') params.status = filters.status
       if (filters.difficulty !== 'all') params.difficulty = filters.difficulty
-      if (filters.track !== 'all') params.track_key = filters.track
+      if (filters.track !== 'all') params.track = filters.track
+      if (filters.tier !== 'all') params.tier = filters.tier
       if (filters.search) params.search = filters.search
 
       const response = await missionsClient.getAllMissions(params)
@@ -155,18 +176,18 @@ export default function MissionsClient() {
 
   // Initial load
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && filtersInitialized) {
       loadProfile()
       loadMissions()
-    } else {
+    } else if (!isAuthenticated) {
       setLoading(false)
       setProfileLoading(false)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, filtersInitialized])
 
   // Reload when filters or pagination changes
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && filtersInitialized) {
       loadMissions()
     }
   }, [pagination.page, filters])
@@ -182,6 +203,7 @@ export default function MissionsClient() {
       status: 'all',
       difficulty: 'all',
       track: 'all',
+      tier: 'all',
       search: '',
     })
     setPagination(prev => ({ ...prev, page: 1 }))
@@ -347,13 +369,26 @@ export default function MissionsClient() {
             <option value="defender">Defender</option>
             <option value="offensive">Offensive</option>
             <option value="grc">GRC</option>
-            <option value="cloud">Cloud Security</option>
+            <option value="innovation">Innovation</option>
             <option value="leadership">Leadership</option>
+          </select>
+
+          {/* Tier Filter */}
+          <select
+            value={filters.tier}
+            onChange={(e) => handleFilterChange({ tier: e.target.value })}
+            className="px-4 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-och-defender"
+          >
+            <option value="all">All Tiers</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+            <option value="mastery">Mastery</option>
           </select>
         </div>
 
         {/* Reset Filters */}
-        {(filters.search || filters.status !== 'all' || filters.difficulty !== 'all' || filters.track !== 'all') && (
+        {(filters.search || filters.status !== 'all' || filters.difficulty !== 'all' || filters.track !== 'all' || filters.tier !== 'all') && (
           <div className="mt-4">
             <Button variant="ghost" size="sm" onClick={handleResetFilters}>
               Reset Filters
@@ -382,7 +417,7 @@ export default function MissionsClient() {
           <Target className="w-12 h-12 mx-auto mb-4 text-och-steel" />
           <h3 className="text-xl font-semibold mb-2 text-white">No Missions Found</h3>
           <p className="text-och-steel mb-4">
-            {filters.search || filters.status !== 'all' || filters.difficulty !== 'all' || filters.track !== 'all'
+            {filters.search || filters.status !== 'all' || filters.difficulty !== 'all' || filters.track !== 'all' || filters.tier !== 'all'
               ? 'Try adjusting your filters to see more missions'
               : 'No missions are currently available'}
           </p>

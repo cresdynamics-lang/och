@@ -1057,10 +1057,10 @@ def sync_fastapi_profiling(request):
 
         # Set user's track_key from profiler recommendation
         if primary_track:
-            # Map profiler track names to track keys
+            # Map profiler track names to track keys (use consistent slugs)
             track_key_map = {
-                'defender': 'defensive-security',
-                'offensive': 'offensive-security',
+                'defender': 'defender',
+                'offensive': 'offensive',
                 'grc': 'grc',
                 'innovation': 'innovation',
                 'leadership': 'leadership',
@@ -1074,43 +1074,30 @@ def sync_fastapi_profiling(request):
         enrolled_track_code = None
         if primary_track:
             from curriculum.models import CurriculumTrack, UserTrackProgress
-            from programs.models import Track
 
-            # Try to find curriculum track by linking through programs.Track
-            # First get the track_key we just set on the user
-            track_key = user.track_key
+            # Directly find curriculum track by slug (matches the track_key we just set)
+            track_slug = user.track_key
 
-            # Find the programs.Track with this key
-            program_track = Track.objects.filter(key=track_key, track_type='primary').first()
+            curriculum_track = CurriculumTrack.objects.filter(
+                slug=track_slug,
+                is_active=True
+            ).first()
 
-            if program_track:
-                # Find curriculum track linked to this program track
-                curriculum_track = CurriculumTrack.objects.filter(
-                    program_track_id=program_track.id,
-                    is_active=True
-                ).first()
-                if curriculum_track:
-                    logger.info(f"Found curriculum track '{curriculum_track.code}' linked to program track '{program_track.key}'")
-                else:
-                    logger.warning(f"No curriculum track found linked to program track '{program_track.key}', trying tier 2 tracks")
-                    curriculum_track = CurriculumTrack.objects.filter(is_active=True, tier=2).first()
-            else:
-                logger.warning(f"No program track found with key '{track_key}', trying any tier 2 track")
-                curriculum_track = CurriculumTrack.objects.filter(is_active=True, tier=2).first()
-
-            try:
-                if curriculum_track:
+            if curriculum_track:
+                try:
                     progress, created = UserTrackProgress.objects.get_or_create(
                         user=user,
                         track=curriculum_track,
                     )
                     enrolled_track_code = curriculum_track.code
                     if created:
-                        logger.info(f"Enrolled user {user.id} in curriculum track {curriculum_track.code}")
-                else:
-                    logger.warning("No active curriculum tracks exist, skipping enrollment")
-            except Exception as e:
-                logger.warning(f"Failed to enroll user in curriculum track: {e}")
+                        logger.info(f"Enrolled user {user.id} in curriculum track '{curriculum_track.name}' (slug: {track_slug})")
+                    else:
+                        logger.info(f"User {user.id} already enrolled in curriculum track '{curriculum_track.name}' (slug: {track_slug})")
+                except Exception as e:
+                    logger.warning(f"Failed to enroll user in curriculum track: {e}")
+            else:
+                logger.warning(f"No curriculum track found with slug '{track_slug}', skipping enrollment")
 
         # Update profiler session with telemetry data if session exists
         try:
@@ -1162,28 +1149,65 @@ def reset_profiling(request):
     """
     POST /api/v1/profiler/reset
     Reset profiling so the user can redo it.
-    Clears profiling_complete flag and session data.
+    Clears data on both Django and FastAPI sides.
     """
     user = request.user
+    session_ids_reset = []
 
+    # 1. Get existing session IDs before resetting (for FastAPI cleanup)
+    try:
+        existing_sessions = ProfilerSession.objects.filter(user=user).values_list('id', flat=True)
+        session_ids_reset = [str(sid) for sid in existing_sessions]
+    except Exception:
+        pass
+
+    # 2. Delete Django profiler data (answers, results, then sessions)
+    try:
+        ProfilerAnswer.objects.filter(session__user=user).delete()
+        ProfilerResult.objects.filter(session__user=user).delete()
+        ProfilerSession.objects.filter(user=user).delete()
+        logger.info(f"Deleted Django profiler sessions for user {user.id}")
+    except Exception as e:
+        logger.warning(f"Error deleting profiler data for user {user.id}: {e}")
+
+    # 3. Reset user profiling flags
     user.profiling_complete = False
     user.profiling_completed_at = None
     user.profiling_session_id = None
     user.save(update_fields=['profiling_complete', 'profiling_completed_at', 'profiling_session_id'])
 
-    # Clear any existing profiler sessions for this user
-    try:
-        from profiler.models import ProfilerSession
-        ProfilerSession.objects.filter(user=user).update(status='reset')
-    except Exception:
-        pass  # Model may not exist or may use different structure
+    # 4. Delete FastAPI in-memory sessions
+    fastapi_url = getattr(
+        __import__('django.conf', fromlist=['settings']).settings,
+        'FASTAPI_BASE_URL',
+        'http://localhost:8001'
+    )
+    fastapi_errors = []
+    for sid in session_ids_reset:
+        try:
+            resp = requests.delete(
+                f"{fastapi_url}/api/v1/profiling/session/{sid}",
+                headers={'Authorization': request.headers.get('Authorization', '')},
+                timeout=5,
+            )
+            if resp.status_code in (200, 204, 404):
+                logger.info(f"FastAPI session {sid} deleted (status {resp.status_code})")
+            else:
+                fastapi_errors.append(f"Session {sid}: {resp.status_code}")
+        except requests.RequestException as e:
+            fastapi_errors.append(f"Session {sid}: {str(e)}")
+            logger.warning(f"Could not delete FastAPI session {sid}: {e}")
 
-    logger.info(f"Profiling reset for user {user.id} ({user.email})")
+    if fastapi_errors:
+        logger.warning(f"FastAPI cleanup errors: {fastapi_errors}")
+
+    logger.info(f"Profiling fully reset for user {user.id} ({user.email})")
 
     return Response({
         'status': 'reset',
         'message': 'Profiling has been reset. You can now retake the assessment.',
         'profiling_complete': False,
+        'sessions_cleared': len(session_ids_reset),
     }, status=status.HTTP_200_OK)
 
 

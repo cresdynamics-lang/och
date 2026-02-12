@@ -31,11 +31,10 @@ from .views import (
     accept_profiler_result,
     get_value_statement,
 )
-# TODO: Create analytics_views.py with these functions
-# from .analytics_views import (
-#     get_track_acceptance_analytics,
-#     get_role_mapping_accuracy,
-# )
+from .analytics_views import (
+    get_track_acceptance_analytics,
+    get_role_mapping_accuracy,
+)
 
 app_name = 'profiler'
 
@@ -72,9 +71,8 @@ urlpatterns = [
     path('profiler/admin/enterprise/analytics', get_enterprise_profiler_analytics, name='enterprise-profiler-analytics'),
     
     # Success metrics analytics endpoints
-    # TODO: Uncomment when analytics_views.py is created
-    # path('profiler/admin/analytics/acceptance-rate', get_track_acceptance_analytics, name='track-acceptance-analytics'),
-    # path('profiler/admin/analytics/role-mapping-accuracy', get_role_mapping_accuracy, name='role-mapping-accuracy'),
+    path('profiler/admin/analytics/acceptance-rate', get_track_acceptance_analytics, name='track-acceptance-analytics'),
+    path('profiler/admin/analytics/role-mapping-accuracy', get_role_mapping_accuracy, name='role-mapping-accuracy'),
     
     # Admin management endpoints
     path('profiler/admin/users/<int:user_id>/reset', admin_reset_profiler, name='admin-reset-profiler'),

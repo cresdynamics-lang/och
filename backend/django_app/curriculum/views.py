@@ -452,7 +452,47 @@ class LessonViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(module_id=module_id)
         
         return queryset.order_by('order_index')
-    
+
+    @action(detail=False, methods=['post'], url_path='upload-video')
+    def upload_video(self, request):
+        """
+        POST /curriculum/lessons/upload-video/
+        Accepts a video file upload, saves to media/lesson_videos/, returns the URL.
+        Used by the director module management UI.
+        """
+        video_file = request.FILES.get('video')
+        if not video_file:
+            return Response({'error': 'No file provided. Send file as "video" field.'}, status=400)
+
+        # Validate file type
+        allowed_types = ('video/mp4', 'video/webm', 'video/ogg', 'video/avi', 'video/mov',
+                         'video/quicktime', 'video/x-msvideo', 'video/mpeg')
+        if video_file.content_type and video_file.content_type not in allowed_types:
+            return Response(
+                {'error': f'Unsupported file type: {video_file.content_type}. Allowed: mp4, webm, ogg, avi, mov'},
+                status=400,
+            )
+
+        from django.core.files.storage import default_storage
+        from django.core.files.base import ContentFile
+        import os, uuid as uuid_lib
+        from django.conf import settings as django_settings
+
+        # Use a unique filename to avoid collisions
+        ext = os.path.splitext(video_file.name)[1].lower() or '.mp4'
+        unique_name = f"{uuid_lib.uuid4().hex}{ext}"
+        save_path = f"lesson_videos/{unique_name}"
+
+        path = default_storage.save(save_path, ContentFile(video_file.read()))
+        url = request.build_absolute_uri(f"{django_settings.MEDIA_URL}{path}")
+
+        return Response({
+            'url': url,
+            'filename': unique_name,
+            'original_name': video_file.name,
+            'size_bytes': video_file.size,
+        }, status=201)
+
     @action(detail=True, methods=['post'])
     def progress(self, request, pk=None):
         """Update lesson progress."""
