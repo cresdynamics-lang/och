@@ -25,7 +25,9 @@
       "Bash(DJANGO_SETTINGS_MODULE=core.settings.development python:*)",
       "Bash(choco install:*)",
       "Bash(findstr:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)"
     ]
   }
 }
