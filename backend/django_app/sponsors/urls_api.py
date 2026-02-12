@@ -42,6 +42,13 @@ billing_patterns = [
 ]
 
 # =============================================================================
+# 📊 Platform Finance APIs (prefix /api/v1/finance) – internal Finance role
+# =============================================================================
+finance_patterns = [
+    path('platform/overview/', views_api.platform_finance_overview, name='platform-finance-overview'),
+]
+
+# =============================================================================
 # 📢 Notifications & Automation APIs (prefix /api/v1/notifications)
 # =============================================================================
 notifications_patterns = [
@@ -76,6 +83,8 @@ urlpatterns = [
     
     # Billing & Finance APIs
     path('billing/', include(billing_patterns)),
+    # Platform-level Finance (internal Finance, cross-sponsor)
+    path('finance/', include(finance_patterns)),
     
     # Notifications & Automation APIs
     path('notifications/', include(notifications_patterns)),

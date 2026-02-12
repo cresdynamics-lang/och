@@ -45,6 +45,29 @@ def _user_has_sponsor_org(user):
     return _user_sponsor_orgs(user).exists()
 
 
+def is_platform_finance(user):
+    """
+    True if user is platform-level (internal) Finance: can see all sponsors' billing/finance data.
+    Staff/superuser or has active role finance/finance_admin/admin (e.g. created via admin dashboard
+    with no sponsor org attachment).
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+        return True
+    return _user_has_active_role(user, ['finance', 'finance_admin', 'admin'])
+
+
+class IsPlatformFinance(BasePermission):
+    """
+    Permission for platform-level finance endpoints. Allows users who can see
+    cross-sponsor finance data (internal Finance role, not tied to a single sponsor).
+    """
+
+    def has_permission(self, request, view):
+        return is_platform_finance(request.user)
+
+
 def _user_has_sponsor_admin_scope(user, sponsor_org):
     """Check if user has admin/finance access for the given sponsor organization."""
     if not user or not user.is_authenticated or sponsor_org is None:

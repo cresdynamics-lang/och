@@ -63,14 +63,16 @@ class Sponsor(models.Model):
 
 class SponsorCohort(models.Model):
     """
-    Cohort managed by a sponsor.
+    Cohort managed by a sponsor (organization with org_type='sponsor').
     Represents a specific group of students (e.g., "Nairobi Poly Jan 2026 Cohort").
+    Links to organizations.Organization when sponsors table is not used.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    sponsor = models.ForeignKey(
-        Sponsor,
+    organization = models.ForeignKey(
+        'organizations.Organization',
         on_delete=models.CASCADE,
-        related_name='cohorts'
+        related_name='sponsor_cohorts',
+        db_column='organization_id',
     )
 
     name = models.CharField(max_length=255, help_text='Cohort display name')
@@ -142,10 +144,10 @@ class SponsorCohort(models.Model):
     class Meta:
         db_table = 'sponsor_cohorts'
         ordering = ['-start_date', 'name']
-        unique_together = ['sponsor', 'name']  # Prevent duplicate cohort names per sponsor
+        unique_together = [['organization', 'name']]  # Prevent duplicate cohort names per org
         indexes = [
-            models.Index(fields=['sponsor', 'is_active']),
-            models.Index(fields=['sponsor', 'status']),
+            models.Index(fields=['organization', 'is_active']),
+            models.Index(fields=['organization', 'status']),
             models.Index(fields=['track_slug']),
             models.Index(fields=['status']),
             models.Index(fields=['start_date']),
@@ -153,7 +155,7 @@ class SponsorCohort(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.sponsor.name} - {self.name}"
+        return f"{self.organization.name} - {self.name}"
 
     @property
     def active_students(self):

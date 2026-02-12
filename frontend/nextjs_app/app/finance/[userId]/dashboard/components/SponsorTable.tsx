@@ -3,53 +3,42 @@ import { Card } from "@/components/ui/Card";
 import { CardContent, CardHeader } from "@/components/ui/card-enhanced";
 import { Badge } from "@/components/ui/Badge";
 import { Building2, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import useSWR from 'swr';
 
-export const SponsorTable = () => {
-  const sponsors = [
-    {
-      name: 'MTN',
-      amount: 500000,
-      status: 'due',
-      dueDate: 'Feb 15',
-      icon: Building2,
-      color: 'text-orange-400'
-    },
-    {
-      name: 'Vodacom',
-      amount: 300000,
-      status: 'paid',
-      dueDate: 'Paid',
-      icon: Building2,
-      color: 'text-green-400'
-    },
-    {
-      name: 'Ecobank',
-      amount: 200000,
-      status: 'overdue',
-      dueDate: 'Jan 30',
-      icon: Building2,
-      color: 'text-red-400'
-    }
-  ];
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return <CheckCircle className="w-4 h-4 text-green-400" />;
-      case 'due':
-        return <Clock className="w-4 h-4 text-orange-400" />;
-      case 'overdue':
-        return <AlertCircle className="w-4 h-4 text-red-400" />;
-      default:
-        return <Clock className="w-4 h-4 text-slate-400" />;
+interface SponsorTableProps {
+  userId: string;
+}
+
+interface SponsorInvoiceRow {
+  id: string;
+  name: string;
+  amount: number;
+  status: string;
+  dueDate?: string;
+  lastPayment?: string;
+}
+
+export const SponsorTable = ({ userId }: SponsorTableProps) => {
+  const { data, error } = useSWR<SponsorInvoiceRow[]>(
+    `/api/finance/${userId}/sponsors`,
+    fetcher,
+    {
+      refreshInterval: 30000,
     }
-  };
+  );
+
+  const sponsors: SponsorInvoiceRow[] = Array.isArray(data) ? data : [];
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const normalized = (status || '').toLowerCase();
+    switch (normalized) {
       case 'paid':
+      case 'settled':
         return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">✓ Paid</Badge>;
       case 'due':
+      case 'pending':
         return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">Due Soon</Badge>;
       case 'overdue':
         return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Overdue</Badge>;
@@ -67,41 +56,46 @@ export const SponsorTable = () => {
         </h3>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {sponsors.map((sponsor, index) => {
-            const Icon = sponsor.icon;
-            return (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30">
+        {!sponsors.length && !error && (
+          <div className="text-sm text-slate-400">
+            No sponsor invoices found yet for this account.
+          </div>
+        )}
+
+        {error && (
+          <div className="text-sm text-red-400">
+            Failed to load sponsor invoices. Please try again.
+          </div>
+        )}
+
+        {!!sponsors.length && (
+          <div className="space-y-4">
+            {sponsors.map((sponsor) => (
+              <div
+                key={sponsor.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/30"
+              >
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg bg-slate-700/50`}>
-                    <Icon className={`w-5 h-5 ${sponsor.color}`} />
+                  <div className="p-2 rounded-lg bg-slate-700/50">
+                    <Building2 className="w-5 h-5 text-cyan-400" />
                   </div>
                   <div>
                     <div className="font-semibold text-white">{sponsor.name}</div>
-                    <div className="text-sm text-slate-400">KES {sponsor.amount.toLocaleString()}</div>
+                    <div className="text-sm text-slate-400">
+                      KES {Number(sponsor.amount || 0).toLocaleString()}
+                    </div>
                   </div>
                 </div>
                 <div className="text-right">
                   {getStatusBadge(sponsor.status)}
-                  <div className="text-xs text-slate-400 mt-1 font-mono">{sponsor.dueDate}</div>
+                  <div className="text-xs text-slate-400 mt-1 font-mono">
+                    {sponsor.dueDate || sponsor.lastPayment || ''}
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 pt-4 border-t border-slate-700/50">
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div>
-              <div className="text-xl font-bold text-cyan-400">KES 1.2M</div>
-              <div className="text-xs text-slate-400">Q1 Target</div>
-            </div>
-            <div>
-              <div className="text-xl font-bold text-green-400">KES 800K</div>
-              <div className="text-xs text-slate-400">Collected</div>
-            </div>
+            ))}
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

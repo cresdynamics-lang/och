@@ -3,9 +3,14 @@ Sponsor/Employer API Views for OCH SMP Technical Specifications.
 Implements all required APIs for sponsor/employer dashboard operations.
 """
 import json
+import logging
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
 from django.db import models, transaction
+from django.db.models import Sum
+from django.db.utils import OperationalError
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.http import StreamingHttpResponse, HttpResponse
@@ -30,7 +35,7 @@ from .serializers import (
     SponsorSerializer, SponsorCohortSerializer, SponsorDashboardSerializer,
     SponsorAnalyticsSerializer
 )
-from .permissions import IsSponsorUser, IsSponsorAdmin, check_sponsor_access
+from .permissions import IsSponsorUser, IsSponsorAdmin, IsPlatformFinance, check_sponsor_access, is_platform_finance
 from . import services as sponsor_services
 
 User = get_user_model()
@@ -659,49 +664,125 @@ def create_checkout_session(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def _build_invoice_item(b):
+    """Build a single invoice dict from a SponsorCohortBilling instance."""
+    if not getattr(b, 'sponsor_cohort', None):
+        return None
+    sc = b.sponsor_cohort
+    org = getattr(sc, 'organization', None)
+    if not org:
+        return None
+    return {
+        'id': str(b.id),
+        'cohort_id': str(sc.id),
+        'cohort_name': getattr(sc, 'name', ''),
+        'sponsor_id': str(org.id),
+        'sponsor_name': getattr(org, 'name', ''),
+        'billing_month': b.billing_month.isoformat() if getattr(b, 'billing_month', None) else '',
+        'net_amount': float(b.net_amount or 0),
+        'currency': 'KES',
+        'payment_status': getattr(b, 'payment_status', 'pending') or 'pending',
+        'invoice_generated': getattr(b, 'invoice_generated', False),
+        'created_at': b.created_at.isoformat() if getattr(b, 'created_at', None) else None,
+    }
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsSponsorUser])
 def sponsor_invoices(request):
-    """GET /api/v1/billing/invoices - Retrieve invoices linked to sponsor (org_id scoping; Finance/Admin/Sponsor)."""
+    """GET /api/v1/billing/invoices - Invoices for user's sponsor org(s), or all invoices for platform Finance."""
     try:
-        # Org-level segregation: user must be member or have scoped Finance/Sponsor role for a sponsor org
         from .permissions import _user_sponsor_orgs
         sponsor_orgs = list(_user_sponsor_orgs(request.user))
+
+        # Platform Finance (no sponsor org): return all invoices across sponsors
         if not sponsor_orgs:
-            return Response({
-                'error': 'User is not associated with a sponsor organization'
-            }, status=status.HTTP_403_FORBIDDEN)
+            if not is_platform_finance(request.user):
+                return Response({
+                    'error': 'User is not associated with a sponsor organization'
+                }, status=status.HTTP_403_FORBIDDEN)
+            billing_qs = SponsorCohortBilling.objects.all().select_related(
+                'sponsor_cohort', 'sponsor_cohort__organization'
+            ).order_by('-billing_month')
+            invoices = [x for b in billing_qs if (x := _build_invoice_item(b)) is not None]
+            return Response({'invoices': invoices, 'total_invoices': len(invoices)})
 
-        # Sponsor model keyed by org slug; get all sponsors for user's orgs
-        org_slugs = [o.slug for o in sponsor_orgs]
-        sponsors = list(Sponsor.objects.filter(slug__in=org_slugs, is_active=True))
-        if not sponsors:
-            return Response({'invoices': [], 'total_invoices': 0})
-
-        # Invoices = billing records (SponsorCohortBilling) for those sponsors
+        # Sponsor-scoped: only invoices for user's orgs (organizations with org_type='sponsor')
         billing_qs = SponsorCohortBilling.objects.filter(
-            sponsor_cohort__sponsor__in=sponsors
-        ).select_related('sponsor_cohort', 'sponsor_cohort__sponsor').order_by('-billing_month')
-
-        invoices = []
-        for b in billing_qs:
-            invoices.append({
-                'id': str(b.id),
-                'cohort_id': str(b.sponsor_cohort.id),
-                'cohort_name': b.sponsor_cohort.name,
-                'sponsor_id': str(b.sponsor_cohort.sponsor.id),
-                'billing_month': b.billing_month.isoformat(),
-                'net_amount': float(b.net_amount),
-                'currency': 'KES',
-                'payment_status': b.payment_status,
-                'invoice_generated': b.invoice_generated,
-                'created_at': b.created_at.isoformat(),
-            })
+            sponsor_cohort__organization__in=sponsor_orgs
+        ).select_related('sponsor_cohort', 'sponsor_cohort__organization').order_by('-billing_month')
+        invoices = [x for b in billing_qs if (x := _build_invoice_item(b)) is not None]
         return Response({'invoices': invoices, 'total_invoices': len(invoices)})
+    except OperationalError as e:
+        logger.exception('sponsor_invoices database error')
+        return Response({
+            'error': f'Database error (run migrations?): {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     except Exception as e:
+        logger.exception('sponsor_invoices failed')
         return Response({
             'error': f'Failed to retrieve invoices: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsPlatformFinance])
+def platform_finance_overview(request):
+    """GET /api/v1/finance/platform/overview - Aggregated finance across all sponsors (platform/internal Finance)."""
+    try:
+        agg = SponsorCohortBilling.objects.aggregate(
+            total_platform_cost=Sum('total_cost'),
+            total_net=Sum('net_amount'),
+            total_revenue_share=Sum('revenue_share_kes'),
+            total_hires=Sum('hires'),
+        )
+        total_platform_cost = float(agg.get('total_platform_cost') or 0)
+        total_revenue_share = float(agg.get('total_revenue_share') or 0)
+        total_hires = int(agg.get('total_hires') or 0)
+        total_net = float(agg.get('total_net') or 0)
+        total_value_created = total_platform_cost  # proxy for display
+        total_roi = (total_value_created / total_platform_cost) if total_platform_cost else 0
+
+        cohorts = []
+        for b in SponsorCohortBilling.objects.select_related(
+            'sponsor_cohort', 'sponsor_cohort__organization'
+        ).order_by('-billing_month')[:50]:
+            sc = getattr(b, 'sponsor_cohort', None)
+            org = getattr(sc, 'organization', None) if sc else None
+            if not sc or not org:
+                continue
+            cohorts.append({
+                'cohort_id': str(sc.id),
+                'name': getattr(sc, 'name', ''),
+                'sponsor_name': getattr(org, 'name', ''),
+                'billed_amount': float(b.net_amount or 0),
+                'revenue_share': float(b.revenue_share_kes or 0),
+                'payment_status': getattr(b, 'payment_status', 'pending') or 'pending',
+                'hires': int(b.hires or 0),
+                'billing_month': b.billing_month.isoformat() if getattr(b, 'billing_month', None) else '',
+            })
+
+        return Response({
+            'total_roi': round(total_roi, 2),
+            'total_value_created': total_value_created,
+            'total_platform_cost': total_platform_cost,
+            'total_revenue_share': total_revenue_share,
+            'total_hires': total_hires,
+            'cohorts': cohorts,
+            'revenue_forecast_q2': 0,
+        })
+    except OperationalError as e:
+        logger.exception('platform_finance_overview database error')
+        return Response(
+            {'error': f'Database error (run migrations?): {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    except Exception as e:
+        logger.exception('platform_finance_overview failed')
+        return Response(
+            {'error': f'Failed to retrieve platform finance overview: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(['GET'])

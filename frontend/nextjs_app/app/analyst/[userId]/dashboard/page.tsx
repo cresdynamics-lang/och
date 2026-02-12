@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { SidePanelTabs } from '@/components/analyst/SidePanelTabs';
 import { PriorityTasksCompact } from '@/components/analyst/PriorityTasksCompact';
 import { LiveLabFeedCompact } from '@/components/analyst/LiveLabFeedCompact';
@@ -11,11 +12,12 @@ import { SkipNavigation } from '@/components/analyst/SkipNavigation';
 import { UserProfileDropdown } from '@/components/navigation/UserProfileDropdown';
 import { useAnalystRealtime } from '@/hooks/useAnalystRealtime';
 
-export default function AnalystDashboard({ params }: { params: { userId: string } }) {
+export default function AnalystDashboard() {
+  const { userId } = useParams() as { userId: string };
   const [mobileOverlay, setMobileOverlay] = useState<string | null>(null);
   
   // Initialize realtime SSE updates
-  useAnalystRealtime(params.userId);
+  useAnalystRealtime(userId);
 
   return (
     <>
@@ -49,7 +51,7 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
         >
           <DashboardErrorBoundary>
             <Suspense fallback={<div className="p-4 text-och-steel-grey" aria-live="polite">Loading sidebar...</div>}>
-              <SidePanelTabs userId={params.userId} />
+              <SidePanelTabs userId={userId} />
             </Suspense>
           </DashboardErrorBoundary>
         </aside>
@@ -64,13 +66,13 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
         >
           <DashboardErrorBoundary>
             <Suspense fallback={<div className="animate-pulse"><div className="h-32 bg-och-steel-grey/30 rounded-xl"></div></div>}>
-              <PriorityTasksCompact userId={params.userId} />
+              <PriorityTasksCompact userId={userId} />
             </Suspense>
           </DashboardErrorBoundary>
 
           <DashboardErrorBoundary>
             <Suspense fallback={<div className="animate-pulse"><div className="h-32 bg-och-steel-grey/30 rounded-xl"></div></div>}>
-              <LiveLabFeedCompact userId={params.userId} />
+              <LiveLabFeedCompact userId={userId} />
             </Suspense>
           </DashboardErrorBoundary>
         </main>
@@ -83,7 +85,7 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
         >
           <DashboardErrorBoundary>
             <Suspense fallback={<div className="animate-pulse"><div className="h-4 bg-och-steel-grey/30 rounded"></div></div>}>
-              <ProgressShelfMicro userId={params.userId} />
+              <ProgressShelfMicro userId={userId} />
             </Suspense>
           </DashboardErrorBoundary>
         </footer>
@@ -106,13 +108,13 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
             <div className="grid grid-cols-1 gap-6">
               <DashboardErrorBoundary>
                 <Suspense fallback={<div className="text-och-steel-grey" aria-live="polite">Loading priorities...</div>}>
-                  <PriorityTasksCompact userId={params.userId} />
+                  <PriorityTasksCompact userId={userId} />
                 </Suspense>
               </DashboardErrorBoundary>
 
               <DashboardErrorBoundary>
                 <Suspense fallback={<div className="text-och-steel-grey" aria-live="polite">Loading lab feed...</div>}>
-                  <LiveLabFeedCompact userId={params.userId} />
+                  <LiveLabFeedCompact userId={userId} />
                 </Suspense>
               </DashboardErrorBoundary>
             </div>
@@ -145,11 +147,11 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
               {/* Render appropriate component based on overlay */}
               <div className="space-y-4">
                 <DashboardErrorBoundary>
-                  {mobileOverlay === 'lab' && <LabOverlay userId={params.userId} />}
-                  {mobileOverlay === 'learning' && <LearningOverlay userId={params.userId} />}
-                  {mobileOverlay === 'metrics' && <MetricsOverlay userId={params.userId} />}
-                  {mobileOverlay === 'career' && <CareerOverlay userId={params.userId} />}
-                  {mobileOverlay === 'reports' && <ReportsOverlay userId={params.userId} />}
+                  {mobileOverlay === 'lab' && <LabOverlay userId={userId} />}
+                  {mobileOverlay === 'learning' && <LearningOverlay userId={userId} />}
+                  {mobileOverlay === 'metrics' && <MetricsOverlay userId={userId} />}
+                  {mobileOverlay === 'career' && <CareerOverlay userId={userId} />}
+                  {mobileOverlay === 'reports' && <ReportsOverlay userId={userId} />}
                   {mobileOverlay === 'tools' && <ToolsOverlay />}
                 </DashboardErrorBoundary>
               </div>
@@ -170,7 +172,7 @@ export default function AnalystDashboard({ params }: { params: { userId: string 
         >
           <DashboardErrorBoundary>
             <Suspense fallback={<div className="animate-pulse"><div className="h-4 bg-och-steel-grey/30 rounded"></div></div>}>
-              <ProgressShelfMicro userId={params.userId} />
+              <ProgressShelfMicro userId={userId} />
             </Suspense>
           </DashboardErrorBoundary>
         </footer>

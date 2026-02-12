@@ -432,7 +432,12 @@ class LoginView(APIView):
         user_role_names = [ur.role.name for ur in user_roles]
         high_risk_roles = ['finance', 'finance_admin', 'admin']
         primary_role = next((r for r in user_role_names if r in high_risk_roles), user_role_names[0] if user_role_names else None)
-        mfa_required = requires_mfa(risk_score, primary_role, user) or user.mfa_enabled
+
+        # Only require MFA when at least one MFA method is configured and enabled.
+        # This avoids blocking login with \"MFA required\" for users who have MFA toggled on
+        # but haven't completed enrollment (no active MFAMethod yet).
+        has_mfa_method = MFAMethod.objects.filter(user=user, enabled=True).exists()
+        mfa_required = (requires_mfa(risk_score, primary_role, user) or user.mfa_enabled) and has_mfa_method
         
         # If MFA required and not verified, return MFA challenge
         if mfa_required and not device_trusted:

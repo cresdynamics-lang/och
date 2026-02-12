@@ -75,7 +75,9 @@ def requires_mfa(risk_score, user_role=None, user=None):
         return True
 
     # Risk-based MFA requirement
-    if risk_score >= 0.5:
+    # Only enforce if user has MFA enabled; if MFA is disabled (e.g. by admin override),
+    # do NOT force MFA even for higher risk scores.
+    if risk_score >= 0.5 and user and user.mfa_enabled:
         return True
 
     return False

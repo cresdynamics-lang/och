@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { Card } from "@/components/ui/Card";
 import { CardContent, CardHeader } from "@/components/ui/card-enhanced";
 import { Badge } from "@/components/ui/Badge";
@@ -9,13 +10,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { FinanceSidePanel } from "./components/FinanceSidePanel";
 import { RevenueHero, PipelineChart, SponsorTable, PlacementPipeline, MobileBottomNav, FinanceDashboardSkeleton, ActionsDropdown } from "./components";
 import { RouteGuard } from '@/components/auth/RouteGuard';
-import { DashboardHeader } from '@/components/navigation/DashboardHeader';
-import { DollarSign, TrendingUp, Users, CreditCard, FileText, Target, Crown, Wallet, Zap, Calendar, Shield } from 'lucide-react';
+import { Users, Target, Shield } from 'lucide-react';
 import useSWR from 'swr';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-function FinanceDashboardContent({ params }: { params: { userId: string } }) {
+function FinanceDashboardContent() {
+  const { userId } = useParams() as { userId: string };
   const { user, isLoading: authLoading } = useAuth();
   const [activeMobileTab, setActiveMobileTab] = useState('revenue');
   const [activePanel, setActivePanel] = useState('overview');
@@ -27,27 +28,12 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
   }, []);
 
   // Always call hooks in the same order, regardless of early returns
-  const { data: revenueData, error: revenueError } = useSWR(`/api/finance/${params.userId}/revenue`, fetcher, {
+  const { data: revenueData, error: revenueError } = useSWR(`/api/finance/${userId}/revenue`, fetcher, {
     refreshInterval: 30000, // 30s refresh
-    fallbackData: {
-      total: 4970000,
-      cohort: 3200000,
-      placements: 600000,
-      pro7: 1270000,
-      roi: 4.2,
-      activeUsers: 127,
-      placementsCount: 12,
-      userId: params.userId
-    }
   });
 
-  const { data: realtimeData, error: realtimeError } = useSWR(`/api/finance/${params.userId}/realtime`, fetcher, {
+  const { data: realtimeData, error: realtimeError } = useSWR(`/api/finance/${userId}/realtime`, fetcher, {
     refreshInterval: 3000, // 3s realtime updates
-    fallbackData: {
-      liveUsers: 5,
-      newInvoices: 2,
-      recentPayments: 3
-    }
   });
 
   // Show loading during hydration or if authentication is still loading
@@ -63,118 +49,69 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
     {
       id: "overview",
       title: "Overview",
-      metrics: [
-        "KES 4.97M Total",
-        "127 Active Users",
-        "12 Placements",
-        "4.2x ROI"
-      ],
       action: "Dashboard →"
     },
     {
       id: "revenue",
       title: "Revenue",
-      metrics: [
-        "KES 3.2M Cohort",
-        "KES 1.27M Pro7",
-        "KES 600K Fees",
-        "4.2x ROI"
-      ],
       action: "Export →"
     },
     {
       id: "invoices",
       title: "Invoices",
-      metrics: [
-        "MTN 500K Due",
-        "Vodacom 300K ✓",
-        "Ecobank 200K",
-        "Q1: 1.2M"
-      ],
       action: "Generate →"
     },
     {
       id: "placements",
       title: "Placements",
-      metrics: [
-        "12/127 (9%)",
-        "KES 50K avg",
-        "47 apps",
-        "300K pending"
-      ],
       action: "Tracker →"
     },
     {
       id: "subscriptions",
       title: "Pro7",
-      metrics: [
-        "127 active",
-        "KES 1.27M MRR",
-        "0% churn",
-        "Feb 5 renew"
-      ],
       action: "Alerts →"
     },
     {
       id: "cashflow",
       title: "Cash Flow",
-      metrics: [
-        "KES 2.1M",
-        "150K/mo burn",
-        "14mo runway",
-        "Payroll Feb 5"
-      ],
       action: "Forecast →"
     },
     { id: "actions", title: "Actions", action: "dropdown" }
   ];
 
-  const mockRevenue = {
-    total: 4970000,
-    cohort: 3200000,
-    placements: 600000,
-    pro7: 1270000,
-    roi: 4.2,
-    activeUsers: 127,
-    placementsCount: 12,
-    userId: params.userId
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950/20 to-cyan-950/20">
-      {/* OCH Finance Dashboard Header */}
-      <div className="bg-och-midnight/95 backdrop-blur-sm border-b border-och-steel/20">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <Shield className="w-8 h-8 text-och-defender" />
-                <div>
-                  <h1 className="text-xl font-bold text-white">Ongoza CyberHub</h1>
-                  <p className="text-sm text-och-steel">Finance Dashboard • SOC Analyst Operations</p>
-                </div>
+    <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8 mx-auto">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Shield className="w-8 h-8 text-och-defender" />
+            <div>
+              <h1 className="text-xl font-bold text-white">Ongoza CyberHub</h1>
+              <p className="text-sm text-och-steel">
+              Finance Dashboard • {revenueData?.scope === 'platform' ? 'Platform (All sponsors)' : 'SOC Analyst Operations'}
+            </p>
+            </div>
+          </div>
+          {revenueData && (
+            <div className="hidden md:flex items-center gap-6 ml-8">
+              <div className="flex items-center gap-2 text-sm text-och-steel">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>Live: KES {Number(revenueData.total || 0).toLocaleString()}</span>
               </div>
-              <div className="hidden md:flex items-center gap-6 ml-8">
-                <div className="flex items-center gap-2 text-sm text-och-steel">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>Live: KES {mockRevenue.total.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-och-steel">
-                  <Users className="w-4 h-4" />
-                  <span>{mockRevenue.activeUsers} Active Users</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-och-steel">
-                  <Target className="w-4 h-4" />
-                  <span>{mockRevenue.placementsCount} Placements</span>
-                </div>
+              <div className="flex items-center gap-2 text-sm text-och-steel">
+                <Users className="w-4 h-4" />
+                <span>{Number(revenueData.activeUsers || 0)} Active Users</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-och-steel">
+                <Target className="w-4 h-4" />
+                <span>{Number(revenueData.placementsCount || 0)} Placements</span>
               </div>
             </div>
-            <DashboardHeader />
-          </div>
+          )}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto xl:grid xl:grid-cols-5 xl:gap-6 h-[calc(100vh-8rem)] p-4 md:p-6">
+      <div className="xl:grid xl:grid-cols-5 xl:gap-6 h-[calc(100vh-8rem)]">
 
         {/* 🔥 SIDE PANELS: Fixed Navigation Buttons */}
         <div className="xl:col-span-1 xl:sticky xl:top-6 xl:self-start space-y-3 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto pr-0 xl:pr-6 scrollbar-thin scrollbar-cyan-500/20">
@@ -183,7 +120,7 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
               <ActionsDropdown
                 key={panel.id}
                 isActive={activePanel === panel.id}
-                userId={params.userId}
+                userId={userId}
               />
             ) : (
               <FinanceSidePanel
@@ -201,14 +138,27 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
         {/* 🔥 MAIN: Dynamic Content Based on Active Panel */}
         <div className="xl:col-span-4 xl:max-h-full xl:overflow-y-auto scrollbar-thin scrollbar-cyan-500/20 space-y-6">
           <Suspense fallback={<FinanceDashboardSkeleton />}>
-            {activePanel === 'overview' && (
+            {activePanel === 'overview' && revenueData && (
               <>
-                <RevenueHero revenue={{...revenueData, userId: params.userId}} realtime={realtimeData} showExportButtons={false} />
+                  <RevenueHero revenue={{...revenueData, userId: userId}} realtime={realtimeData} showExportButtons={false} />
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                  <PipelineChart />
-                  <SponsorTable />
+                  <PipelineChart
+                    activePlacements={Number(realtimeData?.metrics?.activePlacements || 0)}
+                    conversionRate={Number(realtimeData?.metrics?.conversionRate || 0)}
+                    monthlyRevenue={Number(realtimeData?.metrics?.monthlyRevenue || 0)}
+                  />
+                  <SponsorTable userId={userId} />
                   <div className="lg:col-span-2 xl:col-span-3">
-                    <PlacementPipeline />
+                    <PlacementPipeline
+                      activePlacements={Number(realtimeData?.metrics?.activePlacements || 0)}
+                      totalValue={Number(revenueData?.placements || 0)}
+                      averageSalary={
+                        Number(realtimeData?.metrics?.activePlacements || 0) > 0
+                          ? Number(revenueData?.placements || 0) /
+                            Number(realtimeData?.metrics?.activePlacements || 1)
+                          : 0
+                      }
+                    />
                   </div>
                 </div>
               </>
@@ -218,11 +168,12 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
               <Card className="cyber-gradient text-white border-0 shadow-2xl">
                 <CardContent className="p-8">
                   <h2 className="text-2xl font-bold mb-4">Detailed Revenue Analysis</h2>
-                  <RevenueHero revenue={{...revenueData, userId: params.userId}} realtime={realtimeData} showExportButtons={true} />
-                  {/* Add more detailed revenue components here */}
+                  {revenueData && (
+                    <RevenueHero revenue={{...revenueData, userId: userId}} realtime={realtimeData} showExportButtons={true} />
+                  )}
                   <div className="mt-8 text-slate-300">
                     <p>This section will contain detailed charts and tables for revenue breakdown, trends, and ROI analysis.</p>
-                    <p>Current Revenue Data: KES {revenueData?.total?.toLocaleString() || 'Loading...'}</p>
+                    <p>Current Revenue Data: KES {revenueData?.total ? Number(revenueData.total).toLocaleString() : 'Loading...'}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -232,8 +183,7 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
               <Card className="cyber-gradient text-white border-0 shadow-2xl">
                 <CardContent className="p-8">
                   <h2 className="text-2xl font-bold mb-4">Invoice Management</h2>
-                  <SponsorTable />
-                  {/* Add more invoice management components here */}
+                  <SponsorTable userId={userId} />
                   <div className="mt-8 text-slate-300">
                     <p>This section will display a list of invoices, their status (due, paid, overdue), and options to generate new invoices or send reminders.</p>
                   </div>
@@ -283,7 +233,7 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
               <Card className="cyber-gradient text-white border-0 shadow-2xl">
                 <CardContent className="p-8">
                   <h2 className="text-2xl font-bold mb-4">Quick Actions & Workflows</h2>
-                  <ActionsDropdown isActive={true} userId={params.userId} />
+                  <ActionsDropdown isActive={true} userId={userId} />
                   <div className="mt-8 text-slate-300">
                     <p>This panel provides a centralized place for all financial actions, including exports, report generation, and workflow triggers.</p>
                   </div>
@@ -303,7 +253,7 @@ function FinanceDashboardContent({ params }: { params: { userId: string } }) {
   );
 }
 
-export default function FinanceDashboard({ params }: { params: { userId: string } }) {
+export default function FinanceDashboard() {
   return (
     <RouteGuard requiredRoles={['finance']}>
       <Suspense fallback={
@@ -313,7 +263,7 @@ export default function FinanceDashboard({ params }: { params: { userId: string 
           </div>
         </div>
       }>
-        <FinanceDashboardContent params={params} />
+        <FinanceDashboardContent />
       </Suspense>
     </RouteGuard>
   );

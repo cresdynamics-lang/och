@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -143,8 +143,9 @@ const labTemplates: LabTemplate[] = [
   }
 ]
 
-export default function LabCreationPage({ params }: { params: { userId: string } }) {
+export default function LabCreationPage() {
   const router = useRouter()
+  const { userId } = useParams() as { userId: string }
   const [selectedTemplate, setSelectedTemplate] = useState<LabTemplate | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
@@ -159,7 +160,7 @@ export default function LabCreationPage({ params }: { params: { userId: string }
       console.log('Creating lab:', template.title)
 
       // Navigate back to dashboard with success message
-      router.push(`/analyst/${params.userId}/dashboard?success=lab-created&lab=${template.id}`)
+      router.push(`/analyst/${userId}/dashboard?success=lab-created&lab=${template.id}`)
 
     } catch (error) {
       console.error('Failed to create lab:', error)

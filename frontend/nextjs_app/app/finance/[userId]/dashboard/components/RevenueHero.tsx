@@ -26,7 +26,8 @@ export const RevenueHero = ({ revenue, realtime, showExportButtons = true }: Rev
         KES {revenue.total.toLocaleString()} TOTAL
       </div>
       <div className="text-sm text-cyan-200/80 mb-8 font-mono tracking-tight">
-        4.2x ROI | {revenue.activeUsers} Active | {revenue.placementsCount} Placed
+        {Number.isFinite(revenue.roi) ? `${revenue.roi.toFixed(2)}x ROI` : 'ROI —'} |{' '}
+        {revenue.activeUsers} Active | {revenue.placementsCount} Placed
       </div>
 
       <div className="grid grid-cols-3 gap-6 text-sm">

@@ -56,6 +56,52 @@ export function UserManagementModal({ user, onClose, onUpdate }: UserManagementM
     }
   }
 
+  const handleDisableMfa = async () => {
+    if (!user) return
+    if (!confirm('Disable MFA requirement for this user?')) return
+
+    setIsLoading(true)
+    try {
+      await apiGateway.patch(`/users/${user.id}/`, {
+        mfa_enabled: false,
+      })
+      alert('MFA has been disabled for this user.')
+      await onUpdate()
+    } catch (error: any) {
+      console.error('Failed to disable MFA:', error)
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Failed to disable MFA for this user'
+      alert(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleEnableMfa = async () => {
+    if (!user) return
+    if (!confirm('Enable MFA requirement for this user?')) return
+
+    setIsLoading(true)
+    try {
+      await apiGateway.patch(`/users/${user.id}/`, {
+        mfa_enabled: true,
+      })
+      alert('MFA has been enabled for this user.')
+      await onUpdate()
+    } catch (error: any) {
+      console.error('Failed to enable MFA:', error)
+      const message =
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Failed to enable MFA for this user'
+      alert(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleAssignRole = async () => {
     if (!user || !selectedRole) return
 
@@ -179,9 +225,30 @@ export function UserManagementModal({ user, onClose, onUpdate }: UserManagementM
               </div>
               <div>
                 <p className="text-sm text-och-steel mb-1">MFA Enabled</p>
-                <Badge variant={user.mfa_enabled ? 'mint' : 'defender'}>
-                  {user.mfa_enabled ? 'Enabled' : 'Disabled'}
-                </Badge>
+                <div className="flex items-center gap-3">
+                  <Badge variant={user.mfa_enabled ? 'mint' : 'defender'}>
+                    {user.mfa_enabled ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                  {user.mfa_enabled ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDisableMfa}
+                      disabled={isLoading}
+                    >
+                      Disable MFA
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleEnableMfa}
+                      disabled={isLoading}
+                    >
+                      Enable MFA
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
