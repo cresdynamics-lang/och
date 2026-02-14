@@ -16,6 +16,7 @@ from .models import (
     RecipeRecommendation, UserTrackProgress, UserModuleProgress,
     UserLessonProgress, UserMissionProgress, CurriculumActivity,
     UserLessonBookmark, CurriculumMentorFeedback,
+    CurriculumTrackMentorAssignment,
 )
 from .serializers import (
     CurriculumTrackListSerializer, CurriculumTrackDetailSerializer,
@@ -26,7 +27,8 @@ from .serializers import (
     CurriculumActivitySerializer, LessonProgressUpdateSerializer,
     MissionProgressUpdateSerializer, TrackEnrollmentSerializer,
     CrossTrackSubmissionSerializer, CrossTrackSubmissionCreateSerializer,
-    CrossTrackProgramProgressSerializer
+    CrossTrackProgramProgressSerializer,
+    CurriculumTrackMentorAssignmentSerializer,
 )
 
 
@@ -265,6 +267,26 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
                 for i, p in enumerate(leaderboard)
             ]
         })
+
+
+class CurriculumTrackMentorAssignmentViewSet(viewsets.ModelViewSet):
+    """List, create, delete mentor assignments for a curriculum track (no program link required)."""
+    serializer_class = CurriculumTrackMentorAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_url_kwarg = 'id'
+
+    def get_queryset(self):
+        qs = CurriculumTrackMentorAssignment.objects.filter(active=True).select_related(
+            'mentor', 'curriculum_track'
+        )
+        curriculum_track_id = self.request.query_params.get('curriculum_track_id')
+        if curriculum_track_id:
+            qs = qs.filter(curriculum_track_id=curriculum_track_id)
+        return qs
+
+    def perform_destroy(self, instance):
+        instance.active = False
+        instance.save()
 
 
 class CurriculumModuleViewSet(viewsets.ModelViewSet):

@@ -5,7 +5,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     Program, Track, Milestone, Module, Specialization, Cohort, Enrollment,
-    CalendarEvent, MentorAssignment, ProgramRule, Certificate, Waitlist, MentorshipCycle
+    CalendarEvent, MentorAssignment, TrackMentorAssignment, ProgramRule, Certificate, Waitlist, MentorshipCycle
 )
 
 User = get_user_model()
@@ -433,6 +433,30 @@ class MentorAssignmentSerializer(serializers.ModelSerializer):
                     'non_field_errors': ['This mentor is already assigned to this cohort.']
                 })
         
+        return data
+
+
+class TrackMentorAssignmentSerializer(serializers.ModelSerializer):
+    mentor_email = serializers.CharField(source='mentor.email', read_only=True)
+    mentor_name = serializers.SerializerMethodField()
+    track_name = serializers.CharField(source='track.name', read_only=True)
+    mentor = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=True)
+
+    class Meta:
+        model = TrackMentorAssignment
+        fields = '__all__'
+        read_only_fields = ['id', 'assigned_at']
+
+    def get_mentor_name(self, obj):
+        return obj.mentor.get_full_name() or obj.mentor.email
+
+    def validate(self, data):
+        track = data.get('track')
+        mentor = data.get('mentor')
+        if not track or not mentor:
+            raise serializers.ValidationError({'track': 'Required.', 'mentor': 'Required.'})
+        if TrackMentorAssignment.objects.filter(track=track, mentor=mentor, active=True).exists():
+            raise serializers.ValidationError({'non_field_errors': ['This mentor is already assigned to this track.']})
         return data
 
 

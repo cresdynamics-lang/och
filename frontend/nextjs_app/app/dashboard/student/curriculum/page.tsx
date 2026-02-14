@@ -18,7 +18,8 @@ import {
   TrendingUp,
   Target,
   Map as MapIcon,
-  Loader2
+  Loader2,
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -26,6 +27,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { curriculumClient } from '@/services/curriculumClient';
 import Link from 'next/link';
+import { CurriculumProgressReportModal } from './components/CurriculumProgressReportModal';
 
 interface CurriculumTrack {
   id: string;
@@ -227,6 +229,7 @@ export default function CurriculumHubPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recommendedTrack, setRecommendedTrack] = useState<string | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   useEffect(() => {
     const loadTracks = async () => {
@@ -375,11 +378,22 @@ export default function CurriculumHubPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/10 via-transparent to-purple-600/10" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <BookOpen className="w-8 h-8 text-indigo-400" />
-              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Curriculum <span className="text-indigo-400">Hub</span>
-              </h1>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-8 h-8 text-indigo-400" />
+                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                  Curriculum <span className="text-indigo-400">Hub</span>
+                </h1>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReportModalOpen(true)}
+                className="flex items-center gap-2 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10 hover:border-indigo-500/50"
+              >
+                <BarChart3 className="w-4 h-4" />
+                Curriculum Progress Report
+              </Button>
             </div>
 
             <p className="text-base sm:text-lg text-slate-300 mb-6 max-w-2xl mx-auto leading-relaxed">
@@ -560,6 +574,11 @@ export default function CurriculumHubPage() {
           </Card>
         </div>
       </div>
+
+      <CurriculumProgressReportModal
+        open={reportModalOpen}
+        onOpenChange={setReportModalOpen}
+      />
     </div>
   );
 }

@@ -12,6 +12,82 @@ from users.models import Role, UserRole, SponsorStudentLink
 User = get_user_model()
 
 
+def _get_direct_mentors_for_student(student):
+    """Return list of direct mentor assignments for a student (for director view)."""
+    from mentorship_coordination.models import MenteeMentorAssignment
+    assignments = MenteeMentorAssignment.objects.filter(
+        mentee_id=student.id,
+        assignment_type='direct',
+        status='active'
+    ).select_related('mentor')
+    return [
+        {
+            'assignment_id': str(a.id),
+            'mentor_id': str(a.mentor.id),
+            'mentor_name': a.mentor.get_full_name() or a.mentor.email,
+        }
+        for a in assignments
+    ]
+
+
+def _get_all_mentors_for_student(student):
+    """Return all mentors (cohort, track, direct) for a student so director sees full picture."""
+    from programs.models import Enrollment, MentorAssignment, TrackMentorAssignment
+    from mentorship_coordination.models import MenteeMentorAssignment
+    result = []
+    seen = set()  # (mentor_id, type) to avoid duplicates
+    # Cohort mentors
+    for enrollment in Enrollment.objects.filter(
+        user_id=student.id,
+        status__in=['active', 'completed']
+    ).select_related('cohort'):
+        if not enrollment.cohort:
+            continue
+        for ma in MentorAssignment.objects.filter(cohort=enrollment.cohort, active=True).select_related('mentor'):
+            if ma.mentor and (str(ma.mentor.id), 'cohort') not in seen:
+                seen.add((str(ma.mentor.id), 'cohort'))
+                result.append({
+                    'type': 'cohort',
+                    'mentor_id': str(ma.mentor.id),
+                    'mentor_name': ma.mentor.get_full_name() or ma.mentor.email,
+                    'assignment_id': None,
+                })
+    # Track mentors
+    for enrollment in Enrollment.objects.filter(
+        user_id=student.id,
+        status__in=['active', 'completed']
+    ).select_related('cohort', 'cohort__track'):
+        if not enrollment.cohort or not getattr(enrollment.cohort, 'track_id', None):
+            continue
+        track = getattr(enrollment.cohort, 'track', None)
+        if not track:
+            continue
+        for ta in TrackMentorAssignment.objects.filter(track=track, active=True).select_related('mentor'):
+            if ta.mentor and (str(ta.mentor.id), 'track') not in seen:
+                seen.add((str(ta.mentor.id), 'track'))
+                result.append({
+                    'type': 'track',
+                    'mentor_id': str(ta.mentor.id),
+                    'mentor_name': ta.mentor.get_full_name() or ta.mentor.email,
+                    'assignment_id': None,
+                })
+    # Direct mentors (removable)
+    for a in MenteeMentorAssignment.objects.filter(
+        mentee_id=student.id,
+        assignment_type='direct',
+        status='active'
+    ).select_related('mentor'):
+        if a.mentor and (str(a.mentor.id), 'direct') not in seen:
+            seen.add((str(a.mentor.id), 'direct'))
+            result.append({
+                'type': 'direct',
+                'mentor_id': str(a.mentor.id),
+                'mentor_name': a.mentor.get_full_name() or a.mentor.email,
+                'assignment_id': str(a.id),
+            })
+    return result
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def director_students_list(request):
@@ -49,6 +125,8 @@ def director_students_list(request):
                     sponsor_name = sponsor.email
                 sponsor_id = str(sponsor.uuid_id)
             
+            direct_mentors = _get_direct_mentors_for_student(student)
+            all_mentors = _get_all_mentors_for_student(student)
             students_data.append({
                 'id': student.id,
                 'uuid_id': str(student.uuid_id),
@@ -57,6 +135,8 @@ def director_students_list(request):
                 'last_name': student.last_name or '',
                 'sponsor_id': sponsor_id,
                 'sponsor_name': sponsor_name,
+                'direct_mentors': direct_mentors,
+                'all_mentors': all_mentors,
                 'created_at': student.created_at.isoformat()
             })
         
@@ -97,6 +177,7 @@ def director_sponsors_list(request):
         for sponsor in sponsors:
             sponsors_data.append({
                 'id': sponsor.id,
+                'uuid_id': str(sponsor.uuid_id),
                 'email': sponsor.email,
                 'first_name': sponsor.first_name or '',
                 'last_name': sponsor.last_name or '',
@@ -178,6 +259,92 @@ def link_students_to_sponsor(request):
             'updated_count': created_count
         })
         
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def unlink_students_from_sponsor(request):
+    """Unlink one or more students from a sponsor (or from their current sponsor)."""
+    try:
+        student_ids = request.data.get('student_ids', [])
+        sponsor_id = request.data.get('sponsor_id')
+
+        if not student_ids:
+            return Response({
+                'success': False,
+                'error': 'student_ids is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if sponsor_id:
+            # Unlink specified students from this sponsor
+            try:
+                sponsor = User.objects.get(uuid_id=sponsor_id)
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'error': 'Sponsor not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            links = SponsorStudentLink.objects.filter(
+                sponsor=sponsor,
+                student__uuid_id__in=student_ids,
+                is_active=True
+            )
+        else:
+            # Unlink specified students from any sponsor
+            links = SponsorStudentLink.objects.filter(
+                student__uuid_id__in=student_ids,
+                is_active=True
+            )
+
+        updated = links.update(is_active=False)
+        return Response({
+            'success': True,
+            'message': f'Unlinked {updated} student(s) from sponsor',
+            'updated_count': updated
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_direct_mentor_assignment(request):
+    """Remove a direct mentor assignment (director only). Body: assignment_id."""
+    try:
+        assignment_id = request.data.get('assignment_id')
+        if not assignment_id:
+            return Response({
+                'success': False,
+                'error': 'assignment_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        from mentorship_coordination.models import MenteeMentorAssignment
+        assignment = MenteeMentorAssignment.objects.filter(
+            id=assignment_id,
+            assignment_type='direct',
+            status='active'
+        ).first()
+        if not assignment:
+            return Response({
+                'success': False,
+                'error': 'Direct mentor assignment not found or already removed'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        assignment.status = 'cancelled'
+        assignment.save(update_fields=['status'])
+        return Response({
+            'success': True,
+            'message': 'Direct mentor assignment removed',
+            'assignment_id': str(assignment.id)
+        })
     except Exception as e:
         return Response({
             'success': False,

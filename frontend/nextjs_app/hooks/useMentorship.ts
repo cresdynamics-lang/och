@@ -55,17 +55,20 @@ export interface MentorshipFeedback {
   mentor_engagement: number;
 }
 
+export type MentorAssignmentType = 'cohort' | 'track' | 'direct';
+
 export interface StudentMentorAssignment {
-  // Backend assignment id (MenteeMentorAssignment); used for chat/messages.
   id: string;
-  // UI key so that the same mentor+student pair can appear once per cohort.
   uiId: string;
   mentor_id: string;
   mentor_name: string;
   cohort_id?: string;
   cohort_name?: string;
+  track_id?: string;
+  track_name?: string;
   status: string;
   assigned_at?: string;
+  assignment_type?: MentorAssignmentType;
 }
 
 export function useMentorship(userId?: string) {
@@ -153,16 +156,19 @@ export function useMentorship(userId?: string) {
         const items = Array.isArray(response) ? response : (((response as any)?.results) || []);
         return (items as any[]).map((item) => {
           const rawId = String(item.id);
-          const cohortId = item.cohort_id || 'none';
+          const scope = item.track_id || item.cohort_id || 'none';
           return {
             id: rawId,
-            uiId: `${rawId}:${cohortId}`,
+            uiId: `${rawId}:${scope}`,
             mentor_id: String(item.mentor_id),
             mentor_name: item.mentor_name || 'Mentor',
             cohort_id: item.cohort_id || undefined,
             cohort_name: item.cohort_name || undefined,
+            track_id: item.track_id || undefined,
+            track_name: item.track_name || undefined,
             status: item.status || 'active',
             assigned_at: item.assigned_at || undefined,
+            assignment_type: (item.assignment_type as MentorAssignmentType) || 'cohort',
           } as StudentMentorAssignment;
         });
       } catch (error) {

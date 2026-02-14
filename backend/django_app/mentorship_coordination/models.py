@@ -34,6 +34,13 @@ class MenteeMentorAssignment(models.Model):
         db_index=True
     )
     cohort_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    track_id = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    assignment_type = models.CharField(
+        max_length=20,
+        choices=[('cohort', 'Cohort'), ('track', 'Track'), ('direct', 'Direct')],
+        default='cohort',
+        db_index=True,
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
     assigned_at = models.DateTimeField(default=timezone.now)
     max_sessions = models.IntegerField(default=12)

@@ -379,6 +379,29 @@ class MentorAssignment(models.Model):
         return f"{self.mentor.email} - {self.cohort.name} ({self.role})"
 
 
+class TrackMentorAssignment(models.Model):
+    """Mentor assigned to a track; all students in that track get this mentor."""
+    ROLE_CHOICES = [
+        ('primary', 'Primary'),
+        ('support', 'Support'),
+        ('guest', 'Guest'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='mentor_assignments')
+    mentor = models.ForeignKey(User, on_delete=models.CASCADE, related_name='track_mentor_assignments')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='support')
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'track_mentor_assignments'
+        unique_together = ['track', 'mentor']
+        ordering = ['-assigned_at']
+
+    def __str__(self):
+        return f"{self.mentor.email} - {self.track.name} ({self.role})"
+
+
 class ProgramRule(models.Model):
     """Program rule model - completion criteria and auto-graduation logic."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

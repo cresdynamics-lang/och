@@ -130,6 +130,37 @@ class CurriculumTrack(models.Model):
         return f"{self.name} ({self.code})"
 
 
+class CurriculumTrackMentorAssignment(models.Model):
+    """Mentor assigned to a curriculum track (no program link required)."""
+    ROLE_CHOICES = [
+        ('primary', 'Primary'),
+        ('support', 'Support'),
+        ('guest', 'Guest'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    curriculum_track = models.ForeignKey(
+        CurriculumTrack,
+        on_delete=models.CASCADE,
+        related_name='mentor_assignments'
+    )
+    mentor = models.ForeignKey(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='curriculum_track_mentor_assignments'
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='support')
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'curriculum_track_mentor_assignments'
+        unique_together = [['curriculum_track', 'mentor']]
+        ordering = ['-assigned_at']
+
+    def __str__(self):
+        return f"{self.mentor.email} - {self.curriculum_track.name} ({self.role})"
+
+
 class CurriculumLevel(models.Model):
     """
     Level within a curriculum track (Beginner, Intermediate, Advanced, Mastery)

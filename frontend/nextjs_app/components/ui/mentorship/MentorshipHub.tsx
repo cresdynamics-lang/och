@@ -35,7 +35,7 @@ import { GoalsTracker } from './GoalsTracker';
 import { SessionHistory } from './SessionHistory';
 import { MentorshipMessaging } from './MentorshipMessaging'
 import { useAuth } from '@/hooks/useAuth';
-import { useMentorship, type StudentMentorAssignment } from '@/hooks/useMentorship';
+import { useMentorship, type StudentMentorAssignment, type MentorAssignmentType } from '@/hooks/useMentorship';
 import clsx from 'clsx';
 
 export function MentorshipHub() {
@@ -50,27 +50,42 @@ export function MentorshipHub() {
     refetchAll 
   } = useMentorship(userId);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'goals' | 'chat'>('overview');
-  // Use a UI key (uiId) so that the same mentor+student pair can appear once per cohort.
+  const [activeTab, setActiveTab] = useState<'overview' | 'mentors' | 'sessions' | 'goals' | 'chat'>('overview');
+  const [mentorTypeFilter, setMentorTypeFilter] = useState<'all' | MentorAssignmentType>('all');
   const [selectedAssignmentKey, setSelectedAssignmentKey] = useState<string | 'all'>('all');
-  // Separate selection for the active chat thread (per mentor/cohort assignment)
   const [selectedChatKey, setSelectedChatKey] = useState<string | null>(null);
 
-  const activeAssignment: StudentMentorAssignment | null = useMemo(() => {
-    if (!assignments || assignments.length === 0) return null;
-    if (selectedAssignmentKey === 'all') return null;
-    return assignments.find(a => a.uiId === selectedAssignmentKey) || null;
-  }, [assignments, selectedAssignmentKey]);
-
-  // Determine which assignments should appear as chat conversations
-  const chatAssignments: StudentMentorAssignment[] = useMemo(() => {
+  const assignmentsByType = useMemo(() => {
     if (!assignments || assignments.length === 0) return [];
-    // If a cohort filter is active, only show mentors for that cohort
+    if (mentorTypeFilter === 'all') return assignments;
+    return assignments.filter(a => (a.assignment_type || 'cohort') === mentorTypeFilter);
+  }, [assignments, mentorTypeFilter]);
+
+  const mentorsByType = useMemo(() => {
+    if (!assignments || assignments.length === 0) return { cohort: [], track: [], direct: [] };
+    return {
+      cohort: assignments.filter(a => (a.assignment_type || 'cohort') === 'cohort'),
+      track: assignments.filter(a => a.assignment_type === 'track'),
+      direct: assignments.filter(a => a.assignment_type === 'direct'),
+    };
+  }, [assignments]);
+
+  const activeAssignment: StudentMentorAssignment | null = useMemo(() => {
+    if (!assignmentsByType || assignmentsByType.length === 0) return null;
+    if (selectedAssignmentKey === 'all') return null;
+    return assignmentsByType.find(a => a.uiId === selectedAssignmentKey) || null;
+  }, [assignmentsByType, selectedAssignmentKey]);
+
+  const chatAssignments: StudentMentorAssignment[] = useMemo(() => {
+    if (!assignmentsByType || assignmentsByType.length === 0) return [];
     if (activeAssignment?.cohort_id) {
-      return assignments.filter(a => a.cohort_id === activeAssignment.cohort_id);
+      return assignmentsByType.filter(a => a.cohort_id === activeAssignment.cohort_id);
     }
-    return assignments;
-  }, [assignments, activeAssignment]);
+    if (activeAssignment?.track_id) {
+      return assignmentsByType.filter(a => a.track_id === activeAssignment.track_id);
+    }
+    return assignmentsByType;
+  }, [assignmentsByType, activeAssignment]);
 
   // Active chat conversation (per mentor)
   const activeChat: StudentMentorAssignment | null = useMemo(() => {
@@ -81,43 +96,50 @@ export function MentorshipHub() {
     return chatAssignments[0];
   }, [chatAssignments, selectedChatKey]);
 
-  // Count mentors in the current context (all cohorts or a specific cohort filter)
   const mentorCountForContext = useMemo(() => {
-    if (!assignments || assignments.length === 0) return 0;
+    if (!assignmentsByType || assignmentsByType.length === 0) return 0;
     if (activeAssignment?.cohort_id) {
-      return assignments.filter(a => a.cohort_id === activeAssignment.cohort_id).length;
+      return assignmentsByType.filter(a => a.cohort_id === activeAssignment.cohort_id).length;
     }
-    return assignments.length;
-  }, [assignments, activeAssignment]);
+    if (activeAssignment?.track_id) {
+      return assignmentsByType.filter(a => a.track_id === activeAssignment.track_id).length;
+    }
+    return assignmentsByType.length;
+  }, [assignmentsByType, activeAssignment]);
 
   const displayMentorName = activeAssignment?.mentor_name || mentor?.name || 'Not Assigned';
   const displayCohortLabel = useMemo(() => {
     if (activeAssignment) {
+      const type = activeAssignment.assignment_type || 'cohort';
+      if (type === 'track') {
+        return `${activeAssignment.track_name || activeAssignment.track_id || 'Track'}${
+          mentor?.mentor_role ? ` • ${mentor.mentor_role}` : ''
+        }`;
+      }
+      if (type === 'direct') return 'Direct assignment';
       return `${activeAssignment.cohort_name || activeAssignment.cohort_id || 'Cohort'}${
         mentor?.mentor_role ? ` • ${mentor.mentor_role}` : ''
       }`;
     }
 
-    // When multiple cohorts exist, avoid showing a single cohort name to prevent confusion.
-    if (assignments && assignments.length > 1) {
-      return 'All cohorts';
+    if (assignmentsByType && assignmentsByType.length > 1) {
+      return mentorTypeFilter === 'all' ? 'All mentors' : `${mentorTypeFilter} mentors`;
     }
 
-    // Single assignment: show that cohort explicitly.
-    if (assignments && assignments.length === 1) {
-      const a = assignments[0];
-      return `${a.cohort_name || a.cohort_id || 'Cohort'}${
-        mentor?.mentor_role ? ` • ${mentor.mentor_role}` : ''
-      }`;
+    if (assignmentsByType && assignmentsByType.length === 1) {
+      const a = assignmentsByType[0];
+      const type = a.assignment_type || 'cohort';
+      if (type === 'track') return a.track_name || a.track_id || 'Track';
+      if (type === 'direct') return 'Direct';
+      return `${a.cohort_name || a.cohort_id || 'Cohort'}`;
     }
 
-    // Fallback to mentor-level info if no assignments are available.
     if (mentor?.cohort_name) {
       return `${mentor.cohort_name}${mentor.mentor_role ? ` • ${mentor.mentor_role}` : ''}`;
     }
 
     return mentor?.track || 'Contact Director';
-  }, [activeAssignment, assignments, mentor]);
+  }, [activeAssignment, assignmentsByType, mentor, mentorTypeFilter]);
 
   const filteredSessions = useMemo(
     () => {
@@ -160,28 +182,58 @@ export function MentorshipHub() {
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
       
-      {/* COHORT & MENTOR FILTER (TOP TOGGLE CARD) */}
+      {/* MENTOR TYPE TABS (sidebar-style filter) */}
       {assignments && assignments.length > 0 && (
         <Card className="border border-och-steel/40 bg-och-midnight/70 px-4 py-3 rounded-2xl">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[11px] font-black uppercase tracking-widest text-och-steel">Mentor type</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(['all', 'cohort', 'track', 'direct'] as const).map((type) => {
+                const label = type === 'all' ? 'All' : type === 'cohort' ? 'Cohort' : type === 'track' ? 'Track' : 'Direct';
+                const count = type === 'all' ? assignments.length : assignments.filter(a => (a.assignment_type || 'cohort') === type).length;
+                if (type !== 'all' && count === 0) return null;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setMentorTypeFilter(type);
+                      setSelectedAssignmentKey('all');
+                    }}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                      mentorTypeFilter === type
+                        ? 'bg-och-mint text-och-midnight'
+                        : 'bg-och-midnight/50 text-och-steel hover:text-white border border-och-steel/20'
+                    )}
+                  >
+                    {label} {type !== 'all' && count > 0 && `(${count})`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-black uppercase tracking-widest text-och-steel">
-                  Cohorts & Mentors
+                  {mentorTypeFilter === 'all' ? 'Cohorts & Mentors' : mentorTypeFilter === 'cohort' ? 'Cohort mentors' : mentorTypeFilter === 'track' ? 'Track mentors' : 'Direct mentors'}
                 </span>
                 <span className="text-[11px] text-och-mint font-semibold">
-                  {assignments.length} assignment{assignments.length > 1 ? 's' : ''}
+                  {assignmentsByType.length} assignment{assignmentsByType.length !== 1 ? 's' : ''}
                 </span>
               </div>
               {activeAssignment && (
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Viewing: <span className="font-semibold text-white">{activeAssignment.mentor_name}</span>{' '}
-                  • Cohort: {activeAssignment.cohort_name || activeAssignment.cohort_id || 'N/A'}
+                  Viewing: <span className="font-semibold text-white">{activeAssignment.mentor_name}</span>
+                  {activeAssignment.assignment_type === 'track' && ` • Track: ${activeAssignment.track_name || activeAssignment.track_id || 'N/A'}`}
+                  {activeAssignment.assignment_type === 'cohort' && ` • Cohort: ${activeAssignment.cohort_name || activeAssignment.cohort_id || 'N/A'}`}
+                  {activeAssignment.assignment_type === 'direct' && ' • Direct assignment'}
                 </p>
               )}
               {!activeAssignment && (
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Viewing: <span className="font-semibold text-white">All cohorts</span>
+                  Viewing: <span className="font-semibold text-white">{mentorTypeFilter === 'all' ? 'All mentors' : `${mentorTypeFilter} mentors`}</span>
                 </p>
               )}
             </div>
@@ -197,36 +249,32 @@ export function MentorshipHub() {
                       : "bg-och-midnight/60 border-och-steel/40 text-och-steel hover:border-och-mint/40"
                   )}
                 >
-                  <span className="font-semibold truncate">All Cohorts</span>
-                  <span className="text-[9px] uppercase font-black tracking-wide">
-                    CLEAR FILTER
-                  </span>
+                  <span className="font-semibold truncate">{mentorTypeFilter === 'all' ? 'All' : `All ${mentorTypeFilter}`}</span>
+                  <span className="text-[9px] uppercase font-black tracking-wide">CLEAR FILTER</span>
                 </button>
-                {assignments.map((a: StudentMentorAssignment) => (
-                  <button
-                    key={a.uiId}
-                    type="button"
-                    onClick={() => setSelectedAssignmentKey(a.uiId)}
-                    className={clsx(
-                      "inline-flex flex-col items-start rounded-xl px-3 py-1.5 text-[10px] border min-w-[180px] max-w-xs",
-                      selectedAssignmentKey === a.uiId
-                        ? "bg-och-mint/10 border-och-mint text-white"
-                        : "bg-och-midnight/60 border-och-steel/40 text-slate-200 hover:border-och-mint/40"
-                    )}
-                  >
-                    <span className="font-semibold truncate">
-                      {a.mentor_name}
-                    </span>
-                    <span className="text-[9px] text-och-steel truncate">
-                      Cohort: {a.cohort_name || a.cohort_id || 'N/A'}
-                    </span>
-                    {a.assigned_at && (
-                      <span className="text-[9px] text-slate-500">
-                        Since {new Date(a.assigned_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {assignmentsByType.map((a: StudentMentorAssignment) => {
+                  const type = a.assignment_type || 'cohort';
+                  const scopeLabel = type === 'track' ? `Track: ${a.track_name || a.track_id || 'N/A'}` : type === 'direct' ? 'Direct' : `Cohort: ${a.cohort_name || a.cohort_id || 'N/A'}`;
+                  return (
+                    <button
+                      key={a.uiId}
+                      type="button"
+                      onClick={() => setSelectedAssignmentKey(a.uiId)}
+                      className={clsx(
+                        "inline-flex flex-col items-start rounded-xl px-3 py-1.5 text-[10px] border min-w-[180px] max-w-xs",
+                        selectedAssignmentKey === a.uiId
+                          ? "bg-och-mint/10 border-och-mint text-white"
+                          : "bg-och-midnight/60 border-och-steel/40 text-slate-200 hover:border-och-mint/40"
+                      )}
+                    >
+                      <span className="font-semibold truncate">{a.mentor_name}</span>
+                      <span className="text-[9px] text-och-steel truncate">{scopeLabel}</span>
+                      {a.assigned_at && (
+                        <span className="text-[9px] text-slate-500">Since {new Date(a.assigned_at).toLocaleDateString()}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -299,13 +347,14 @@ export function MentorshipHub() {
           <div className="space-y-1.5">
             {[
               { id: 'overview', label: 'Overview', icon: History, desc: 'Session history' },
+              { id: 'mentors', label: 'Mentors', icon: Users, desc: 'By type: Cohort, Track, Direct' },
               { id: 'sessions', label: 'Sessions', icon: CalendarDays, desc: 'Schedule meetings' },
               { id: 'goals', label: 'Goals', icon: Target, desc: 'Track milestones' },
               { id: 'chat', label: 'Messages', icon: MessageSquare, desc: 'Chat with mentors' },
             ].map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
+                onClick={() => setActiveTab(item.id as 'overview' | 'mentors' | 'sessions' | 'goals' | 'chat')}
                 className={clsx(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left border",
                   activeTab === item.id 
@@ -359,6 +408,71 @@ export function MentorshipHub() {
                   <SessionHistory sessions={filteredSessions} />
                 </div>
               )}
+
+              {activeTab === 'mentors' && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-xl font-bold text-white mb-1">Your Mentors</h2>
+                    <p className="text-sm text-slate-400">Mentors grouped by assignment type</p>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {[
+                      { type: 'cohort' as const, label: 'Cohort mentors', list: mentorsByType.cohort, desc: 'Assigned to your cohort' },
+                      { type: 'track' as const, label: 'Track mentors', list: mentorsByType.track, desc: 'Assigned to your track' },
+                      { type: 'direct' as const, label: 'Direct mentors', list: mentorsByType.direct, desc: 'Assigned directly to you' },
+                    ].map(({ type, label, list, desc }) => (
+                      <Card key={type} className="border border-och-steel/40 bg-och-midnight/70 rounded-2xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-och-steel/30 bg-och-midnight/50">
+                          <h3 className="text-sm font-bold text-white">{label}</h3>
+                          <p className="text-[11px] text-och-steel mt-0.5">{desc}</p>
+                          <span className="inline-block mt-2 text-[10px] font-semibold text-och-mint uppercase tracking-wider">
+                            {list.length} mentor{list.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="p-3 space-y-2 max-h-[320px] overflow-y-auto">
+                          {list.length === 0 ? (
+                            <p className="text-xs text-och-steel py-4 text-center">No {type} mentors assigned</p>
+                          ) : (
+                            list.map((a: StudentMentorAssignment) => {
+                              const scope = type === 'track'
+                                ? (a.track_name || a.track_id || 'Track')
+                                : type === 'direct'
+                                  ? 'Direct'
+                                  : (a.cohort_name || a.cohort_id || 'Cohort');
+                              return (
+                                <button
+                                  key={a.uiId}
+                                  type="button"
+                                  onClick={() => {
+                                    setMentorTypeFilter(type);
+                                    setSelectedAssignmentKey(a.uiId);
+                                    setActiveTab('chat');
+                                  }}
+                                  className={clsx(
+                                    'w-full text-left px-3 py-2.5 rounded-xl border transition-all',
+                                    'border-och-steel/30 bg-och-midnight/40 hover:border-och-mint/40 hover:bg-och-mint/5'
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-semibold text-white truncate">{a.mentor_name}</span>
+                                    <ArrowUpRight className="w-3.5 h-3.5 text-och-steel shrink-0" />
+                                  </div>
+                                  <p className="text-[11px] text-och-steel mt-0.5 truncate" title={scope}>
+                                    {type === 'cohort' && scope ? `Cohort: ${scope}` : type === 'track' && scope ? `Track: ${scope}` : scope}
+                                  </p>
+                                  {a.assigned_at && (
+                                    <p className="text-[10px] text-slate-500 mt-1">Since {new Date(a.assigned_at).toLocaleDateString()}</p>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {activeTab === 'sessions' && (
                 <SchedulingHub sessions={filteredSessions} />
@@ -408,7 +522,9 @@ export function MentorshipHub() {
                                   {a.mentor_name}
                                 </span>
                                 <span className="text-[10px] text-och-steel uppercase">
-                                  {a.cohort_name || a.cohort_id || 'Cohort'}
+                                  {(a.assignment_type || 'cohort') === 'track'
+                                    ? (a.track_name || a.track_id || 'Track')
+                                    : (a.assignment_type === 'direct' ? 'Direct' : (a.cohort_name || a.cohort_id || 'Cohort'))}
                                 </span>
                               </div>
                               {a.assigned_at && (

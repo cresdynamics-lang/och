@@ -130,10 +130,14 @@ def list_student_missions(request):
         if not user.is_mentor:
             tier = get_user_tier(user)
             if tier == 'free':
-                return Response({
-                    'error': 'Missions require Starter 3 or higher subscription',
-                    'upgrade_required': True
-                }, status=status.HTTP_403_FORBIDDEN)
+                # In DEBUG mode, allow free tier for local development
+                from django.conf import settings
+                if not getattr(settings, 'DEBUG', False):
+                    return Response({
+                        'error': 'Missions require Starter 3 or higher subscription',
+                        'upgrade_required': True
+                    }, status=status.HTTP_403_FORBIDDEN)
+                tier = 'starter_3'  # Treat as starter for dev
 
         # Check starter3_normal limits (5 submissions/month) - mentors bypass this check
         if not user.is_mentor and tier in ['starter_3', 'starter_normal']:

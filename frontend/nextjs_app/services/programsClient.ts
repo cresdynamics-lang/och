@@ -167,6 +167,30 @@ export interface MentorAssignment {
   active: boolean
 }
 
+export interface TrackMentorAssignment {
+  id: string
+  track: string
+  track_name?: string
+  mentor: string
+  mentor_email?: string
+  mentor_name?: string
+  role: 'primary' | 'support' | 'guest'
+  assigned_at: string
+  active: boolean
+}
+
+export interface CurriculumTrackMentorAssignment {
+  id: string
+  curriculum_track: string
+  curriculum_track_name?: string
+  mentor: string
+  mentor_email?: string
+  mentor_name?: string
+  role: 'primary' | 'support' | 'guest'
+  assigned_at: string
+  active: boolean
+}
+
 export interface ProgramRule {
   id: string
   program: string
@@ -659,6 +683,47 @@ class ProgramsClient {
 
   async removeMentorAssignment(assignmentId: string): Promise<void> {
     return apiGateway.delete(`/mentor-assignments/${assignmentId}/`)
+  }
+
+  // Track-level mentor assignments
+  async getTrackMentors(trackId: string): Promise<TrackMentorAssignment[]> {
+    const raw = await apiGateway.get<TrackMentorAssignment[] | { results: TrackMentorAssignment[] }>(
+      `/track-mentor-assignments/?track_id=${encodeURIComponent(trackId)}`
+    )
+    return Array.isArray(raw) ? raw : (raw?.results ?? [])
+  }
+
+  async assignMentorToTrack(trackId: string, data: { mentor: string; role?: string }): Promise<TrackMentorAssignment> {
+    return apiGateway.post('/track-mentor-assignments/', { track: trackId, role: data.role || 'support', mentor: data.mentor })
+  }
+
+  async removeTrackMentorAssignment(assignmentId: string): Promise<void> {
+    return apiGateway.delete(`/track-mentor-assignments/${assignmentId}/`)
+  }
+
+  // Curriculum-track mentor assignments (no program link required)
+  async getCurriculumTrackMentors(curriculumTrackId: string): Promise<CurriculumTrackMentorAssignment[]> {
+    const raw = await apiGateway.get<CurriculumTrackMentorAssignment[] | { results: CurriculumTrackMentorAssignment[] }>(
+      `/curriculum/track-mentor-assignments/?curriculum_track_id=${encodeURIComponent(curriculumTrackId)}`
+    )
+    return Array.isArray(raw) ? raw : (raw?.results ?? [])
+  }
+
+  async assignMentorToCurriculumTrack(curriculumTrackId: string, data: { mentor: string; role?: string }): Promise<CurriculumTrackMentorAssignment> {
+    return apiGateway.post('/curriculum/track-mentor-assignments/', {
+      curriculum_track: curriculumTrackId,
+      role: data.role || 'support',
+      mentor: data.mentor,
+    })
+  }
+
+  async removeCurriculumTrackMentorAssignment(assignmentId: string): Promise<void> {
+    return apiGateway.delete(`/curriculum/track-mentor-assignments/${assignmentId}/`)
+  }
+
+  /** Direct mentor assignment (director assigns a mentor to a specific student). */
+  async assignMentorDirect(menteeId: string, mentorId: string): Promise<{ id: string; mentee_id: string; mentor_id: string; created: boolean }> {
+    return apiGateway.post('/director/mentors/assign-direct/', { mentee_id: menteeId, mentor_id: mentorId })
   }
 
   async getMentorAssignments(mentorId?: string): Promise<MentorAssignment[]> {

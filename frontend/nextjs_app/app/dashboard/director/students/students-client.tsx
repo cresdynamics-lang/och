@@ -1,7 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { GraduationCap, Link, Search, Filter, UserPlus } from 'lucide-react'
+import { GraduationCap, Link, Search, MoreHorizontal } from 'lucide-react'
+import { apiGateway } from '@/services/apiGateway'
+
+interface DirectMentor {
+  assignment_id: string
+  mentor_id: string
+  mentor_name: string
+}
+
+interface MentorEntry {
+  type: 'cohort' | 'track' | 'direct'
+  mentor_id: string
+  mentor_name: string
+  assignment_id?: string | null
+}
 
 interface Student {
   id: string
@@ -11,11 +25,14 @@ interface Student {
   last_name: string
   sponsor_id?: string
   sponsor_name?: string
+  direct_mentors?: DirectMentor[]
+  all_mentors?: MentorEntry[]
   created_at: string
 }
 
 interface Sponsor {
   id: string
+  uuid_id?: string
   email: string
   first_name: string
   last_name: string
@@ -30,6 +47,18 @@ export function StudentsManagementClient() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [selectedSponsor, setSelectedSponsor] = useState('')
+  const [showMentorModal, setShowMentorModal] = useState(false)
+  const [studentForMentor, setStudentForMentor] = useState<Student | null>(null)
+  const [mentors, setMentors] = useState<{ id: number; uuid_id?: string; email: string; first_name?: string; last_name?: string }[]>([])
+  const [selectedMentorId, setSelectedMentorId] = useState('')
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [openActionRow, setOpenActionRow] = useState<string | null>(null)
+
+  const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
+    setMessage({ type, text })
+    setTimeout(() => setMessage(null), 4000)
+  }
 
   useEffect(() => {
     fetchStudents()
@@ -38,31 +67,19 @@ export function StudentsManagementClient() {
 
   const fetchStudents = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/director/students/', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setStudents(data.students || [])
-      }
+      const response = await apiGateway.get<{ students: Student[] }>('/director/students/')
+      setStudents(response?.students ?? [])
     } catch (error) {
       console.error('Failed to fetch students:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
   const fetchSponsors = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/users/?role=sponsor', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setSponsors(data.results || [])
-      }
+      const data = await apiGateway.get<{ results: Sponsor[] }>('/users/', { params: { role: 'sponsor' } })
+      setSponsors(data?.results ?? [])
     } catch (error) {
       console.error('Failed to fetch sponsors:', error)
     } finally {
@@ -72,28 +89,79 @@ export function StudentsManagementClient() {
 
   const linkStudentsToSponsor = async () => {
     if (!selectedSponsor || selectedStudents.length === 0) return
-
     try {
-      const response = await fetch('http://localhost:8000/api/v1/director/students/link-sponsor/', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({
-          student_ids: selectedStudents,
-          sponsor_id: selectedSponsor
-        })
+      await apiGateway.post('/director/students/link-sponsor/', {
+        student_ids: selectedStudents,
+        sponsor_id: selectedSponsor,
       })
+      await fetchStudents()
+      setSelectedStudents([])
+      setShowLinkModal(false)
+      setSelectedSponsor('')
+      showMsg('Students linked to sponsor.')
+    } catch (e: any) {
+      showMsg(e?.response?.data?.error || 'Failed to link students', 'error')
+    }
+  }
 
-      if (response.ok) {
-        await fetchStudents()
-        setSelectedStudents([])
-        setShowLinkModal(false)
-        setSelectedSponsor('')
-      }
-    } catch (error) {
-      console.error('Failed to link students to sponsor:', error)
+  const unlinkStudentFromSponsor = async (student: Student) => {
+    if (!student.sponsor_id) return
+    setActionLoading(`unlink-sponsor-${student.uuid_id}`)
+    try {
+      await apiGateway.post('/director/students/unlink-sponsor/', {
+        student_ids: [student.uuid_id],
+        sponsor_id: student.sponsor_id,
+      })
+      await fetchStudents()
+      showMsg('Student unlinked from sponsor.')
+    } catch (e: any) {
+      showMsg(e?.response?.data?.error || 'Failed to unlink', 'error')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const removeDirectMentor = async (student: Student, assignmentId: string) => {
+    setActionLoading(`remove-mentor-${assignmentId}`)
+    try {
+      await apiGateway.post('/director/students/remove-mentor/', { assignment_id: assignmentId })
+      await fetchStudents()
+      showMsg('Direct mentor removed.')
+      setOpenActionRow(null)
+    } catch (e: any) {
+      showMsg(e?.response?.data?.error || 'Failed to remove mentor', 'error')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const openMentorModal = (student: Student) => {
+    setStudentForMentor(student)
+    setSelectedMentorId('')
+    setShowMentorModal(true)
+    setOpenActionRow(null)
+    apiGateway.get<{ results?: any[] }>('/users/', { params: { role: 'mentor', page_size: 200 } })
+      .then((data) => setMentors(data?.results ?? []))
+      .catch(() => setMentors([]))
+  }
+
+  const linkStudentToMentor = async () => {
+    if (!studentForMentor || !selectedMentorId) return
+    setActionLoading('assign-mentor')
+    try {
+      await apiGateway.post('/director/mentors/assign-direct/', {
+        mentee_id: String(studentForMentor.id),
+        mentor_id: String(selectedMentorId),
+      })
+      await fetchStudents()
+      showMsg('Direct mentor assigned.')
+      setShowMentorModal(false)
+      setStudentForMentor(null)
+      setSelectedMentorId('')
+    } catch (e: any) {
+      showMsg(e?.response?.data?.error || 'Failed to assign mentor', 'error')
+    } finally {
+      setActionLoading(null)
     }
   }
 
@@ -132,6 +200,12 @@ export function StudentsManagementClient() {
         )}
       </div>
 
+      {message && (
+        <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${message.type === 'success' ? 'bg-och-mint/20 text-och-mint' : 'bg-red-500/20 text-red-400'}`}>
+          {message.text}
+        </div>
+      )}
+
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-och-steel" />
@@ -167,7 +241,9 @@ export function StudentsManagementClient() {
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Name</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Email</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Sponsor</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Mentors</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Joined</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-och-steel w-[120px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-och-steel/20">
@@ -210,8 +286,72 @@ export function StudentsManagementClient() {
                       <span className="text-och-steel text-sm">Not linked</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    {(student.all_mentors && student.all_mentors.length > 0) ? (
+                      <div className="flex flex-wrap gap-1">
+                        {student.all_mentors.map((m, idx) => (
+                          <span
+                            key={`${m.mentor_id}-${m.type}-${idx}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-och-midnight border border-och-steel/30 rounded text-xs text-white"
+                          >
+                            {m.mentor_name}
+                            <span className="text-och-steel text-[10px] uppercase">({m.type})</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-och-steel text-sm">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-och-steel text-sm">
                     {new Date(student.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 relative">
+                    <div className="relative inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setOpenActionRow(openActionRow === student.uuid_id ? null : student.uuid_id)}
+                        className="p-1.5 rounded border border-och-steel/30 text-och-steel hover:bg-och-steel/10 hover:text-white transition-colors"
+                        aria-label="Actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                      {openActionRow === student.uuid_id && (
+                        <>
+                          <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpenActionRow(null)} />
+                          <div className="absolute right-0 top-full mt-1 py-1 min-w-[200px] bg-och-midnight border border-och-steel/30 rounded-lg shadow-xl z-20">
+                            <button
+                              type="button"
+                              onClick={() => openMentorModal(student)}
+                              className="w-full text-left px-3 py-2 text-sm text-och-mint hover:bg-och-mint/10 disabled:opacity-50"
+                            >
+                              Assign direct mentor
+                            </button>
+                            {student.sponsor_id && (
+                              <button
+                                type="button"
+                                onClick={() => { unlinkStudentFromSponsor(student); setOpenActionRow(null) }}
+                                disabled={actionLoading === `unlink-sponsor-${student.uuid_id}`}
+                                className="w-full text-left px-3 py-2 text-sm text-och-steel hover:bg-och-steel/10 hover:text-white disabled:opacity-50"
+                              >
+                                Remove from sponsor
+                              </button>
+                            )}
+                            {student.direct_mentors?.map((dm) => (
+                              <button
+                                key={dm.assignment_id}
+                                type="button"
+                                onClick={() => removeDirectMentor(student, dm.assignment_id)}
+                                disabled={actionLoading === `remove-mentor-${dm.assignment_id}`}
+                                className="w-full text-left px-3 py-2 text-sm text-och-steel hover:bg-och-steel/10 hover:text-white disabled:opacity-50"
+                              >
+                                Remove mentor: {dm.mentor_name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -238,7 +378,7 @@ export function StudentsManagementClient() {
                 >
                   <option value="">Choose a sponsor...</option>
                   {sponsors.map((sponsor) => (
-                    <option key={sponsor.uuid_id} value={sponsor.uuid_id}>
+                    <option key={(sponsor as any).uuid_id ?? sponsor.id} value={(sponsor as any).uuid_id ?? sponsor.id}>
                       {sponsor.first_name && sponsor.last_name 
                         ? `${sponsor.first_name} ${sponsor.last_name} (${sponsor.email})`
                         : sponsor.email
@@ -266,6 +406,54 @@ export function StudentsManagementClient() {
                 className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Link Students
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link to Mentor (direct assignment) Modal */}
+      {showMentorModal && studentForMentor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-och-midnight border border-och-steel/20 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-4">Assign direct mentor</h3>
+            <p className="text-sm text-och-steel mb-4">
+              Assign a mentor directly to {studentForMentor.first_name || studentForMentor.last_name ? `${studentForMentor.first_name} ${studentForMentor.last_name}` : studentForMentor.email}. This is independent of cohort or track.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-och-steel mb-2">Select mentor</label>
+                <select
+                  value={selectedMentorId}
+                  onChange={(e) => setSelectedMentorId(e.target.value)}
+                  className="w-full px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                >
+                  <option value="">Choose a mentor...</option>
+                  {mentors.map((mentor) => (
+                    <option key={mentor.id} value={String(mentor.id)}>
+                      {mentor.first_name && mentor.last_name
+                        ? `${mentor.first_name} ${mentor.last_name} (${mentor.email})`
+                        : mentor.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => { setShowMentorModal(false); setStudentForMentor(null); setSelectedMentorId('') }}
+                className="flex-1 px-4 py-2 border border-och-steel/20 text-och-steel rounded-lg hover:bg-och-steel/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={linkStudentToMentor}
+                disabled={!selectedMentorId || actionLoading === 'assign-mentor'}
+                className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {actionLoading === 'assign-mentor' ? 'Assigning…' : 'Assign mentor'}
               </button>
             </div>
           </div>

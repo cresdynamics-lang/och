@@ -27,6 +27,7 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'tracks', views.CurriculumTrackViewSet, basename='track')
+router.register(r'track-mentor-assignments', views.CurriculumTrackMentorAssignmentViewSet, basename='curriculum-track-mentor-assignment')
 router.register(r'modules', views.CurriculumModuleViewSet, basename='module')
 router.register(r'lessons', views.LessonViewSet, basename='lesson')
 

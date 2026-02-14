@@ -7,9 +7,11 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Count
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from .models import Cohort, Module, Milestone, Specialization, CalendarTemplate, MentorAssignment, Enrollment, CalendarEvent
-from .serializers import MentorAssignmentSerializer, EnrollmentSerializer, CalendarEventSerializer
+from .models import Cohort, Track, Module, Milestone, Specialization, CalendarTemplate, MentorAssignment, TrackMentorAssignment, Enrollment, CalendarEvent, Waitlist
+from .serializers import MentorAssignmentSerializer, TrackMentorAssignmentSerializer, EnrollmentSerializer, CalendarEventSerializer, WaitlistSerializer
+from .core_services import EnrollmentService
 from .api_serializers import (
     CohortSerializer, CreateCohortSerializer,
     ModuleSerializer, CreateModuleSerializer,
@@ -17,11 +19,36 @@ from .api_serializers import (
     SpecializationSerializer, CreateSpecializationSerializer
 )
 from .permissions import IsDirectorOrAdmin, IsDirectorOrAdminOrMentorCohortsReadOnly
+from .services.director_service import DirectorService
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsDirectorOrAdminOrMentorCohortsReadOnly])
+def cohort_waitlist_view(request, pk):
+    """Standalone view for cohort waitlist - ensures /cohorts/{uuid}/waitlist/ always resolves."""
+    cohort = get_object_or_404(Cohort, pk=pk)
+    perm = IsDirectorOrAdminOrMentorCohortsReadOnly()
+    if not perm.has_object_permission(request, None, cohort):
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("You do not have access to this cohort.")
+    if request.method == 'GET':
+        waitlist_entries = Waitlist.objects.filter(cohort=cohort, active=True).order_by('position')
+        serializer = WaitlistSerializer(waitlist_entries, many=True)
+        return Response(serializer.data)
+    elif request.method == 'POST':
+        count = int(request.data.get('count', 1))
+        promoted = EnrollmentService.promote_from_waitlist(cohort, count)
+        if promoted:
+            serializer = EnrollmentSerializer(promoted, many=True)
+            return Response({'promoted': serializer.data, 'count': len(promoted)}, status=status.HTTP_200_OK)
+        return Response({'message': 'No users could be promoted from waitlist'}, status=status.HTTP_200_OK)
 
 
 class CohortViewSet(viewsets.ModelViewSet):
     """ViewSet for managing cohorts. Directors/admins see all; mentors see only assigned cohorts (read-only)."""
     permission_classes = [IsAuthenticated, IsDirectorOrAdminOrMentorCohortsReadOnly]
+    lookup_field = 'pk'
+    lookup_value_regex = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
     
     def get_queryset(self):
         from .permissions import _is_director_or_admin
@@ -79,6 +106,22 @@ class CohortViewSet(viewsets.ModelViewSet):
         enrollments_qs = Enrollment.objects.filter(cohort=cohort).select_related('user')
         serializer = EnrollmentSerializer(enrollments_qs, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='waitlist')
+    def waitlist(self, request, pk=None):
+        """Get waitlist or promote from waitlist."""
+        cohort = self.get_object()
+        if request.method == 'GET':
+            waitlist_entries = Waitlist.objects.filter(cohort=cohort, active=True).order_by('position')
+            serializer = WaitlistSerializer(waitlist_entries, many=True)
+            return Response(serializer.data)
+        elif request.method == 'POST':
+            count = int(request.data.get('count', 1))
+            promoted = EnrollmentService.promote_from_waitlist(cohort, count)
+            if promoted:
+                serializer = EnrollmentSerializer(promoted, many=True)
+                return Response({'promoted': serializer.data, 'count': len(promoted)}, status=status.HTTP_200_OK)
+            return Response({'message': 'No users could be promoted from waitlist'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'], url_path='missions')
     def missions(self, request, pk=None):
@@ -567,6 +610,38 @@ class CalendarTemplateViewSet(viewsets.ModelViewSet):
             'events': t.events
         } for t in queryset]
         return Response({'success': True, 'data': data})
+
+
+class TrackMentorAssignmentViewSet(viewsets.ModelViewSet):
+    """List, create, delete track-level mentor assignments. Directors only for write."""
+    serializer_class = TrackMentorAssignmentSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_url_kwarg = 'id'
+
+    def get_queryset(self):
+        qs = TrackMentorAssignment.objects.filter(active=True).select_related('mentor', 'track')
+        track_id = self.request.query_params.get('track_id')
+        if track_id:
+            qs = qs.filter(track_id=track_id)
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        # Directors see only their tracks
+        return qs.filter(track__director=user)
+
+    def perform_create(self, serializer):
+        track = serializer.validated_data['track']
+        if not (self.request.user.is_staff or DirectorService.can_manage_track(self.request.user, track)):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to manage this track")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not (self.request.user.is_staff or DirectorService.can_manage_track(self.request.user, instance.track)):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to manage this track")
+        instance.active = False
+        instance.save()
 
 
 @api_view(['GET'])

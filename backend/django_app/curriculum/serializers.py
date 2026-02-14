@@ -8,7 +8,8 @@ from .models import (
     StrategicSession, UserTrackEnrollment, UserContentProgress, Lesson, ModuleMission,
     RecipeRecommendation, UserTrackProgress, UserModuleProgress,
     UserLessonProgress, UserMissionProgress, CurriculumActivity,
-    CrossTrackSubmission, CrossTrackProgramProgress
+    CrossTrackSubmission, CrossTrackProgramProgress,
+    CurriculumTrackMentorAssignment,
 )
 
 
@@ -428,8 +429,8 @@ class CurriculumTrackListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'code', 'slug', 'name', 'title', 'description',
             'level', 'tier', 'order_number', 'thumbnail_url',
-            'icon', 'color', 'estimated_duration_weeks',
-            'module_count', 'lesson_count', 'mission_count',
+            'icon', 'color', 'program_track_id',
+            'estimated_duration_weeks', 'module_count', 'lesson_count', 'mission_count',
             'is_active', 'user_progress'
         ]
         read_only_fields = ['id']
@@ -558,6 +559,37 @@ class CurriculumTrackDetailSerializer(serializers.ModelSerializer):
             'label': 'Track Completed!',
             'url': f'/curriculum/{obj.code}/complete'
         }
+
+
+class CurriculumTrackMentorAssignmentSerializer(serializers.ModelSerializer):
+    """Serializer for curriculum track mentor assignments (no program link required)."""
+    mentor_email = serializers.CharField(source='mentor.email', read_only=True)
+    mentor_name = serializers.SerializerMethodField()
+    curriculum_track_name = serializers.CharField(source='curriculum_track.name', read_only=True)
+
+    class Meta:
+        model = CurriculumTrackMentorAssignment
+        fields = [
+            'id', 'curriculum_track', 'curriculum_track_name', 'mentor',
+            'mentor_email', 'mentor_name', 'role', 'assigned_at', 'active'
+        ]
+        read_only_fields = ['id', 'assigned_at']
+
+    def get_mentor_name(self, obj):
+        return obj.mentor.get_full_name() or obj.mentor.email
+
+    def validate(self, data):
+        ct = data.get('curriculum_track')
+        mentor = data.get('mentor')
+        if not ct or not mentor:
+            raise serializers.ValidationError({'curriculum_track': 'Required.', 'mentor': 'Required.'})
+        if CurriculumTrackMentorAssignment.objects.filter(
+            curriculum_track=ct, mentor=mentor, active=True
+        ).exists():
+            raise serializers.ValidationError(
+                {'non_field_errors': ['This mentor is already assigned to this curriculum track.']}
+            )
+        return data
 
 
 class UserTrackProgressSerializer(serializers.ModelSerializer):

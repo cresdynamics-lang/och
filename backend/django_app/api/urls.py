@@ -12,10 +12,14 @@ from users.views.admin_views import (
 from users.views.audit_views import AuditLogViewSet
 
 from .views import health_check, dashboard_metrics
+from programs.views.director_management_views import director_mentor_analytics_view
 
 urlpatterns = [
     path('health/', health_check, name='health-check'),
     path('metrics/dashboard', dashboard_metrics, name='dashboard-metrics'),
+    
+    # Director mentor analytics - must come before generic '' includes to avoid 404
+    path('director/mentors/<int:mentor_id>/analytics/', director_mentor_analytics_view, name='director-mentor-analytics'),
     
     # Authentication endpoints (includes password reset)
     path('', include('users.urls')),

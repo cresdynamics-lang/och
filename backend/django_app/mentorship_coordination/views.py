@@ -3123,10 +3123,15 @@ def get_student_mentorship_assignments(request, mentee_id):
                         defaults={
                             'status': 'active',
                             'cohort_id': cohort_key,
+                            'assignment_type': 'cohort',
                         }
                     )
+                    if not created:
+                        if assignment.assignment_type != 'cohort' or assignment.cohort_id != cohort_key:
+                            assignment.cohort_id = cohort_key
+                            assignment.assignment_type = 'cohort'
+                            assignment.save(update_fields=['cohort_id', 'assignment_type'])
 
-                    # Do not overwrite cohort_id on the assignment; a single dyad can span multiple cohorts.
                     assigned_ts = assignment.assigned_at or mentor_assignment.assigned_at
 
                     results.append({
@@ -3135,8 +3140,128 @@ def get_student_mentorship_assignments(request, mentee_id):
                         'assigned_at': assigned_ts.isoformat() if assigned_ts else None,
                         'cohort_id': cohort_key,
                         'cohort_name': cohort.name,
+                        'track_id': None,
+                        'track_name': None,
                         'mentor_id': str(mentor.id),
                         'mentor_name': mentor.get_full_name() or mentor.email,
+                        'assignment_type': 'cohort',
+                    })
+
+            # Track-level mentors: student is in a track (via enrollment) -> all mentors assigned to that track
+            from programs.models import TrackMentorAssignment
+            seen_track_mentor = set()
+            for enrollment in enrollments:
+                cohort = enrollment.cohort
+                if not cohort or not cohort.track_id:
+                    continue
+                track = getattr(cohort, 'track', None)
+                if not track:
+                    continue
+                track_key = str(track.id)
+                track_name = getattr(track, 'name', None) or track_key
+                track_assignments = TrackMentorAssignment.objects.filter(
+                    track=track,
+                    active=True
+                ).select_related('mentor')
+                for ta in track_assignments:
+                    mentor = ta.mentor
+                    if not mentor:
+                        continue
+                    pair_key = ('track', track_key, str(mentor.id))
+                    if pair_key in seen_track_mentor:
+                        continue
+                    seen_track_mentor.add(pair_key)
+                    assignment, created = MenteeMentorAssignment.objects.get_or_create(
+                        mentee=mentee,
+                        mentor=mentor,
+                        defaults={
+                            'status': 'active',
+                            'track_id': track_key,
+                            'assignment_type': 'track',
+                            'cohort_id': None,
+                        }
+                    )
+                    if not created:
+                        if assignment.assignment_type != 'track' or assignment.track_id != track_key:
+                            assignment.track_id = track_key
+                            assignment.assignment_type = 'track'
+                            assignment.cohort_id = None
+                            assignment.save(update_fields=['track_id', 'assignment_type', 'cohort_id'])
+                    results.append({
+                        'id': str(assignment.id),
+                        'status': assignment.status,
+                        'assigned_at': (assignment.assigned_at or ta.assigned_at).isoformat() if (assignment.assigned_at or getattr(ta, 'assigned_at', None)) else None,
+                        'cohort_id': None,
+                        'cohort_name': None,
+                        'track_id': track_key,
+                        'track_name': track_name,
+                        'mentor_id': str(mentor.id),
+                        'mentor_name': mentor.get_full_name() or mentor.email,
+                        'assignment_type': 'track',
+                    })
+
+            # Direct assignments (director-assigned mentor to student)
+            direct_assignments = MenteeMentorAssignment.objects.filter(
+                mentee_id=mentee_id_int,
+                assignment_type='direct',
+                status='active'
+            ).select_related('mentor')
+            for assignment in direct_assignments:
+                mentor = assignment.mentor
+                results.append({
+                    'id': str(assignment.id),
+                    'status': assignment.status,
+                    'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                    'cohort_id': None,
+                    'cohort_name': None,
+                    'track_id': None,
+                    'track_name': None,
+                    'mentor_id': str(mentor.id),
+                    'mentor_name': mentor.get_full_name() or mentor.email,
+                    'assignment_type': 'direct',
+                })
+
+            # If no results from enrollment/track/direct (e.g. no enrollments or different status), include any existing MenteeMentorAssignment so Mentors tab matches "Your mentor"
+            if not results:
+                fallback_assignments = MenteeMentorAssignment.objects.filter(
+                    mentee_id=mentee_id_int,
+                    status__in=['active', 'pending']
+                ).select_related('mentor')
+                for assignment in fallback_assignments:
+                    mentor = assignment.mentor
+                    atype = getattr(assignment, 'assignment_type', None) or 'cohort'
+                    if atype not in ('cohort', 'track', 'direct'):
+                        atype = 'cohort'
+                    cohort_name = None
+                    track_name = None
+                    if assignment.cohort_id:
+                        try:
+                            from programs.models import Cohort
+                            c = Cohort.objects.filter(id=assignment.cohort_id).first()
+                            if c:
+                                cohort_name = c.name
+                        except Exception:
+                            pass
+                    tid = getattr(assignment, 'track_id', None)
+                    if tid:
+                        try:
+                            from programs.models import Track
+                            t = Track.objects.filter(id=tid).first()
+                            if t:
+                                track_name = t.name
+                        except Exception:
+                            pass
+                    results.append({
+                        'id': str(assignment.id),
+                        'status': assignment.status,
+                        'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                        'cohort_id': assignment.cohort_id,
+                        'cohort_name': cohort_name,
+                        'track_id': tid,
+                        'track_name': track_name,
+                        'mentor_id': str(mentor.id),
+                        'mentor_name': mentor.get_full_name() or mentor.email,
+                        'assignment_type': atype,
                     })
 
         except Exception as e:
@@ -3149,14 +3274,36 @@ def get_student_mentorship_assignments(request, mentee_id):
 
             for assignment in assignments:
                 mentor = assignment.mentor
+                cohort_name = None
+                track_name = None
+                if assignment.cohort_id:
+                    try:
+                        from programs.models import Cohort
+                        c = Cohort.objects.filter(id=assignment.cohort_id).first()
+                        if c:
+                            cohort_name = c.name
+                    except Exception:
+                        pass
+                tid = getattr(assignment, 'track_id', None)
+                if tid:
+                    try:
+                        from programs.models import Track
+                        t = Track.objects.filter(id=tid).first()
+                        if t:
+                            track_name = t.name
+                    except Exception:
+                        pass
                 results.append({
                     'id': str(assignment.id),
                     'status': assignment.status,
                     'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
                     'cohort_id': assignment.cohort_id,
-                    'cohort_name': None,
+                    'cohort_name': cohort_name,
+                    'track_id': tid,
+                    'track_name': track_name,
                     'mentor_id': str(mentor.id),
                     'mentor_name': mentor.get_full_name() or mentor.email,
+                    'assignment_type': getattr(assignment, 'assignment_type', 'cohort'),
                 })
 
         return Response(results, status=status.HTTP_200_OK)

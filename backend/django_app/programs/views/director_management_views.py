@@ -2,13 +2,14 @@
 Enhanced Program Management Views for Directors.
 """
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from ..models import Program, Track, Cohort, Enrollment, MentorAssignment
+from mentorship_coordination.models import MenteeMentorAssignment
 from ..serializers import (
     ProgramSerializer, TrackSerializer, CohortSerializer,
     EnrollmentSerializer, MentorAssignmentSerializer
@@ -226,6 +227,56 @@ class DirectorCohortManagementViewSet(viewsets.ModelViewSet):
         })
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsProgramDirector])
+def director_mentor_analytics_view(request, mentor_id):
+    """GET /api/v1/director/mentors/{id}/analytics/ - Mentor analytics for director view."""
+    mentor = get_object_or_404(User, id=mentor_id, is_mentor=True)
+    active_assignments = MentorAssignment.objects.filter(
+        mentor=mentor, active=True
+    ).select_related('cohort', 'cohort__track', 'cohort__track__program')
+    cohorts = list({a.cohort for a in active_assignments})
+    from programs.models import Enrollment
+    total_mentees = Enrollment.objects.filter(
+        cohort__in=cohorts, status='active'
+    ).count()
+    metrics = {
+        'total_mentees': total_mentees,
+        'active_cohorts': len(cohorts),
+        'session_completion_rate': 0,
+        'feedback_average': 0,
+        'mentee_completion_rate': 0,
+        'impact_score': 0,
+        'sessions_scheduled': 0,
+        'sessions_completed': 0,
+        'sessions_missed': 0,
+        'average_session_rating': 0,
+        'mentee_satisfaction_score': 0,
+    }
+    assignments_data = [
+        {
+            'id': str(a.id),
+            'cohort_id': str(a.cohort_id),
+            'cohort_name': a.cohort.name if a.cohort else '',
+            'role': a.role or 'support',
+            'mentees_count': Enrollment.objects.filter(cohort=a.cohort, status='active').count() if a.cohort else 0,
+            'start_date': a.cohort.start_date.isoformat() if a.cohort and getattr(a.cohort, 'start_date', None) else None,
+            'end_date': a.cohort.end_date.isoformat() if a.cohort and getattr(a.cohort, 'end_date', None) else None,
+        }
+        for a in active_assignments
+    ]
+    return Response({
+        'mentor_id': str(mentor.id),
+        'mentor_name': mentor.get_full_name() or mentor.email,
+        'metrics': metrics,
+        'assignments': assignments_data,
+        'cohorts': [{'id': str(c.id), 'name': c.name} for c in cohorts],
+        'reviews': [],
+        'mentee_goals': [],
+        'activity_over_time': [],
+    })
+
+
 class DirectorMentorManagementViewSet(viewsets.ViewSet):
     """Director Mentor Management API."""
     permission_classes = [IsAuthenticated, IsProgramDirector]
@@ -259,6 +310,52 @@ class DirectorMentorManagementViewSet(viewsets.ViewSet):
         
         return Response(mentor_data)
     
+    @action(detail=False, methods=['post'], url_path='assign-direct')
+    def assign_direct(self, request):
+        """Assign a mentor directly to a student (direct assignment, no cohort/track)."""
+        mentee_id = request.data.get('mentee_id')
+        mentor_id = request.data.get('mentor_id')
+        if not mentee_id or not mentor_id:
+            return Response(
+                {'error': 'mentee_id and mentor_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            mentee = User.objects.get(id=int(mentee_id))
+            mentor = User.objects.get(id=int(mentor_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'error': 'Invalid mentee_id or mentor_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not getattr(mentor, 'is_mentor', False):
+            return Response(
+                {'error': 'Selected user is not a mentor'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        assignment, created = MenteeMentorAssignment.objects.get_or_create(
+            mentee=mentee,
+            mentor=mentor,
+            defaults={
+                'status': 'active',
+                'assignment_type': 'direct',
+                'cohort_id': None,
+                'track_id': None,
+            }
+        )
+        if not created and assignment.status != 'active':
+            assignment.status = 'active'
+            assignment.assignment_type = 'direct'
+            assignment.cohort_id = None
+            assignment.track_id = None
+            assignment.save()
+        return Response({
+            'id': str(assignment.id),
+            'mentee_id': str(mentee.id),
+            'mentor_id': str(mentor.id),
+            'created': created,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'])
     def suggestions(self, request):
         """Get mentor suggestions for a cohort."""
