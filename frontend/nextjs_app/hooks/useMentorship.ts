@@ -79,13 +79,10 @@ export function useMentorship(userId?: string) {
     queryKey: ['mentorship', 'mentor', userId],
     queryFn: async () => {
       try {
-        console.log('Fetching mentor for userId:', userId);
-        // Fetch assigned mentor from backend
         const response = await apiGateway.get(`/mentorship/mentees/${userId}/mentor`);
-        console.log('Mentor API response:', response);
         const resp = response as any;
         if (resp && resp.id) {
-          const mentor: Mentor = {
+          return {
             id: resp.id,
             name: resp.name || 'Mentor',
             avatar: resp.avatar || undefined,
@@ -99,23 +96,26 @@ export function useMentorship(userId?: string) {
             assigned_at: resp.assigned_at || undefined,
             mentor_role: resp.mentor_role || undefined,
             assignment_type: resp.assignment_type || undefined
-          };
-          console.log('Processed mentor data:', mentor);
-          return mentor;
+          } as Mentor;
         }
+        return null;
       } catch (error: any) {
-        // If mentor endpoint fails, log and return null
-        console.error('Failed to fetch mentor:', error);
-        // Log the full error for debugging
-        if (error?.response?.data) {
-          console.error('Error response data:', error.response.data);
+        // 404 = no mentor assigned (expected); treat as success with null
+        const status = error?.response?.status ?? error?.status;
+        if (status === 404) {
+          return null;
         }
+        console.error('Failed to fetch mentor:', error);
+        throw error; // Re-throw so React Query marks as error and can retry for real failures
       }
-      return null;
     },
     enabled: !!userId,
-    retry: 2, // Retry twice on failure
-    refetchOnWindowFocus: true, // Refetch when window regains focus
+    retry: (failureCount, error: any) => {
+      const status = error?.response?.status ?? error?.status;
+      if (status === 404) return false; // Do not retry 404
+      return failureCount < 2;
+    },
+    refetchOnWindowFocus: true,
   });
 
   // 2. Scheduling & Session Management - Fetch from backend

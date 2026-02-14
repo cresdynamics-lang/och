@@ -29,6 +29,41 @@ interface Mentor {
   is_active?: boolean
 }
 
+type AssignmentType = 'cohort' | 'track' | 'direct'
+
+interface TrackAssignmentMentee {
+  id: string
+  name: string
+  email: string
+}
+
+interface MentorAssignmentItem {
+  id: string
+  assignment_type: AssignmentType
+  cohort_id?: string | null
+  cohort_name?: string | null
+  track_id?: string | null
+  track_name?: string | null
+  program_name?: string | null
+  role?: string | null
+  mentees_count: number
+  mentees?: TrackAssignmentMentee[]
+  mentee_id?: string
+  mentee_name?: string
+  mentee_email?: string
+  start_date?: string | null
+  end_date?: string | null
+}
+
+interface MentorMentee {
+  id: string
+  email: string
+  name: string
+  source: 'cohort' | 'track' | 'direct'
+  cohort_name?: string | null
+  track_name?: string | null
+}
+
 interface MentorAnalytics {
   mentor_id: string
   mentor_name: string
@@ -45,15 +80,8 @@ interface MentorAnalytics {
     average_session_rating: number
     mentee_satisfaction_score: number
   }
-  assignments: Array<{
-    id: string
-    cohort_id: string
-    cohort_name: string
-    role: string
-    mentees_count: number
-    start_date: string
-    end_date?: string
-  }>
+  assignments: MentorAssignmentItem[]
+  mentees?: MentorMentee[]
   cohorts: Array<{ id: string; name: string }>
   reviews: Array<{
     id: string
@@ -230,6 +258,7 @@ export default function MentorDetailPage() {
           mentee_satisfaction_score: 0,
         },
         assignments: [],
+        mentees: [],
         cohorts: [],
         reviews: [],
         mentee_goals: [],
@@ -649,107 +678,208 @@ export default function MentorDetailPage() {
             </Card>
           </div>
 
-          {/* Detailed Assignments */}
+          {/* All Assignments (Cohort, Track, Direct) from analytics API */}
           <Card className="mb-6">
             <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Cohort Assignments</h2>
-                <Badge variant="defender">{assignments.length} Active</Badge>
-              </div>
-              
-              {isLoadingAssignments ? (
+              <h2 className="text-xl font-bold text-white mb-4">All Assignments</h2>
+              {isLoadingAnalytics ? (
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-och-mint"></div>
                 </div>
-              ) : assignments.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-och-steel">No active cohort assignments</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {assignments.map((assignment) => {
-                    const cohort = assignment.cohort_details
-                    const track = assignment.track
-                    const program = assignment.program
-                    
-                    return (
-                      <div
-                        key={assignment.id}
-                        className="p-5 bg-och-midnight/50 rounded-lg border border-och-steel/20 hover:border-och-mint/30 transition-all"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold text-white">{cohort?.name || assignment.cohort_name}</h3>
-                              <Badge 
-                                variant={
-                                  assignment.role === 'primary' ? 'defender' : 
-                                  assignment.role === 'support' ? 'mint' : 'steel'
-                                }
-                              >
-                                {assignment.role?.charAt(0).toUpperCase() + assignment.role?.slice(1) || 'Support'}
-                              </Badge>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
-                              {program && (
-                                <div>
-                                  <p className="text-och-steel text-xs mb-1">Program</p>
-                                  <p className="text-white text-sm font-medium">{program.name}</p>
-                                </div>
-                              )}
-                              {track && (
-                                <div>
-                                  <p className="text-och-steel text-xs mb-1">Track</p>
-                                  <p className="text-white text-sm font-medium">{track.name}</p>
-                                </div>
-                              )}
-                              <div>
-                                <p className="text-och-steel text-xs mb-1">Enrollments</p>
-                                <p className="text-white text-sm font-medium">{assignment.enrollment_count || 0}</p>
-                              </div>
-                              <div>
-                                <p className="text-och-steel text-xs mb-1">Assigned</p>
-                                <p className="text-white text-sm font-medium">
-                                  {new Date(assignment.assigned_at).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {cohort?.status && (
-                          <div className="mt-3 pt-3 border-t border-och-steel/20">
-                            <div className="flex items-center gap-2">
-                              <span className="text-och-steel text-xs">Status:</span>
-                              <Badge 
-                                variant={
-                                  cohort.status === 'active' ? 'mint' :
-                                  cohort.status === 'completed' ? 'defender' :
-                                  cohort.status === 'upcoming' ? 'gold' : 'steel'
-                                }
-                                className="text-xs"
-                              >
-                                {cohort.status}
-                              </Badge>
-                              {cohort.start_date && (
-                                <>
-                                  <span className="text-och-steel text-xs">•</span>
-                                  <span className="text-och-steel text-xs">
-                                    Start: {new Date(cohort.start_date).toLocaleDateString()}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
+              ) : (() => {
+                const fromApi = (analytics?.assignments ?? []) as MentorAssignmentItem[]
+                const cohortList = fromApi.filter((a) => (a.assignment_type || 'cohort') === 'cohort')
+                const trackList = fromApi.filter((a) => a.assignment_type === 'track')
+                const directList = fromApi.filter((a) => a.assignment_type === 'direct')
+                const hasAny = cohortList.length > 0 || trackList.length > 0 || directList.length > 0
+                if (!hasAny) {
+                  return (
+                    <div className="text-center py-8">
+                      <p className="text-och-steel">No cohort, track, or direct assignments</p>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="space-y-8">
+                    {/* Cohort */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-white">Cohort assignments</h3>
+                        <Badge variant="defender">{cohortList.length}</Badge>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                      {cohortList.length === 0 ? (
+                        <p className="text-och-steel text-sm">None</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {cohortList.map((a) => (
+                            <div
+                              key={a.id}
+                              className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20"
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-medium text-white">{a.cohort_name || a.cohort_id || 'Cohort'}</span>
+                                {a.role && (
+                                  <Badge variant={a.role === 'primary' ? 'defender' : 'mint'}>
+                                    {a.role}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                                {a.program_name && (
+                                  <div>
+                                    <span className="text-och-steel">Program </span>
+                                    <span className="text-white">{a.program_name}</span>
+                                  </div>
+                                )}
+                                {a.track_name && (
+                                  <div>
+                                    <span className="text-och-steel">Track </span>
+                                    <span className="text-white">{a.track_name}</span>
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="text-och-steel">Mentees </span>
+                                  <span className="text-white">{a.mentees_count}</span>
+                                </div>
+                                {a.start_date && (
+                                  <div>
+                                    <span className="text-och-steel">Start </span>
+                                    <span className="text-white">{new Date(a.start_date).toLocaleDateString()}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Track */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-white">Track assignments</h3>
+                        <Badge variant="mint">{trackList.length}</Badge>
+                      </div>
+                      {trackList.length === 0 ? (
+                        <p className="text-och-steel text-sm">None</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {trackList.map((a) => (
+                            <div
+                              key={a.id}
+                              className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20"
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-medium text-white">{a.track_name || a.track_id || 'Track'}</span>
+                                {a.role && (
+                                  <Badge variant="mint">{a.role}</Badge>
+                                )}
+                                {(a.mentees_count ?? (a.mentees?.length ?? 0)) > 0 && (
+                                  <Badge variant="steel" className="text-xs">
+                                    {a.mentees_count ?? a.mentees?.length ?? 0} student{(a.mentees_count ?? a.mentees?.length ?? 0) !== 1 ? 's' : ''}
+                                  </Badge>
+                                )}
+                              </div>
+                              {a.program_name && (
+                                <p className="text-sm text-och-steel mb-2">Program: {a.program_name}</p>
+                              )}
+                              {a.mentees && a.mentees.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-och-steel/20">
+                                  <p className="text-och-steel text-xs font-medium uppercase tracking-wide mb-2">Students under this track</p>
+                                  <ul className="space-y-1.5">
+                                    {a.mentees.map((m) => (
+                                      <li key={m.id} className="flex items-center gap-2 text-sm">
+                                        <span className="text-white">{m.name || m.email}</span>
+                                        {m.email && m.name && (
+                                          <span className="text-och-steel">({m.email})</span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Direct */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-white">Direct (mentee) assignments</h3>
+                        <Badge variant="gold">{directList.length}</Badge>
+                      </div>
+                      {directList.length === 0 ? (
+                        <p className="text-och-steel text-sm">None</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {directList.map((a) => (
+                            <div
+                              key={a.id}
+                              className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20"
+                            >
+                              <div className="font-medium text-white">{a.mentee_name || a.mentee_email || a.mentee_id || 'Mentee'}</div>
+                              {a.mentee_email && (
+                                <p className="text-sm text-och-steel mt-1">{a.mentee_email}</p>
+                              )}
+                              {a.start_date && (
+                                <p className="text-xs text-och-steel mt-1">Since {new Date(a.start_date).toLocaleDateString()}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </Card>
+
+          {/* All students under this mentor */}
+          {analytics?.mentees && analytics.mentees.length > 0 && (
+            <Card className="mb-6">
+              <div className="p-6">
+                <h2 className="text-xl font-bold text-white mb-4">All students under this mentor</h2>
+                <p className="text-och-steel text-sm mb-4">
+                  {analytics.mentees.length} student{analytics.mentees.length !== 1 ? 's' : ''} (cohort, track, and direct)
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-och-steel/30">
+                        <th className="pb-3 pr-4 text-och-steel text-sm font-medium">Name</th>
+                        <th className="pb-3 pr-4 text-och-steel text-sm font-medium">Email</th>
+                        <th className="pb-3 pr-4 text-och-steel text-sm font-medium">Source</th>
+                        <th className="pb-3 text-och-steel text-sm font-medium">Context</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.mentees.map((m) => (
+                        <tr key={m.id} className="border-b border-och-steel/10 hover:bg-och-midnight/40">
+                          <td className="py-3 pr-4 text-white font-medium">{m.name || '—'}</td>
+                          <td className="py-3 pr-4 text-och-steel text-sm">{m.email}</td>
+                          <td className="py-3 pr-4">
+                            <Badge
+                              variant={
+                                m.source === 'cohort' ? 'defender' :
+                                m.source === 'track' ? 'mint' : 'gold'
+                              }
+                              className="text-xs"
+                            >
+                              {m.source}
+                            </Badge>
+                          </td>
+                          <td className="py-3 text-och-steel text-sm">
+                            {[m.cohort_name, m.track_name].filter(Boolean).join(' · ') || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Recent Reviews */}
           {analytics?.reviews && analytics.reviews.length > 0 && (

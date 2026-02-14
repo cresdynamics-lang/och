@@ -2935,32 +2935,34 @@ def get_student_mentor(request, mentee_id):
         mentor_assignment_obj = None  # To store MentorAssignment or MenteeMentorAssignment for assigned_at, role, type
         assignment = None
 
-        # FIRST: Check for existing MenteeMentorAssignment (created when messages are sent or direct assignment)
-        assignment = MenteeMentorAssignment.objects.filter(
+        from programs.models import Enrollment
+        # FIRST: Check for existing MenteeMentorAssignment - only use if it would appear in assignments (align with get_student_mentorship_assignments)
+        for candidate in MenteeMentorAssignment.objects.filter(
             mentee_id=mentee_id_int,
             status='active'
-        ).select_related('mentor').first()
-
-        if assignment:
-            # Found an active assignment - use it
+        ).select_related('mentor').order_by('assignment_type'):
+            atype = getattr(candidate, 'assignment_type', None) or 'cohort'
+            if atype == 'cohort' and candidate.cohort_id:
+                if not Enrollment.objects.filter(
+                    user_id=mentee_id_int,
+                    cohort_id=candidate.cohort_id,
+                    status__in=['active', 'completed']
+                ).exists():
+                    continue  # Skip cohort assignment when mentee is not enrolled in that cohort
+            assignment = candidate
             mentor = assignment.mentor
             logger.info(f"Found active MenteeMentorAssignment {assignment.id} for mentee {mentee_id_int} with mentor {mentor.id}")
-            
-            # Set mentor_assignment_obj for response
             mentor_assignment_obj = assignment
-            
-            # Try to get cohort info for additional context
-            try:
-                from programs.models import Enrollment
-                enrollment = Enrollment.objects.filter(
-                    user_id=mentee_id_int,
-                    status__in=['active', 'completed']
-                ).select_related('cohort').first()
-                if enrollment:
-                    cohort = enrollment.cohort
-            except Exception as e:
-                logger.warning(f"Could not fetch cohort info for mentee {mentee_id_int}: {str(e)}")
-        else:
+            if assignment.cohort_id:
+                try:
+                    from programs.models import Cohort
+                    c = Cohort.objects.filter(id=assignment.cohort_id).first()
+                    if c:
+                        cohort = c
+                except Exception:
+                    pass
+            break
+        if not assignment:
             # SECOND: Fallback to cohort-level MentorAssignment
             logger.info(f"No active MenteeMentorAssignment found for mentee {mentee_id_int}, checking cohort assignment")
             try:
@@ -3011,11 +3013,15 @@ def get_student_mentor(request, mentee_id):
             except Exception as cohort_error:
                 logger.warning(f"Cohort-based mentor lookup failed for mentee {mentee_id_int}: {cohort_error}")
 
-        # If still no mentor found, return error
+        # No mentor assigned: return 200 with assigned=false so clients get a successful response (no 404)
         if not mentor:
             return Response(
-                {'error': 'No mentor assigned. Please contact your program director.'},
-                status=status.HTTP_404_NOT_FOUND
+                {
+                    'assigned': False,
+                    'id': None,
+                    'message': 'No mentor assigned. Please contact your program director.',
+                },
+                status=status.HTTP_200_OK,
             )
 
         # Get mentor's profile information and expertise
@@ -3140,7 +3146,7 @@ def get_student_mentorship_assignments(request, mentee_id):
                         'assignment_type': 'cohort',
                     })
 
-            # Track-level mentors: student is in a track (via enrollment) -> all mentors assigned to that track
+            # Track-level mentors: student is in a track (via enrollment) -> all mentors assigned to that track (programs)
             from programs.models import TrackMentorAssignment
             seen_track_mentor = set()
             for enrollment in enrollments:
@@ -3193,6 +3199,115 @@ def get_student_mentorship_assignments(request, mentee_id):
                         'assignment_type': 'track',
                     })
 
+            # Curriculum track mentors: student's cohort track may link to a curriculum track with assigned mentors
+            from curriculum.models import CurriculumTrack, CurriculumTrackMentorAssignment
+            for enrollment in enrollments:
+                cohort = enrollment.cohort
+                if not cohort or not cohort.track_id:
+                    continue
+                curriculum_tracks = CurriculumTrack.objects.filter(program_track_id=cohort.track_id)
+                for ct in curriculum_tracks:
+                    for cta in CurriculumTrackMentorAssignment.objects.filter(
+                        curriculum_track=ct, active=True
+                    ).select_related('mentor'):
+                        mentor = cta.mentor
+                        if not mentor:
+                            continue
+                        track_key = str(ct.id)
+                        track_name = getattr(ct, 'title', None) or getattr(ct, 'name', None) or getattr(ct, 'slug', None) or track_key
+                        pair_key = ('track', track_key, str(mentor.id))
+                        if pair_key in seen_track_mentor:
+                            continue
+                        seen_track_mentor.add(pair_key)
+                        assignment, created = MenteeMentorAssignment.objects.get_or_create(
+                            mentee=mentee,
+                            mentor=mentor,
+                            defaults={
+                                'status': 'active',
+                                'track_id': track_key,
+                                'assignment_type': 'track',
+                                'cohort_id': None,
+                            }
+                        )
+                        if not created:
+                            if assignment.assignment_type != 'track' or assignment.track_id != track_key:
+                                assignment.track_id = track_key
+                                assignment.assignment_type = 'track'
+                                assignment.cohort_id = None
+                                assignment.save(update_fields=['track_id', 'assignment_type', 'cohort_id'])
+                        results.append({
+                            'id': str(assignment.id),
+                            'status': assignment.status,
+                            'assigned_at': (assignment.assigned_at or cta.assigned_at).isoformat() if (assignment.assigned_at or getattr(cta, 'assigned_at', None)) else None,
+                            'cohort_id': None,
+                            'cohort_name': None,
+                            'track_id': track_key,
+                            'track_name': track_name,
+                            'mentor_id': str(mentor.id),
+                            'mentor_name': mentor.get_full_name() or mentor.email,
+                            'assignment_type': 'track',
+                        })
+
+            # Curriculum track mentors by User.track_key (e.g. cyber_defense -> Defender track) when student has no cohort link
+            user_track_key = (getattr(mentee, 'track_key', None) or '').strip().lower()
+            if user_track_key:
+                TRACK_KEY_ALIASES = {
+                    'defender': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'DEFENSIVE', 'SOCDEFENSE', 'SOCDEF')},
+                    'cyber_defense': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('DEFENSIVE', 'defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE', 'SOCDEF')},
+                    'defensive-security': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'DEFENSIVE', 'SOCDEFENSE')},
+                    'offensive': {'slugs': ('offensive',), 'codes': ('OFFENSIVE', 'offensive')},
+                    'grc': {'slugs': ('grc',), 'codes': ('GRC', 'grc')},
+                    'innovation': {'slugs': ('innovation',), 'codes': ('INNOVATION', 'innovation')},
+                    'leadership': {'slugs': ('leadership',), 'codes': ('LEADERSHIP', 'leadership')},
+                }
+                aliases = TRACK_KEY_ALIASES.get(user_track_key)
+                if aliases:
+                    curriculum_tracks_by_key = CurriculumTrack.objects.filter(
+                        Q(slug__in=aliases['slugs']) | Q(code__in=aliases['codes']),
+                        is_active=True
+                    )
+                    for ct in curriculum_tracks_by_key:
+                        for cta in CurriculumTrackMentorAssignment.objects.filter(
+                            curriculum_track=ct, active=True
+                        ).select_related('mentor'):
+                            mentor = cta.mentor
+                            if not mentor:
+                                continue
+                            track_key = str(ct.id)
+                            track_name = getattr(ct, 'title', None) or getattr(ct, 'name', None) or getattr(ct, 'slug', None) or track_key
+                            pair_key = ('track', track_key, str(mentor.id))
+                            if pair_key in seen_track_mentor:
+                                continue
+                            seen_track_mentor.add(pair_key)
+                            assignment, created = MenteeMentorAssignment.objects.get_or_create(
+                                mentee=mentee,
+                                mentor=mentor,
+                                defaults={
+                                    'status': 'active',
+                                    'track_id': track_key,
+                                    'assignment_type': 'track',
+                                    'cohort_id': None,
+                                }
+                            )
+                            if not created:
+                                if assignment.assignment_type != 'track' or assignment.track_id != track_key:
+                                    assignment.track_id = track_key
+                                    assignment.assignment_type = 'track'
+                                    assignment.cohort_id = None
+                                    assignment.save(update_fields=['track_id', 'assignment_type', 'cohort_id'])
+                            results.append({
+                                'id': str(assignment.id),
+                                'status': assignment.status,
+                                'assigned_at': (assignment.assigned_at or cta.assigned_at).isoformat() if (assignment.assigned_at or getattr(cta, 'assigned_at', None)) else None,
+                                'cohort_id': None,
+                                'cohort_name': None,
+                                'track_id': track_key,
+                                'track_name': track_name,
+                                'mentor_id': str(mentor.id),
+                                'mentor_name': mentor.get_full_name() or mentor.email,
+                                'assignment_type': 'track',
+                            })
+
             # Direct assignments (director-assigned mentor to student)
             direct_assignments = MenteeMentorAssignment.objects.filter(
                 mentee_id=mentee_id_int,
@@ -3215,6 +3330,7 @@ def get_student_mentorship_assignments(request, mentee_id):
                 })
 
             # If no results from enrollment/track/direct (e.g. no enrollments or different status), include any existing MenteeMentorAssignment so Mentors tab matches "Your mentor"
+            # For cohort-type assignments, only include if the mentee has an active Enrollment in that cohort (align with director cohort page).
             if not results:
                 fallback_assignments = MenteeMentorAssignment.objects.filter(
                     mentee_id=mentee_id_int,
@@ -3225,6 +3341,14 @@ def get_student_mentorship_assignments(request, mentee_id):
                     atype = getattr(assignment, 'assignment_type', None) or 'cohort'
                     if atype not in ('cohort', 'track', 'direct'):
                         atype = 'cohort'
+                    # Cohort assignments: only show if mentee is actually enrolled in this cohort (single source of truth = Enrollment)
+                    if atype == 'cohort' and assignment.cohort_id:
+                        if not Enrollment.objects.filter(
+                            user=mentee,
+                            cohort_id=assignment.cohort_id,
+                            status__in=['active', 'completed']
+                        ).exists():
+                            continue
                     cohort_name = None
                     track_name = None
                     if assignment.cohort_id:
@@ -3260,12 +3384,23 @@ def get_student_mentorship_assignments(request, mentee_id):
         except Exception as e:
             # If Enrollment / MentorAssignment lookup fails, fall back to raw MenteeMentorAssignment records
             logger.warning(f"Falling back to direct MenteeMentorAssignment lookup for mentee {mentee_id_int}: {e}")
+            from programs.models import Enrollment as EnrollmentModel
+            mentee_for_fallback = User.objects.get(id=mentee_id_int)
             assignments = MenteeMentorAssignment.objects.filter(
                 mentee_id=mentee_id_int,
                 status__in=['active', 'pending']
             ).select_related('mentor')
 
             for assignment in assignments:
+                atype = getattr(assignment, 'assignment_type', 'cohort')
+                # Cohort assignments: only show if mentee is actually enrolled in this cohort (align with director view)
+                if atype == 'cohort' and assignment.cohort_id:
+                    if not EnrollmentModel.objects.filter(
+                        user=mentee_for_fallback,
+                        cohort_id=assignment.cohort_id,
+                        status__in=['active', 'completed']
+                    ).exists():
+                        continue
                 mentor = assignment.mentor
                 cohort_name = None
                 track_name = None
@@ -3296,7 +3431,7 @@ def get_student_mentorship_assignments(request, mentee_id):
                     'track_name': track_name,
                     'mentor_id': str(mentor.id),
                     'mentor_name': mentor.get_full_name() or mentor.email,
-                    'assignment_type': getattr(assignment, 'assignment_type', 'cohort'),
+                    'assignment_type': atype,
                 })
 
         return Response(results, status=status.HTTP_200_OK)

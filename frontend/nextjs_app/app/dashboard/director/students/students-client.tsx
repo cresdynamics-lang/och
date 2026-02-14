@@ -25,6 +25,8 @@ interface Student {
   last_name: string
   sponsor_id?: string
   sponsor_name?: string
+  track_key?: string | null
+  track_display?: string | null
   direct_mentors?: DirectMentor[]
   all_mentors?: MentorEntry[]
   created_at: string
@@ -65,10 +67,12 @@ export function StudentsManagementClient() {
     fetchSponsors()
   }, [])
 
-  const fetchStudents = async () => {
+  const fetchStudents = async (cacheBust = false) => {
     try {
-      const response = await apiGateway.get<{ students: Student[] }>('/director/students/')
-      setStudents(response?.students ?? [])
+      const url = cacheBust ? `/director/students/?_=${Date.now()}` : '/director/students/'
+      const response = await apiGateway.get<{ students?: Student[] }>(url)
+      const list = response?.students ?? (response as any)?.data?.students ?? []
+      setStudents(Array.isArray(list) ? list : [])
     } catch (error) {
       console.error('Failed to fetch students:', error)
     } finally {
@@ -153,13 +157,14 @@ export function StudentsManagementClient() {
         mentee_id: String(studentForMentor.id),
         mentor_id: String(selectedMentorId),
       })
-      await fetchStudents()
-      showMsg('Direct mentor assigned.')
       setShowMentorModal(false)
       setStudentForMentor(null)
       setSelectedMentorId('')
+      showMsg('Direct mentor assigned.')
+      await fetchStudents(true)
     } catch (e: any) {
-      showMsg(e?.response?.data?.error || 'Failed to assign mentor', 'error')
+      const errMsg = e?.response?.data?.error || e?.message || 'Failed to assign mentor'
+      showMsg(errMsg, 'error')
     } finally {
       setActionLoading(null)
     }
@@ -240,6 +245,7 @@ export function StudentsManagementClient() {
                 </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Name</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Email</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Tracks</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Sponsor</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Mentors</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-och-steel">Joined</th>
@@ -277,6 +283,15 @@ export function StudentsManagementClient() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-och-steel">{student.email}</td>
+                  <td className="px-4 py-3">
+                    {student.track_display || student.track_key ? (
+                      <span className="px-2 py-1 bg-och-midnight border border-och-steel/30 text-och-mint rounded text-sm">
+                        {student.track_display || student.track_key}
+                      </span>
+                    ) : (
+                      <span className="text-och-steel text-sm">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {student.sponsor_name ? (
                       <span className="px-2 py-1 bg-och-defender/20 text-och-mint rounded text-sm">

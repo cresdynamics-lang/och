@@ -52,7 +52,7 @@ def _get_all_mentors_for_student(student):
                     'mentor_name': ma.mentor.get_full_name() or ma.mentor.email,
                     'assignment_id': None,
                 })
-    # Track mentors
+    # Track mentors (programs Track via enrollment)
     for enrollment in Enrollment.objects.filter(
         user_id=student.id,
         status__in=['active', 'completed']
@@ -71,6 +71,20 @@ def _get_all_mentors_for_student(student):
                     'mentor_name': ta.mentor.get_full_name() or ta.mentor.email,
                     'assignment_id': None,
                 })
+    # Track mentors (curriculum track, e.g. from MenteeMentorAssignment synced by track_key)
+    for a in MenteeMentorAssignment.objects.filter(
+        mentee_id=student.id,
+        assignment_type='track',
+        status='active'
+    ).select_related('mentor'):
+        if a.mentor and (str(a.mentor.id), 'track') not in seen:
+            seen.add((str(a.mentor.id), 'track'))
+            result.append({
+                'type': 'track',
+                'mentor_id': str(a.mentor.id),
+                'mentor_name': a.mentor.get_full_name() or a.mentor.email,
+                'assignment_id': str(a.id),
+            })
     # Direct mentors (removable)
     for a in MenteeMentorAssignment.objects.filter(
         mentee_id=student.id,
@@ -108,6 +122,16 @@ def director_students_list(request):
             is_active=True
         ).order_by('-created_at')
         
+        TRACK_KEY_DISPLAY = {
+            'cyber_defense': 'Career Track (Defender)',
+            'defender': 'Defender',
+            'defensive-security': 'Defensive Security',
+            'offensive': 'Offensive',
+            'grc': 'GRC',
+            'innovation': 'Innovation',
+            'leadership': 'Leadership',
+        }
+
         students_data = []
         for student in students:
             # Get sponsor link if exists
@@ -125,6 +149,11 @@ def director_students_list(request):
                     sponsor_name = sponsor.email
                 sponsor_id = str(sponsor.uuid_id)
             
+            track_key = (getattr(student, 'track_key', None) or '').strip() or None
+            track_display = TRACK_KEY_DISPLAY.get((track_key or '').lower()) if track_key else None
+            if not track_display and track_key:
+                track_display = track_key.replace('_', ' ').title()
+
             direct_mentors = _get_direct_mentors_for_student(student)
             all_mentors = _get_all_mentors_for_student(student)
             students_data.append({
@@ -135,6 +164,8 @@ def director_students_list(request):
                 'last_name': student.last_name or '',
                 'sponsor_id': sponsor_id,
                 'sponsor_name': sponsor_name,
+                'track_key': track_key,
+                'track_display': track_display,
                 'direct_mentors': direct_mentors,
                 'all_mentors': all_mentors,
                 'created_at': student.created_at.isoformat()
