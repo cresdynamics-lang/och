@@ -37,7 +37,6 @@ export default function AdminRecipesPage() {
         const data = await missionsClient.getAllMissionsAdmin({ page_size: 50 });
         setMissions(data.results || []);
       } catch (error) {
-        console.error('Failed to fetch missions:', error);
       } finally {
         setLoading(false);
       }
@@ -52,7 +51,6 @@ export default function AdminRecipesPage() {
           supabase: false
         });
       } catch (error) {
-        console.error('Failed to fetch environment status:', error);
       }
     };
 
@@ -61,7 +59,6 @@ export default function AdminRecipesPage() {
         const data = await recipesClient.getRecipes();
         setRecipes(data);
       } catch (error) {
-        console.error('Failed to fetch recipes:', error);
       } finally {
         setRecipesLoading(false);
       }
@@ -72,7 +69,6 @@ export default function AdminRecipesPage() {
         const links = await recipesClient.getContextLinks();
         setContextLinks(links);
       } catch (error) {
-        console.error('Failed to fetch context links:', error);
       }
     };
 
@@ -136,7 +132,6 @@ export default function AdminRecipesPage() {
       const links = await recipesClient.getContextLinks();
       setContextLinks(links);
     } catch (error) {
-      console.error('Failed to refresh recipes:', error);
     }
   };
 
