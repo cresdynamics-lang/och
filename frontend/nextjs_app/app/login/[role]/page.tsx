@@ -488,7 +488,15 @@ function LoginForm() {
       }, 1000);
 
     } catch (err: any) {
-      console.error('[Login] Error during login flow:', err);
+      const isServiceUnavailable =
+        err?.code === 'BAD_GATEWAY' ||
+        err?.status === 502 ||
+        err?.message?.includes('temporarily unavailable');
+      if (isServiceUnavailable) {
+        console.warn('[Login] Backend temporarily unavailable:', err?.message);
+      } else {
+        console.error('[Login] Error during login flow:', err);
+      }
       setIsLoggingIn(false);
       setIsRedirecting(false);
       
@@ -573,7 +581,9 @@ function LoginForm() {
         }
       }
 
-      console.error('Login error:', err);
+      if (!isServiceUnavailable) {
+        console.error('Login error:', err);
+      }
       setError(message);
     }
   };

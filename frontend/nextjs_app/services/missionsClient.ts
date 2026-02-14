@@ -144,7 +144,7 @@ export const missionsClient = {
       // Handle paginated response (DRF default pagination)
       if (data?.results !== undefined) {
         const missions = Array.isArray(data.results) ? data.results : []
-        const totalCount = data.count !== undefined ? data.count : (data.total !== undefined ? data.total : missions.length)
+        const totalCount = data.total !== undefined ? data.total : (data.count !== undefined ? data.count : missions.length)
         
         console.log(`✅ Found ${missions.length} missions in paginated response (total: ${totalCount})`)
         if (missions.length > 0) {
@@ -162,6 +162,9 @@ export const missionsClient = {
         return {
           results: missions,
           count: totalCount,
+          total: data.total !== undefined ? data.total : totalCount,
+          has_next: data.has_next,
+          has_previous: data.has_previous,
           next: data.next || null,
           previous: data.previous || null,
         }

@@ -18,8 +18,40 @@ export default function MissionSubmitPage() {
   const [notebookUrl, setNotebookUrl] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
 
+  const reqs = (mission as { submission_requirements?: Record<string, unknown> })?.submission_requirements || {};
+  const notesRequired = (reqs.notes_required ?? true) as boolean;
+  const notesMinChars = Math.max(10, Number(reqs.notes_min_chars ?? 20));
+  const filesRequired = (reqs.files_required ?? false) as boolean;
+  const githubRequired = (reqs.github_required ?? false) as boolean;
+  const notebookRequired = (reqs.notebook_required ?? false) as boolean;
+  const videoRequired = (reqs.video_required ?? false) as boolean;
+
+  const canSubmit = () => {
+    if (notesRequired && notes.trim().length < notesMinChars) return false;
+    if (filesRequired && files.length === 0) return false;
+    if (githubRequired && !githubUrl?.trim()) return false;
+    if (notebookRequired && !notebookUrl?.trim()) return false;
+    if (videoRequired && !videoUrl?.trim()) return false;
+    return true;
+  };
+
+  const getMissingRequirements = () => {
+    const m: string[] = [];
+    if (notesRequired && notes.trim().length < notesMinChars) m.push(`Notes (at least ${notesMinChars} characters)`);
+    if (filesRequired && files.length === 0) m.push('Upload at least one file');
+    if (githubRequired && !githubUrl?.trim()) m.push('GitHub Repository URL');
+    if (notebookRequired && !notebookUrl?.trim()) m.push('Notebook URL');
+    if (videoRequired && !videoUrl?.trim()) m.push('Video Demo URL');
+    return m;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const missing = getMissingRequirements();
+    if (missing.length > 0) {
+      alert('Missing required items: ' + missing.join(', '));
+      return;
+    }
 
     try {
       const formData = new FormData();
@@ -96,10 +128,22 @@ export default function MissionSubmitPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Requirements banner when not met */}
+        {!canSubmit() && getMissingRequirements().length > 0 && (
+          <div className="p-4 rounded-lg bg-amber-500/15 border border-amber-500/40">
+            <p className="text-amber-200 font-semibold mb-1">Complete required items before submitting</p>
+            <ul className="text-amber-200/90 text-sm list-disc list-inside">
+              {getMissingRequirements().map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Notes Section */}
         <div>
           <label htmlFor="notes" className="block text-sm font-medium text-white mb-2">
-            Mission Notes & Reflection
+            Mission Notes & Reflection {notesRequired && <span className="text-amber-400">*</span>}
           </label>
           <textarea
             id="notes"
@@ -114,7 +158,7 @@ export default function MissionSubmitPage() {
         {/* File Upload */}
         <div>
           <label htmlFor="files" className="block text-sm font-medium text-white mb-2">
-            Upload Files
+            Upload Files {filesRequired && <span className="text-amber-400">*</span>}
           </label>
           <input
             type="file"
@@ -139,7 +183,7 @@ export default function MissionSubmitPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label htmlFor="github" className="block text-sm font-medium text-white mb-2">
-              GitHub Repository
+              GitHub Repository {githubRequired && <span className="text-amber-400">*</span>}
             </label>
             <input
               type="url"
@@ -153,7 +197,7 @@ export default function MissionSubmitPage() {
           
           <div>
             <label htmlFor="notebook" className="block text-sm font-medium text-white mb-2">
-              Notebook URL
+              Notebook URL {notebookRequired && <span className="text-amber-400">*</span>}
             </label>
             <input
               type="url"
@@ -167,7 +211,7 @@ export default function MissionSubmitPage() {
           
           <div>
             <label htmlFor="video" className="block text-sm font-medium text-white mb-2">
-              Video Demo URL
+              Video Demo URL {videoRequired && <span className="text-amber-400">*</span>}
             </label>
             <input
               type="url"
@@ -192,8 +236,9 @@ export default function MissionSubmitPage() {
           
           <button
             type="submit"
-            disabled={submitMission.isPending}
+            disabled={submitMission.isPending || !canSubmit()}
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            title={!canSubmit() ? getMissingRequirements().join('; ') : undefined}
           >
             {submitMission.isPending ? 'Submitting...' : 'Submit for AI Review'}
           </button>

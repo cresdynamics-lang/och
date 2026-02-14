@@ -26,11 +26,6 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { curriculumClient } from '@/services/curriculumClient';
 import Link from 'next/link';
-import {
-  BEGINNER_TRACKS_OVERVIEW,
-  BEGINNER_TRACK_CATEGORIES,
-  BEGINNER_TRACK_PLATFORM_OUTCOMES,
-} from '@/lib/beginnerTracksSpec';
 
 interface CurriculumTrack {
   id: string;
@@ -41,12 +36,28 @@ interface CurriculumTrack {
   order_number: number;
   levels_count: number;
   total_duration_hours: number;
+  level?: string;
+  tier?: number;
   user_enrollment: {
     enrolled: boolean;
     current_level?: string;
     progress_percent?: number;
   };
 }
+
+/** Tier display names from backend (CurriculumTrack.TIER_CHOICES) */
+const TIER_LABELS: Record<number, string> = {
+  0: 'Foundations',
+  1: 'Foundations',
+  2: 'Beginner',
+  3: 'Intermediate',
+  4: 'Advanced',
+  5: 'Mastery',
+  6: 'Cross-track',
+  7: 'Missions',
+  8: 'Ecosystem',
+  9: 'Enterprise',
+};
 
 // Track configurations
 const TRACK_CONFIGS = {
@@ -101,6 +112,7 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
   const config = TRACK_CONFIGS[track.slug as keyof typeof TRACK_CONFIGS] || TRACK_CONFIGS.defender;
   const IconComponent = config.icon;
   const enrollment = track.user_enrollment;
+  const tierLabel = track.tier != null ? TIER_LABELS[track.tier] : track.level;
 
   const progressPercentage = enrollment.progress_percent || 0;
   const isEnrolled = enrollment.enrolled;
@@ -122,7 +134,6 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
             </Badge>
           </div>
         )}
-
         {/* Lock Overlay */}
         {isLocked && (
           <div className="absolute inset-0 bg-slate-900/80 rounded-lg flex items-center justify-center z-10">
@@ -142,9 +153,16 @@ function TrackCard({ track, isRecommended }: TrackCardProps) {
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-bold text-white mb-1 truncate">
-              {track.title}
-            </h3>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h3 className="text-base font-bold text-white truncate">
+                {track.title}
+              </h3>
+              {tierLabel && (
+                <Badge variant="outline" className="text-slate-400 border-slate-500/50 text-[10px] shrink-0">
+                  {tierLabel}
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-slate-300 line-clamp-2 mb-2">
               {track.description}
             </p>
@@ -224,20 +242,22 @@ export default function CurriculumHubPage() {
         // Load tracks from API
         const tracksData = await curriculumClient.getTracks();
 
-        // Transform API data to match component format
+        // Transform API data to match component format (all copy from API)
         const formattedTracks: CurriculumTrack[] = tracksData.map((track: any) => ({
           id: track.id || track.code,
-          slug: track.code || track.slug,
-          title: track.name || track.title,
+          slug: (track.slug || track.code || '').toLowerCase(),
+          title: track.title || track.name || track.code || 'Track',
           description: track.description || '',
           thumbnail_url: track.thumbnail_url || '',
-          order_number: track.order || track.order_number || 0,
-          levels_count: track.levels_count || 4,
-          total_duration_hours: track.total_duration_hours || 40,
+          order_number: track.order_number ?? track.order ?? 0,
+          levels_count: track.levels_count ?? track.module_count ?? 4,
+          total_duration_hours: track.total_duration_hours ?? (track.estimated_duration_weeks ? track.estimated_duration_weeks * 10 : 40),
+          level: track.level,
+          tier: track.tier,
           user_enrollment: {
-            enrolled: track.is_enrolled || false,
-            current_level: track.current_level || 'beginner',
-            progress_percent: track.progress_percentage || track.progress_percent || 0
+            enrolled: track.user_enrollment?.enrolled ?? track.is_enrolled ?? !!track.user_progress,
+            current_level: track.user_enrollment?.current_level ?? track.current_level ?? track.user_progress?.phase,
+            progress_percent: track.user_enrollment?.progress_percent ?? track.progress_percentage ?? track.user_progress?.completion_percentage ?? 0
           }
         }));
 
@@ -386,40 +406,59 @@ export default function CurriculumHubPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-        {/* Intermediate Level Tracks — spec-aligned intro */}
-        <Card className="p-6 bg-gradient-to-br from-indigo-500/10 via-slate-900/50 to-purple-500/10 border border-indigo-500/20">
-          <div className="flex items-center gap-2 mb-3">
-            <BookOpen className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-bold text-white">Intermediate Level Tracks</h2>
-            <Badge className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs">
-              First pathway after Foundations
-            </Badge>
-          </div>
-          <p className="text-sm text-slate-300 mb-2">
-            {BEGINNER_TRACKS_OVERVIEW.firstPathwayAfterFoundations}{' '}
-            {BEGINNER_TRACKS_OVERVIEW.movement}{' '}
-            {BEGINNER_TRACKS_OVERVIEW.introduces}{' '}
-            {BEGINNER_TRACKS_OVERVIEW.designPrinciples}
-          </p>
-          <p className="text-slate-400 text-xs mb-3">
-            {BEGINNER_TRACKS_OVERVIEW.purpose}
-          </p>
-          <blockquote className="border-l-2 border-indigo-500/50 pl-4 py-1 mb-4 text-indigo-200 font-medium text-sm">
-            &ldquo;{BEGINNER_TRACKS_OVERVIEW.tagline}&rdquo;
-          </blockquote>
-          <p className="text-xs text-slate-400 mb-3 font-medium">Five Beginner categories:</p>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs text-slate-300 mb-4">
-            {BEGINNER_TRACK_CATEGORIES.map((cat) => (
-              <li key={cat.key} className="flex gap-2">
-                <span className="text-indigo-400 shrink-0">•</span>
-                <span><strong className="text-slate-200">{cat.name}</strong> — {cat.description}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-slate-500">
-            Platform outcomes: {BEGINNER_TRACK_PLATFORM_OUTCOMES.join(' ')}
-          </p>
-        </Card>
+        {/* Learning paths intro — data-driven: one line + tier from first track if available */}
+        {tracks.length > 0 && (
+          <Card className="p-4 bg-gradient-to-br from-indigo-500/10 via-slate-900/50 to-purple-500/10 border border-indigo-500/20">
+            <div className="flex flex-wrap items-center gap-2">
+              <BookOpen className="w-5 h-5 text-indigo-400 shrink-0" />
+              <h2 className="text-lg font-bold text-white">
+                {tracks.some((t) => t.tier != null && t.tier === 3)
+                  ? 'Intermediate Level Tracks'
+                  : tracks.some((t) => t.tier != null && t.tier === 2)
+                    ? 'Beginner Level Tracks'
+                    : 'Learning Tracks'}
+              </h2>
+              {tracks[0]?.tier != null && TIER_LABELS[tracks[0].tier] && (
+                <Badge className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs">
+                  {TIER_LABELS[tracks[0].tier]}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-slate-300 mt-2">
+              Choose a track below to start your learning path. Progress is saved as you go.
+            </p>
+          </Card>
+        )}
+
+        {/* Empty state: no tracks (student has track but no curriculum linked, or no modules) */}
+        {tracks.length === 0 && (
+          <Card className="p-6 border-amber-500/20 bg-amber-500/5">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-amber-500/20 p-2 shrink-0">
+                <BookOpen className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white mb-1">No learning tracks available yet</h2>
+                <p className="text-sm text-slate-300 mb-3">
+                  The curriculum hub shows tracks that are linked to your program. Right now there are none visible — either no curriculum tracks are linked to your assigned track, or your track has no modules yet.
+                </p>
+                {user?.track_key ? (
+                  <div className="rounded-lg bg-slate-800/80 border border-slate-600/50 px-3 py-2 mb-3">
+                    <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">Your assigned track (for directors)</p>
+                    <p className="text-sm font-mono font-semibold text-amber-300">{user.track_key}</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Directors: add modules to this track in <strong>Dashboard → Director → Modules</strong> (filter by track &quot;{user.track_key}&quot;). Ensure a curriculum track is linked to the same program track in <strong>Director → Tracks</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    You don’t have an assigned track yet. Complete profiling or ask your program director to assign you to a track; then curriculum can be linked to it.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Active Tracks */}
         {enrolledTracks.length > 0 && (
@@ -444,26 +483,28 @@ export default function CurriculumHubPage() {
           </div>
         )}
 
-        {/* Recommended Track */}
-        {recommendedTrack && !enrolledTracks.find(t => t.slug === recommendedTrack) && (
-          <div>
-            <Card className="p-6 bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20">
-              <div className="flex items-center gap-2 mb-3">
-                <Star className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Recommended for You</h3>
-              </div>
-              <p className="text-sm text-slate-300 mb-3">
-                Based on your profile, we recommend starting with the Defender Track to build strong foundational security skills.
-              </p>
-              {(() => {
-                const recommendedTrackData = tracks.find(t => t.slug === recommendedTrack);
-                return recommendedTrackData ? (
-                  <TrackCard track={recommendedTrackData} isRecommended />
-                ) : null;
-              })()}
-            </Card>
-          </div>
-        )}
+        {/* Recommended Track — copy from API (track title + description) */}
+        {recommendedTrack && !enrolledTracks.find(t => t.slug === recommendedTrack) && (() => {
+          const recommendedTrackData = tracks.find(t => t.slug === recommendedTrack);
+          if (!recommendedTrackData) return null;
+          return (
+            <div>
+              <Card className="p-6 bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <Star className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">Recommended for You</h3>
+                </div>
+                <p className="text-sm text-slate-300 mb-3">
+                  Based on your profile, we recommend starting with <strong className="text-slate-200">{recommendedTrackData.title}</strong>
+                  {recommendedTrackData.description
+                    ? ` — ${recommendedTrackData.description.slice(0, 120)}${recommendedTrackData.description.length > 120 ? '…' : ''}`
+                    : '.'}
+                </p>
+                <TrackCard track={recommendedTrackData} isRecommended />
+              </Card>
+            </div>
+          );
+        })()}
 
         {/* All Available Tracks */}
         {availableTracks.length > 0 && (

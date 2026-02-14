@@ -28,7 +28,6 @@ class ProfilerSession(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='profiler_sessions',
-        to_field='uuid_id',
         db_index=True
     )
     status = models.CharField(

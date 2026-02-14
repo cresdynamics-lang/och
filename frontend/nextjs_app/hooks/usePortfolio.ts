@@ -38,7 +38,9 @@ interface PortfolioHealthMetrics {
   pendingReviews: number;
   averageScore: number;
   healthScore: number;
-  topSkills: string[];
+  topSkills: Array<{ skill: string; score: number; count: number }> | string[];
+  readinessScore?: number;
+  readinessTrend?: number;
 }
 
 interface PortfolioResponse {

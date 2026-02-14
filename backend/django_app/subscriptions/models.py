@@ -124,7 +124,7 @@ class UserSubscription(models.Model):
         User,
         on_delete=models.CASCADE,
         related_name='subscription',
-        to_field='uuid_id',
+        to_field='id',
         db_column='user_id',
         db_index=True
     )

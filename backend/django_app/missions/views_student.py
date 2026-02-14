@@ -170,43 +170,80 @@ def list_student_missions(request):
     recommended = request.query_params.get('recommended', 'false').lower() == 'true'
     urgent = request.query_params.get('urgent', 'false').lower() == 'true'
 
-    # Base queryset - only active missions
-    missions = Mission.objects.filter(is_active=True)
+    # --- Student context: cohorts and track ---
+    try:
+        enrollments = Enrollment.objects.filter(user=user, status='active').select_related('cohort', 'cohort__track')
+        cohort_ids = list(enrollments.values_list('cohort_id', flat=True))
+        enrollment = enrollments.first()
+        student_track_raw = getattr(user, 'track_key', None) or (enrollment.track_key if enrollment and getattr(enrollment, 'track_key', None) else None)
+    except Exception:
+        cohort_ids = []
+        enrollment = None
+        student_track_raw = None
 
-    # Apply profiler-based difficulty filtering if no explicit filter
-    if difficulty_filter == 'all':
-        try:
-            from missions.services import get_max_mission_difficulty_for_user
-            max_difficulty = get_max_mission_difficulty_for_user(user)
-            missions = missions.filter(difficulty__lte=max_difficulty)
-            logger.debug(f"Filtered missions by profiler difficulty for user {user.id}: max_difficulty={max_difficulty}")
-        except Exception as e:
-            logger.warning(f"Failed to apply profiler difficulty filter for user {user.id}: {e}", exc_info=True)
-            # Fallback: show beginner missions only
-            missions = missions.filter(difficulty=1)
+    # Normalize student track to mission track (defender, offensive, grc, innovation, leadership)
+    def normalize_track(key):
+        if not key:
+            return None
+        k = (key or '').strip().lower()
+        if k in ('cyber_defense', 'defensive-security', 'defender'):
+            return 'defender'
+        if k in ('offensive', 'grc', 'innovation', 'leadership'):
+            return k
+        return k if k in ('defender', 'offensive', 'grc', 'innovation', 'leadership') else None
+
+    student_track = normalize_track(student_track_raw)
+
+    # Mission IDs assigned to the student's cohort(s)
+    from .models import MissionAssignment
+    assigned_mission_ids = set(
+        MissionAssignment.objects.filter(
+            assignment_type='cohort',
+            cohort_id__in=cohort_ids
+        ).values_list('mission_id', flat=True)
+    ) if cohort_ids else set()
+
+    # Base queryset: missions that are (a) assigned to student's cohort(s) OR (b) in student's track OR (c) no track set (show to all)
+    missions = Mission.objects.filter(is_active=True)
+    if assigned_mission_ids or student_track:
+        q = Q()
+        if assigned_mission_ids:
+            q |= Q(id__in=assigned_mission_ids)
+        if student_track:
+            q |= Q(track=student_track)
+        # Missions with no track set appear for everyone (e.g. unassigned-to-track missions from director)
+        q |= Q(track__isnull=True)
+        missions = missions.filter(q).distinct()
     else:
-        # Apply explicit difficulty filter
-        missions = missions.filter(difficulty=difficulty_filter)
+        # No cohort and no track: show all active missions (lock by track later)
+        pass
+
+    # Optional explicit difficulty filter (do not restrict by profiler when showing by cohort/track)
+    if difficulty_filter != 'all':
+        try:
+            missions = missions.filter(difficulty=int(difficulty_filter))
+        except (ValueError, TypeError):
+            pass
 
     if track_filter != 'all':
         missions = missions.filter(track__isnull=False, track=track_filter)
 
     if tier_filter != 'all':
         missions = missions.filter(tier__isnull=False, tier=tier_filter)
-    
+
     if search:
         missions = missions.filter(
             Q(title__icontains=search) |
             Q(code__icontains=search) |
             Q(description__icontains=search)
         )
-    
+
     # Get user submissions to add status
     user_submissions = {
         str(sub.assignment.mission_id): sub
         for sub in MissionSubmission.objects.filter(student=user).select_related('assignment__mission')
     }
-    
+
     # Filter by status if needed (before pagination)
     if status_filter != 'all':
         mission_ids_by_status = []
@@ -216,46 +253,92 @@ def list_student_missions(request):
             if mission_status == status_filter:
                 mission_ids_by_status.append(mission.id)
         missions = missions.filter(id__in=mission_ids_by_status)
-    
+
     # Pagination
     page = int(request.query_params.get('page', 1))
     page_size = int(request.query_params.get('page_size', 20))
     offset = (page - 1) * page_size
-    
+
     total_count = missions.count()
     missions_page = missions[offset:offset + page_size]
-    
-    # Get student's track (simplified)
-    from programs.models import Enrollment
-    try:
-        enrollment = Enrollment.objects.filter(user=user, status='active').select_related('cohort').first()
-        student_track = enrollment.cohort.track_key if enrollment and hasattr(enrollment.cohort, 'track_key') else None
-    except Exception:
-        student_track = None
-    
-    # Build response with submission status
+
+    # Curriculum progress per track (for tier-based locking and points)
+    from curriculum.models import CurriculumTrack, UserTrackProgress
+    track_progress_by_slug = {}
+    all_user_progress = []
+    if user:
+        # Fetch ALL UserTrackProgress for this user so points are consistent with sidebar
+        all_user_progress = list(
+            UserTrackProgress.objects.filter(user=user).select_related('track')
+        )
+        # Build lookup by slug for tier locking (mission.track matches CurriculumTrack.slug or .code)
+        track_slugs = set()
+        for m in missions_page:
+            if m.track:
+                track_slugs.add(m.track)
+        if student_track:
+            track_slugs.add(student_track)
+        if track_slugs:
+            curriculum_tracks = CurriculumTrack.objects.filter(
+                Q(slug__in=track_slugs) | Q(code__in=track_slugs)
+            )
+            for ct in curriculum_tracks:
+                prog = next((p for p in all_user_progress if p.track_id == ct.id), None)
+                if prog:
+                    track_progress_by_slug[ct.slug] = prog
+                    track_progress_by_slug[ct.code] = prog
+
+    track_names = {
+        'defender': 'Defender',
+        'offensive': 'Offensive',
+        'grc': 'GRC',
+        'innovation': 'Innovation',
+        'leadership': 'Leadership',
+    }
+
+    # Build response with submission status and tier-based lock
     results = []
     for mission in missions_page:
         submission = user_submissions.get(str(mission.id))
-        
-        # Simplified locking: just lock if track doesn't match
+
         is_locked = False
         lock_reason = None
-        
-        if student_track and mission.track_id and mission.track_id != student_track:
+
+        # Lock if mission is for a different track (when student has a track and mission has a track)
+        if student_track and mission.track and mission.track != student_track:
             is_locked = True
-            track_names = {
-                'defender': 'Defender',
-                'offensive': 'Offensive',
-                'grc': 'GRC',
-                'innovation': 'Innovation',
-                'leadership': 'Leadership',
-            }
-            lock_reason = f"This mission is for {track_names.get(mission.track_id, mission.track_id)} track."
-        
+            lock_reason = f"This mission is for the {track_names.get(mission.track, mission.track)} track."
+        # Lock by points: mission requires_points and user hasn't attained points_required (from primary track progress)
+        elif getattr(mission, 'requires_points', False) and mission.points_required is not None and not is_locked:
+            # Use primary track points (mission's track or student's track) — matches sidebar Track Progress
+            track_for_points = mission.track or student_track
+            prog = track_progress_by_slug.get(track_for_points) if track_for_points else None
+            user_points = getattr(prog, 'total_points', 0) or 0 if prog else 0
+            if user_points < mission.points_required:
+                is_locked = True
+                lock_reason = f"Earn {mission.points_required - user_points} more points (from curriculum progress) to unlock. You have {user_points}/{mission.points_required}."
+        # Otherwise lock by tier: intermediate -> need beginner done; advanced -> need intermediate; mastery -> need advanced
+        elif mission.tier and not is_locked:
+            # Use mission track for progress; if mission has no track, use student's track so level locking still applies
+            prog = track_progress_by_slug.get(mission.track) if mission.track else (track_progress_by_slug.get(student_track) if student_track else None)
+            if mission.tier == 'intermediate':
+                if not (prog and getattr(prog, 'tier2_completion_requirements_met', False)):
+                    is_locked = True
+                    lock_reason = f"Complete Beginner level in {track_names.get(mission.track, mission.track or 'this')} track to unlock."
+            elif mission.tier == 'advanced':
+                if not (prog and getattr(prog, 'tier3_completion_requirements_met', False)):
+                    is_locked = True
+                    lock_reason = f"Complete Intermediate level in {track_names.get(mission.track, mission.track or 'this')} track to unlock."
+            elif mission.tier in ('mastery', 'capstone'):
+                if not (prog and (getattr(prog, 'tier4_completion_requirements_met', False) or getattr(prog, 'tier5_completion_requirements_met', False))):
+                    is_locked = True
+                    lock_reason = f"Complete Advanced level in {track_names.get(mission.track, mission.track or 'this')} track to unlock."
+
+        # Expose only human-readable code for display; do not expose UUID as "code" on student-facing cards
+        display_code = mission.code if (mission.code and mission.code != str(mission.id)) else None
         mission_data = {
             'id': str(mission.id),
-            'code': str(mission.id),
+            'code': display_code,
             'title': mission.title,
             'description': mission.description,
             'difficulty': mission.difficulty,
@@ -400,6 +483,14 @@ def get_mission_detail(request, mission_id):
         'track': mission.track,
         'tier': mission.tier,
         'requirements': {},
+        'submission_requirements': getattr(mission, 'submission_requirements', None) or {
+            'notes_required': True,
+            'notes_min_chars': 20,
+            'files_required': False,
+            'github_required': False,
+            'notebook_required': False,
+            'video_required': False,
+        },
         'status': submission.status,
         'submission': {
             'id': str(submission.id),
@@ -436,7 +527,7 @@ def submit_mission_for_ai(request, mission_id):
     """
     user = request.user
 
-    # Check entitlement (gracefully handle missing subscription system)
+    # Check entitlement
     tier = 'professional'  # Default to full access if subscription system not set up
     try:
         tier = get_user_tier(user)
@@ -477,6 +568,39 @@ def submit_mission_for_ai(request, mission_id):
     except Mission.DoesNotExist:
         return Response({'error': 'Mission not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Validate submission requirements (configurable per mission by director/mentor)
+    reqs = getattr(mission, 'submission_requirements', None) or {}
+    notes_required = reqs.get('notes_required', True)
+    notes_min_chars = int(reqs.get('notes_min_chars', 20))
+    files_required = reqs.get('files_required', False)
+    github_required = reqs.get('github_required', False)
+    notebook_required = reqs.get('notebook_required', False)
+    video_required = reqs.get('video_required', False)
+
+    notes = (request.data.get('notes') or '').strip()
+    files = list(request.FILES.getlist('files', []))
+    github_url = (request.data.get('github_url') or '').strip()
+    notebook_url = (request.data.get('notebook_url') or '').strip()
+    video_url = (request.data.get('video_url') or '').strip()
+
+    missing = []
+    if notes_required and len(notes) < notes_min_chars:
+        missing.append(f'Notes (at least {notes_min_chars} characters)')
+    if files_required and len(files) == 0:
+        missing.append('Upload at least one file')
+    if github_required and not github_url:
+        missing.append('GitHub Repository URL')
+    if notebook_required and not notebook_url:
+        missing.append('Notebook URL')
+    if video_required and not video_url:
+        missing.append('Video Demo URL')
+
+    if missing:
+        return Response(
+            {'error': 'Missing required submission items: ' + ', '.join(missing)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     # Import MissionAssignment
     from .models import MissionAssignment
 
@@ -506,8 +630,7 @@ def submit_mission_for_ai(request, mission_id):
     if 'notes' in request.data:
         submission.content = request.data['notes']
     
-    # Handle file uploads
-    files = request.FILES.getlist('files', [])
+    # Handle file uploads (files already retrieved for validation)
     
     for file in files:
         try:

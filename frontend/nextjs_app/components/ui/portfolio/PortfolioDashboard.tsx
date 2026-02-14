@@ -82,9 +82,11 @@ export function PortfolioDashboard() {
   const canRequestReview = isProfessional && entitlements?.mentorAccess === true;
   const maxItemsView = isProfessional ? Infinity : (isStarterEnhanced ? Infinity : 5);
 
-  // TalentScope Metrics
+  // TalentScope Metrics (from portfolio health API / ReadinessScore)
   const healthScore = healthMetrics?.healthScore ? Math.round(healthMetrics.healthScore * 10) : 0;
-  const readinessScore = 742; // TODO: Implement TalentScope API
+  const readinessScore = healthMetrics?.readinessScore ?? 0;
+  const readinessTrend = healthMetrics?.readinessTrend ?? 0;
+  const readinessTrendStr = readinessTrend > 0 ? `+${Math.round(readinessTrend)}` : readinessTrend < 0 ? `${Math.round(readinessTrend)}` : null;
 
   const [statusFilter, setStatusFilter] = useState<PortfolioItemStatus | 'all' | 'pending'>('all');
   const [typeFilter, setTypeFilter] = useState<PortfolioItemType | 'all'>('all');
@@ -166,7 +168,7 @@ export function PortfolioDashboard() {
           {/* METRICS OVERVIEW */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: 'Readiness Score', value: readinessScore, trend: '+14', icon: TrendingUp, color: 'och-mint', bgGradient: 'from-emerald-500/10 to-emerald-500/5' },
+              { label: 'Readiness Score', value: readinessScore, trend: readinessTrendStr, icon: TrendingUp, color: 'och-mint', bgGradient: 'from-emerald-500/10 to-emerald-500/5' },
               { label: 'Portfolio Health', value: `${healthScore}%`, icon: Shield, color: 'och-defender', bgGradient: 'from-red-500/10 to-red-500/5' },
               { label: 'Verified Items', value: approvedItems.length, icon: CheckCircle, color: 'och-gold', bgGradient: 'from-och-gold/10 to-och-gold/5' },
             ].map((stat, i) => (

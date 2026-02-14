@@ -159,7 +159,7 @@ export default function MissionDetailPage() {
                   Assigned to cohorts
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {mission.assigned_cohorts.map((c) => (
+                  {[...new Map(mission.assigned_cohorts.map((c) => [c.cohort_id, c])).values()].map((c) => (
                     <Link
                       key={c.cohort_id}
                       href={`/dashboard/director/cohorts/${c.cohort_id}`}

@@ -8,6 +8,15 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
 import { apiGateway } from '@/services/apiGateway'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Loader2, Trash2 } from 'lucide-react'
 
 interface CurriculumTrack {
   id: string
@@ -27,6 +36,10 @@ export default function DirectorTracksPage() {
   const [tracks, setTracks] = useState<CurriculumTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false)
+  const [selectedTrack, setSelectedTrack] = useState<CurriculumTrack | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const fetchTracks = async () => {
     try {
@@ -45,6 +58,38 @@ export default function DirectorTracksPage() {
   useEffect(() => {
     fetchTracks()
   }, [])
+
+  const openDetails = (track: CurriculumTrack) => {
+    setSelectedTrack(track)
+    setDeleteError('')
+    setDetailsModalOpen(true)
+  }
+
+  const closeDetails = () => {
+    setDetailsModalOpen(false)
+    setSelectedTrack(null)
+    setDeleteError('')
+  }
+
+  const handleDeleteTrack = async () => {
+    if (!selectedTrack) return
+    const confirmed = window.confirm(
+      `Permanently delete the track "${selectedTrack.title || selectedTrack.name}" and all modules linked to it? This cannot be undone.`
+    )
+    if (!confirmed) return
+
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await apiGateway.delete(`/curriculum/tracks/${selectedTrack.slug}/`)
+      closeDetails()
+      await fetchTracks()
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete track. It may have linked progress or enrollments.')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <RouteGuard>
@@ -91,9 +136,9 @@ export default function DirectorTracksPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 shrink-0">
-                      <Link href={`/dashboard/director/tracks/${track.slug}`}>
-                        <Button variant="outline" size="sm">View Details</Button>
-                      </Link>
+                      <Button variant="outline" size="sm" onClick={() => openDetails(track)}>
+                        View Details
+                      </Button>
                       <Link href={`/dashboard/director/tracks/${track.slug}/edit`}>
                         <Button variant="outline" size="sm">Edit</Button>
                       </Link>
@@ -128,6 +173,79 @@ export default function DirectorTracksPage() {
               </div>
             </Card>
           )}
+
+          {/* View track details modal with delete */}
+          <Dialog open={detailsModalOpen} onOpenChange={(open) => !open && closeDetails()}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="text-white">
+                  {selectedTrack ? (selectedTrack.title || selectedTrack.name) : 'Track details'}
+                </DialogTitle>
+                <DialogDescription>
+                  Track information and actions. Deleting removes this track and all its modules permanently.
+                </DialogDescription>
+              </DialogHeader>
+              {selectedTrack && (
+                <div className="space-y-4 py-2">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-och-steel block mb-0.5">Code</span>
+                      <code className="px-2 py-1 bg-och-midnight/50 rounded text-och-defender font-mono text-xs">
+                        {selectedTrack.code}
+                      </code>
+                    </div>
+                    <div>
+                      <span className="text-och-steel block mb-0.5">Slug</span>
+                      <code className="px-2 py-1 bg-och-midnight/50 rounded text-och-mint font-mono text-xs">
+                        {selectedTrack.slug}
+                      </code>
+                    </div>
+                    <div>
+                      <span className="text-och-steel block mb-0.5">Level</span>
+                      <Badge className="capitalize">{selectedTrack.level}</Badge>
+                    </div>
+                    <div>
+                      <span className="text-och-steel block mb-0.5">Tier</span>
+                      <span className="text-white">Tier {selectedTrack.tier}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-och-steel block mb-0.5">Description</span>
+                      <p className="text-white text-sm">{selectedTrack.description || '—'}</p>
+                    </div>
+                  </div>
+                  {deleteError && (
+                    <p className="text-sm text-red-400">{deleteError}</p>
+                  )}
+                </div>
+              )}
+              <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  onClick={handleDeleteTrack}
+                  disabled={deleting || !selectedTrack}
+                >
+                  {deleting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  Delete track and all modules
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={closeDetails}>
+                    Close
+                  </Button>
+                  {selectedTrack && (
+                    <Link href={`/dashboard/director/tracks/${selectedTrack.slug}/edit`}>
+                      <Button variant="defender">Edit track</Button>
+                    </Link>
+                  )}
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </DirectorLayout>
     </RouteGuard>

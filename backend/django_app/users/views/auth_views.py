@@ -880,6 +880,8 @@ class MeView(APIView):
             # Include profiling and foundations status for frontend redirect logic
             'profiling_complete': user.profiling_complete,
             'foundations_complete': user.foundations_complete,
+            # Student's assigned track (from profiler or program); used by curriculum hub to show "your track" and by backend to filter tracks
+            'track_key': getattr(user, 'track_key', None) or user_data.get('track_key'),
         }
         
         # Format consent scopes as list of strings (e.g., ["share_with_mentor","public_portfolio:false"])

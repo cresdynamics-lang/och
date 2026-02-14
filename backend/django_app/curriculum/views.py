@@ -66,10 +66,11 @@ def _is_uuid(value):
         return False
 
 
-# Common slug/code aliases so "defender" and "defensive-security" resolve to Defender track
+# Common slug/code aliases so "defender", "cyber_defense", "defensive-security" resolve to Defender track
 CURRICULUM_TRACK_ALIASES = {
-    'defender': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE', 'SOCDEF')},
-    'defensive-security': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE')},
+    'defender': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'DEFENSIVE', 'SOCDEFENSE', 'SOCDEF')},
+    'cyber_defense': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('DEFENSIVE', 'defender', 'CYBERDEF', 'DEFENDER', 'SOCDEFENSE', 'SOCDEF')},
+    'defensive-security': {'slugs': ('defender', 'cyberdef', 'defensive-security', 'socdefense'), 'codes': ('defender', 'CYBERDEF', 'DEFENDER', 'DEFENSIVE', 'SOCDEFENSE')},
     'offensive': {'slugs': ('offensive',), 'codes': ('OFFENSIVE', 'offensive')},
     'grc': {'slugs': ('grc',), 'codes': ('GRC', 'grc')},
     'innovation': {'slugs': ('innovation',), 'codes': ('INNOVATION', 'innovation')},
@@ -136,7 +137,7 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
 
         # Filter by user's enrolled track for authenticated users
         if self.action == 'list' and self.request.user.is_authenticated:
-            user_track_key = self.request.user.track_key
+            user_track_key = (self.request.user.track_key or '').strip()
 
             if user_track_key:
                 # Get the program track for this user
@@ -153,8 +154,16 @@ class CurriculumTrackViewSet(viewsets.ModelViewSet):
                         Q(program_track_id=program_track.id) | Q(tier=6)
                     )
                 else:
-                    # No matching program track found, show tier 2 beginner tracks + tier 6 cross-tracks
-                    queryset = queryset.filter(Q(tier=2) | Q(tier=6))
+                    # No program track found: match curriculum by slug/code alias (e.g. cyber_defense → defender)
+                    key_normalized = user_track_key.lower()
+                    aliases = CURRICULUM_TRACK_ALIASES.get(key_normalized)
+                    if aliases:
+                        queryset = queryset.filter(
+                            Q(slug__in=aliases['slugs']) | Q(code__in=aliases['codes']) | Q(tier=6)
+                        )
+                    else:
+                        # No alias for this track_key: show tier 2 beginner + tier 6 cross-tracks
+                        queryset = queryset.filter(Q(tier=2) | Q(tier=6))
             # If no track_key set, show all tracks (user hasn't been assigned a track yet)
 
         # Order by order_number and code for consistent API responses
@@ -541,6 +550,8 @@ class LessonViewSet(viewsets.ModelViewSet):
             
             # Update module progress
             self._update_module_progress(user, lesson.module)
+            # Update track progress so sidebar and dashboards stay in sync with learning
+            self._update_track_progress_after_lesson(user, lesson.module)
         
         progress.save()
         
@@ -571,6 +582,40 @@ class LessonViewSet(viewsets.ModelViewSet):
         module_progress.lessons_completed = completed_lessons
         module_progress.completion_percentage = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0
         module_progress.save()
+
+    def _update_track_progress_after_lesson(self, user, module):
+        """Create or update UserTrackProgress when a lesson is completed so sidebar/dashboard stay in sync."""
+        if not module:
+            return
+        track = getattr(module, 'track', None)
+        if not track and getattr(module, 'track_key', None):
+            track = CurriculumTrack.objects.filter(
+                Q(slug=module.track_key) | Q(code=module.track_key)
+            ).first()
+        if not track:
+            return
+        track_progress, _ = UserTrackProgress.objects.get_or_create(
+            user=user,
+            track=track,
+            defaults={'current_module': track.modules.filter(is_active=True).order_by('order_index').first()}
+        )
+        track_modules = track.modules.filter(is_active=True)
+        if not track_modules.exists():
+            track_modules = CurriculumModule.objects.filter(track_key__in=[track.code, track.slug], is_active=True)
+        track_module_ids = list(track_modules.values_list('id', flat=True))
+        completed_lessons = UserLessonProgress.objects.filter(
+            user=user,
+            status='completed',
+            lesson__module_id__in=track_module_ids
+        ).count() if track_module_ids else 0
+        total_lessons = sum(
+            m.lessons.filter(is_required=True).count()
+            for m in track_modules
+        )
+        track_progress.lessons_completed = completed_lessons
+        track_progress.completion_percentage = (completed_lessons / total_lessons * 100) if total_lessons > 0 else 0
+        track_progress.total_points = (track_progress.total_points or 0) + 10
+        track_progress.save(update_fields=['lessons_completed', 'completion_percentage', 'total_points', 'last_activity_at'])
 
 
 class MissionProgressView(APIView):

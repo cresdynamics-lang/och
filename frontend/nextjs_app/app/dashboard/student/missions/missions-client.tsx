@@ -137,9 +137,9 @@ export default function MissionsClient() {
       setMissions(response.results || [])
       setPagination(prev => ({
         ...prev,
-        total: response.count || 0,
-        hasNext: !!response.next,
-        hasPrevious: !!response.previous,
+        total: (response as any).total ?? response.count ?? 0,
+        hasNext: !!(response as any).has_next ?? !!response.next,
+        hasPrevious: !!(response as any).has_previous ?? !!response.previous,
       }))
 
     } catch (err: any) {

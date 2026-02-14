@@ -99,8 +99,11 @@ export function useAuth() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const error = new Error(errorData.detail || errorData.error || 'Login failed');
+        const message = errorData.detail || errorData.error || 'Login failed';
+        const error = new Error(message);
         (error as any).data = errorData;
+        (error as any).status = response.status;
+        (error as any).code = errorData.code; // e.g. 'BAD_GATEWAY' for backend 5xx
         throw error;
       }
 

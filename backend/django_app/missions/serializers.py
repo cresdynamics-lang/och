@@ -16,6 +16,8 @@ class MissionSerializer(serializers.ModelSerializer):
             'requires_mentor_review', 'requires_lab_integration', 'estimated_duration_min',
             'skills_tags', 'subtasks', 'is_active', 'created_by', 'created_by_email',
             'created_at', 'updated_at', 'assigned_cohorts',
+            'requires_points', 'points_required',
+            'submission_requirements',
         ]
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 

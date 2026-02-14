@@ -75,6 +75,15 @@ class Mission(models.Model):
     escalation_events = models.JSONField(default=list, blank=True, help_text='Escalation events: [{subtask_id: int, event_type: str, description: str, triggers: [], consequences: {}}]')
     # Environmental cues for Mastery missions
     environmental_cues = models.JSONField(default=list, blank=True, help_text='Environmental cues: [{subtask_id: int, cue_type: str, description: str, location: str, significance: str}]')
+    # Points required to unlock (earned via curriculum progress)
+    requires_points = models.BooleanField(default=False, help_text='If True, mission is locked until user attains points_required')
+    points_required = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(0)], help_text='Minimum points (from progress level) needed to unlock this mission')
+    # Submission requirements (configurable by director/mentor)
+    submission_requirements = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Submission requirements: {notes_required, notes_min_chars, files_required, github_required, notebook_required, video_required}'
+    )
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_missions', db_column='created_by', to_field='uuid_id')
     created_at = models.DateTimeField(auto_now_add=True)

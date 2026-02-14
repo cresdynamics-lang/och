@@ -146,6 +146,7 @@ export default function CurriculumLearnPage() {
             const trackInfo = trackInfoFromKey(module.track_key || '');
             return (moduleDetail.lessons || []).map((l: any) => ({
               ...l,
+              status: l.user_progress?.status ?? l.status ?? 'not_started',
               trackSlug: trackInfo.slug,
               trackName: trackInfo.name,
               moduleName: module.title,
@@ -216,12 +217,30 @@ export default function CurriculumLearnPage() {
     }
   };
 
-  const goToNextVideo = () => {
+  const goToNextVideo = async () => {
     const next = currentVideoIndex + 1;
-    if (next < lessons.length && (next === 0 || lessons[next - 1]?.status === 'completed')) {
-      setCurrentVideoIndex(next);
-      localStorage.setItem(`all_tracks_${currentLevel}_index`, next.toString());
+    if (next >= lessons.length) return;
+    const prevCompleted = next === 0 || lessons[next - 1]?.status === 'completed';
+    if (!prevCompleted) return;
+
+    const currentLesson = lessons[currentVideoIndex];
+    if (currentLesson && currentLesson.status !== 'completed') {
+      setLessons(prev =>
+        prev.map((l, i) => i === currentVideoIndex ? { ...l, status: 'completed' as const } : l)
+      );
+      try {
+        await curriculumClient.updateLessonProgress(currentLesson.id, {
+          status: 'completed',
+          progress_percentage: 100,
+          time_spent_minutes: currentLesson.duration_minutes || 5,
+        });
+      } catch (err) {
+        console.error('Failed to save progress on Next:', err);
+      }
     }
+
+    setCurrentVideoIndex(next);
+    localStorage.setItem(`all_tracks_${currentLevel}_index`, next.toString());
   };
 
   const isNextUnlocked = () => {
@@ -373,6 +392,69 @@ export default function CurriculumLearnPage() {
           <div className="lg:col-span-1 order-2 lg:order-1">
             <Card className="p-4 bg-slate-900/50 border-slate-700 sticky top-4">
               <h3 className="text-lg font-semibold text-white mb-4">Learning Path</h3>
+              {/* Level completion summary */}
+              {!loading && lessons.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg bg-slate-800/60 border border-slate-600/40">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Level Status</p>
+                  {currentLevel === 'beginner' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-white">Level 1 (Beginner)</span>
+                        {allCompleted() ? (
+                          <span className="text-xs font-bold text-green-400">100% Done</span>
+                        ) : (
+                          <span className="text-xs text-slate-400">
+                            {Math.round((lessons.filter(l => l.status === 'completed').length / lessons.length) * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500 rounded-full transition-all"
+                          style={{ width: `${allCompleted() ? 100 : (lessons.filter(l => l.status === 'completed').length / lessons.length) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {currentLevel === 'intermediate' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-green-400">Level 1: Done</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-sm text-white font-medium">Level 2 (Intermediate)</span>
+                        <span className="text-xs text-blue-400">Now in Level 2</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="h-full bg-blue-500 rounded-full transition-all"
+                          style={{ width: `${(lessons.filter(l => l.status === 'completed').length / lessons.length) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {currentLevel === 'advanced' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-green-400">Level 1: Done</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-green-400">Level 2: Done</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-sm text-white font-medium">Level 3 (Advanced)</span>
+                        <span className="text-xs text-purple-400">Now in Level 3</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mt-1">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all"
+                          style={{ width: `${(lessons.filter(l => l.status === 'completed').length / lessons.length) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               {loading ? (
                 <div className="space-y-2">
                   {[...Array(4)].map((_, i) => (

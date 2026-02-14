@@ -11,8 +11,9 @@ from django.utils import timezone
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.conf import settings
-from .models import PortfolioItem
+from .models import PortfolioItem, ReadinessScore
 from users.models import User
+from programs.models import Enrollment
 import json
 import uuid
 import os
@@ -314,6 +315,11 @@ def get_portfolio_health(request, user_id):
         for skill, count in top_skills
     ]
     
+    # Readiness score from ReadinessScore model (TalentScope/profiler)
+    readiness = ReadinessScore.objects.filter(user=request.user).order_by('-updated_at').first()
+    readiness_score = readiness.score if readiness else 0
+    readiness_trend = readiness.trend if readiness else 0
+    
     return Response({
         'totalItems': total_items,
         'approvedItems': approved_items,
@@ -322,6 +328,8 @@ def get_portfolio_health(request, user_id):
         'healthScore': round(health_score, 2),
         'averageScore': 0,  # TODO: Calculate from mentor reviews
         'topSkills': top_skills_list,
+        'readinessScore': readiness_score,
+        'readinessTrend': readiness_trend,
     })
 
 
@@ -381,4 +389,100 @@ def upload_portfolio_file(request, user_id):
         'size': uploaded_file.size,
         'type': file_type,
     }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_cohort_peers(request):
+    """
+    GET /api/v1/student/dashboard/portfolio/cohort-peers
+    Get cohort peers for the current user with readiness, portfolio health, and item counts.
+    """
+    user = request.user
+
+    # Get user's cohort IDs from enrollments
+    enrollments = Enrollment.objects.filter(
+        user=user,
+        status__in=['active', 'completed']
+    ).select_related('cohort', 'cohort__track')
+
+    cohort_ids = list(enrollments.values_list('cohort_id', flat=True).distinct())
+    cohort_names = list(
+        enrollments.values_list('cohort__name', flat=True).distinct()
+    )
+    cohort_names = [n for n in cohort_names if n]
+
+    if not cohort_ids:
+        return Response({
+            'peers': [],
+            'cohortName': None,
+            'averageReadiness': 0,
+            'totalOutcomes': 0,
+        })
+
+    # Get peer user IDs in same cohort(s), excluding self
+    peer_user_ids = set(
+        Enrollment.objects.filter(
+            cohort_id__in=cohort_ids,
+            status__in=['active', 'completed']
+        ).exclude(user=user).values_list('user_id', flat=True).distinct()
+    )
+
+    # Build peer data with readiness, portfolio health, items
+    peers_data = []
+    total_readiness = 0
+    total_outcomes = 0
+
+    for peer_user in User.objects.filter(id__in=peer_user_ids).select_related():
+        items = PortfolioItem.objects.filter(user=peer_user)
+        items_count = items.count()
+        approved_count = items.filter(status='approved').count()
+        health = round((approved_count / items_count * 100), 1) if items_count > 0 else 0
+        health_display = round(health / 10, 1)  # 0-10 scale for display
+
+        readiness = ReadinessScore.objects.filter(user=peer_user).order_by('-updated_at').first()
+        readiness_val = readiness.score if readiness else 0
+        total_readiness += readiness_val
+        total_outcomes += items_count
+
+        # Get track from enrollment
+        peer_enrollment = Enrollment.objects.filter(
+            user=peer_user,
+            cohort_id__in=cohort_ids,
+            status__in=['active', 'completed']
+        ).select_related('cohort__track').first()
+        track_key = peer_enrollment.cohort.track.key if peer_enrollment and peer_enrollment.cohort and peer_enrollment.cohort.track else ''
+
+        # Handle: use username or email prefix for public profile link
+        handle = getattr(peer_user, 'username', None) or (peer_user.email.split('@')[0] if peer_user.email else str(peer_user.uuid_id))
+        name = f"{peer_user.first_name or ''} {peer_user.last_name or ''}".strip() or peer_user.email or handle
+
+        # Status based on readiness
+        if readiness_val >= 80:
+            status_key = 'job_ready'
+        elif readiness_val >= 50:
+            status_key = 'emerging'
+        else:
+            status_key = 'building'
+
+        peers_data.append({
+            'id': str(peer_user.uuid_id),
+            'name': name,
+            'handle': handle,
+            'track': track_key,
+            'readiness': readiness_val,
+            'health': health_display,
+            'items': items_count,
+            'status': status_key,
+        })
+
+    peer_count = len(peers_data)
+    avg_readiness = round(total_readiness / peer_count, 0) if peer_count > 0 else 0
+
+    return Response({
+        'peers': peers_data,
+        'cohortName': cohort_names[0] if cohort_names else None,
+        'averageReadiness': int(avg_readiness),
+        'totalOutcomes': total_outcomes,
+    })
 

@@ -148,7 +148,7 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
   
   const theme = trackThemes[trackKey] || trackThemes.defender;
 
-  // Fetch track progress
+  // Fetch track progress from primary track only (track-specific progress)
   useEffect(() => {
     if (!user?.id || !trackKey) {
       setLoadingProgress(false);
@@ -157,22 +157,18 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
 
     const fetchProgress = async () => {
       try {
-        // Fetch progress for the user's recommended track
-        const tracks = await curriculumClient.getTracks();
-        const currentTrack = tracks.find(
-          t => t.code.toLowerCase().includes(trackKey) && t.tier === 2
-        );
-
-        if (currentTrack) {
-          // In a real implementation, this would fetch actual progress
-          // For now, we'll use mock data or query the backend directly
-          const progress = currentTrack.user_progress;
-          if (progress) {
-            setTrackProgress(progress as UserTrackProgress);
-          }
+        const slugForApi = trackKey === 'cyber_defense' ? 'defender' : trackKey;
+        const response = await curriculumClient.getTrackProgress(slugForApi) as { enrolled?: boolean; progress?: UserTrackProgress };
+        if (response?.enrolled && response?.progress) {
+          setTrackProgress(response.progress);
+        } else {
+          setTrackProgress(null);
         }
       } catch (error) {
-        console.error('Failed to fetch track progress:', error);
+        if ((error as { status?: number })?.status !== 404) {
+          console.error('Failed to fetch track progress:', error);
+        }
+        setTrackProgress(null);
       } finally {
         setLoadingProgress(false);
       }
@@ -376,18 +372,18 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
               />
             </div>
 
-            {/* Stats row */}
+            {/* Stats row — primary track only (Track Progress) */}
             <div className="grid grid-cols-3 gap-2 text-center text-[9px] font-bold text-och-steel/70 pt-1">
               <div>
-                <div className="text-white">{trackProgress?.circle_level || 0}</div>
+                <div className="text-white">{trackProgress?.circle_level ?? 0}</div>
                 <div className="text-[8px]">Level</div>
               </div>
               <div>
-                <div className="text-white">{trackProgress?.current_streak_days || 0}d</div>
+                <div className="text-white">{trackProgress?.current_streak_days ?? 0}d</div>
                 <div className="text-[8px]">Streak</div>
               </div>
               <div>
-                <div className="text-white">{trackProgress?.total_points || 0}</div>
+                <div className="text-white">{trackProgress?.total_points ?? 0}</div>
                 <div className="text-[8px]">Points</div>
               </div>
             </div>

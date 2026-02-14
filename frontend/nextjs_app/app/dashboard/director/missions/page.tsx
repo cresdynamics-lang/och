@@ -195,9 +195,9 @@ export default function MissionsPage() {
                       {mission.assigned_cohorts && mission.assigned_cohorts.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 items-center">
                           <span className="text-xs text-och-steel">Assigned to:</span>
-                          {mission.assigned_cohorts.map((c) => (
+                          {mission.assigned_cohorts.map((c, i) => (
                             <Link
-                              key={c.cohort_id}
+                              key={c.cohort_id ? `${c.cohort_id}-${i}` : `cohort-${i}`}
                               href={`/dashboard/director/cohorts/${c.cohort_id}`}
                               className="text-xs px-2 py-0.5 rounded bg-och-defender/20 text-och-defender hover:bg-och-defender/30"
                             >

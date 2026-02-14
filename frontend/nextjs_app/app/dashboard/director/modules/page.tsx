@@ -6,6 +6,7 @@ import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { apiGateway } from '@/services/apiGateway'
+import { Loader2, Trash2 } from 'lucide-react'
 
 // --- Track colors mapping ---
 const TRACK_COLORS: Record<string, string> = {
@@ -75,6 +76,8 @@ export default function ModulesPage() {
   const [expandedModuleId, setExpandedModuleId] = useState<string | null>(null)
   const [moduleLessons, setModuleLessons] = useState<Record<string, Lesson[]>>({})
   const [addLessonToModule, setAddLessonToModule] = useState<CurriculumModule | null>(null)
+  const [deletingModuleId, setDeletingModuleId] = useState<string | null>(null)
+  const [deletingLessonId, setDeletingLessonId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTracks()
@@ -125,6 +128,39 @@ export default function ModulesPage() {
       if (!moduleLessons[module.id]) {
         fetchLessons(module.id)
       }
+    }
+  }
+
+  const handleDeleteModule = async (module: CurriculumModule) => {
+    if (!window.confirm(`Delete module "${module.title}" and all its lessons? This cannot be undone.`)) return
+    setDeletingModuleId(module.id)
+    try {
+      await apiGateway.delete(`/curriculum/modules/${module.id}/`)
+      setExpandedModuleId(prev => (prev === module.id ? null : prev))
+      setModuleLessons(prev => {
+        const next = { ...prev }
+        delete next[module.id]
+        return next
+      })
+      await fetchModules()
+    } catch (error) {
+      console.error('Failed to delete module:', error)
+    } finally {
+      setDeletingModuleId(null)
+    }
+  }
+
+  const handleDeleteLesson = async (moduleId: string, lesson: Lesson) => {
+    if (!window.confirm(`Delete lesson "${lesson.title}"? This cannot be undone.`)) return
+    setDeletingLessonId(lesson.id)
+    try {
+      await apiGateway.delete(`/curriculum/lessons/${lesson.id}/`)
+      await fetchLessons(moduleId)
+      await fetchModules()
+    } catch (error) {
+      console.error('Failed to delete lesson:', error)
+    } finally {
+      setDeletingLessonId(null)
     }
   }
 
@@ -278,6 +314,20 @@ export default function ModulesPage() {
                           >
                             + Lesson
                           </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteModule(module)}
+                            disabled={!!deletingModuleId}
+                            className="text-xs border-red-500/50 text-red-400 hover:border-red-500 hover:bg-red-500/10"
+                            title="Delete module and all lessons"
+                          >
+                            {deletingModuleId === module.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
                           <button
                             onClick={() => toggleExpand(module)}
                             className="text-och-steel hover:text-white transition-colors p-1"
@@ -327,6 +377,20 @@ export default function ModulesPage() {
                                       View
                                     </a>
                                   )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteLesson(module.id, lesson)}
+                                    disabled={!!deletingLessonId}
+                                    className="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 min-w-0 h-7"
+                                    title="Delete lesson"
+                                  >
+                                    {deletingLessonId === lesson.id ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </Button>
                                 </div>
                               ))}
                             </div>

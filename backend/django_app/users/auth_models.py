@@ -23,7 +23,7 @@ class MFAMethod(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_methods', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='mfa_methods')
     method_type = models.CharField(max_length=20, choices=METHOD_TYPES)
     
     # TOTP specific (RFC 6238)
@@ -149,7 +149,7 @@ class UserSession(models.Model):
     User session management with device tracking and refresh token binding.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions', to_field='uuid_id')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
     
     # Device tracking
     device_fingerprint = models.CharField(max_length=255, db_index=True)

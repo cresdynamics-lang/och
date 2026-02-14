@@ -42,6 +42,16 @@ export default function CreateMissionPage() {
     mission_type: 'intermediate',
     requires_mentor_review: false,
     requires_lab_integration: false,
+    requires_points: false,
+    points_required: 0,
+    submission_requirements: {
+      notes_required: true,
+      notes_min_chars: 20,
+      files_required: false,
+      github_required: false,
+      notebook_required: false,
+      video_required: false,
+    },
     estimated_duration_min: 60,
     skills_tags: '',
     track_id: '',
@@ -63,7 +73,9 @@ export default function CreateMissionPage() {
       const payload = {
         ...formData,
         skills_tags: formData.skills_tags.split(',').map(s => s.trim()).filter(Boolean),
-        subtasks: formData.subtasks
+        subtasks: formData.subtasks,
+        points_required: formData.requires_points ? formData.points_required : null,
+        submission_requirements: formData.submission_requirements,
       }
 
       const response = await fetch('http://localhost:8000/api/v1/missions/', {
@@ -313,6 +325,135 @@ export default function CreateMissionPage() {
                   <label htmlFor="lab_integration" className="ml-2 text-sm text-white">
                     Requires Lab Integration
                   </label>
+                </div>
+                <div className="border-t border-och-steel/20 pt-3 mt-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      id="requires_points"
+                      checked={formData.requires_points}
+                      onChange={(e) => setFormData({...formData, requires_points: e.target.checked})}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint focus:ring-2"
+                    />
+                    <label htmlFor="requires_points" className="text-sm text-white">
+                      Requires points to unlock (earned via curriculum progress)
+                    </label>
+                  </div>
+                  {formData.requires_points && (
+                    <div className="ml-6 mt-2">
+                      <label className="block text-sm font-medium text-white mb-1">Points required</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={formData.points_required}
+                        onChange={(e) => setFormData({...formData, points_required: Math.max(0, parseInt(e.target.value) || 0)})}
+                        className="w-32 px-3 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white focus:border-och-mint focus:outline-none"
+                        placeholder="e.g. 100"
+                      />
+                      <p className="text-xs text-och-steel mt-1">Students need this many points (from progress level) to unlock this mission</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Submission requirements - which fields students must fill */}
+              <div className="border-t border-och-steel/20 pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Submission Requirements</h3>
+                <p className="text-och-steel text-xs mb-4">Specify which submission fields students must complete before submitting.</p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white">Notes & Reflection required</label>
+                    <input
+                      type="checkbox"
+                      checked={formData.submission_requirements.notes_required}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        submission_requirements: {
+                          ...formData.submission_requirements,
+                          notes_required: e.target.checked,
+                        },
+                      })}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint"
+                    />
+                  </div>
+                  {formData.submission_requirements.notes_required && (
+                    <div className="ml-6">
+                      <label className="text-xs text-och-steel">Minimum characters</label>
+                      <input
+                        type="number"
+                        min={10}
+                        value={formData.submission_requirements.notes_min_chars}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          submission_requirements: {
+                            ...formData.submission_requirements,
+                            notes_min_chars: Math.max(10, parseInt(e.target.value) || 20),
+                          },
+                        })}
+                        className="ml-2 w-20 px-2 py-1 bg-och-midnight border border-och-steel/30 rounded text-white text-sm"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white">Upload Files required</label>
+                    <input
+                      type="checkbox"
+                      checked={formData.submission_requirements.files_required}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        submission_requirements: {
+                          ...formData.submission_requirements,
+                          files_required: e.target.checked,
+                        },
+                      })}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white">GitHub URL required</label>
+                    <input
+                      type="checkbox"
+                      checked={formData.submission_requirements.github_required}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        submission_requirements: {
+                          ...formData.submission_requirements,
+                          github_required: e.target.checked,
+                        },
+                      })}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white">Notebook URL required</label>
+                    <input
+                      type="checkbox"
+                      checked={formData.submission_requirements.notebook_required}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        submission_requirements: {
+                          ...formData.submission_requirements,
+                          notebook_required: e.target.checked,
+                        },
+                      })}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-white">Video Demo URL required</label>
+                    <input
+                      type="checkbox"
+                      checked={formData.submission_requirements.video_required}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        submission_requirements: {
+                          ...formData.submission_requirements,
+                          video_required: e.target.checked,
+                        },
+                      })}
+                      className="w-4 h-4 text-och-mint bg-och-midnight border-och-steel/30 rounded focus:ring-och-mint"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -17,16 +17,31 @@ const DJANGO_API_URL = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localho
 const FASTAPI_API_URL = process.env.NEXT_PUBLIC_FASTAPI_API_URL || '';
 
 /**
+ * Origin for same-origin API calls (Next.js API routes)
+ */
+function getNextApiBase(): string {
+  if (typeof window !== 'undefined') return `${window.location.origin}/api`;
+  return process.env.NEXT_PUBLIC_APP_URL
+    ? `${process.env.NEXT_PUBLIC_APP_URL}/api`
+    : 'http://localhost:3000/api';
+}
+
+/**
  * Determine if a path should go to Django or FastAPI
  */
 function getBaseUrl(path: string): string {
-  // FastAPI routes (AI, recommendations, embeddings, personality, profiling)
+  // Profiling: always use Next.js proxy so /profiling/status and /profiling/tracks
+  // work even when FastAPI is down (proxy returns fallback responses)
+  if (path.startsWith('/profiling')) {
+    return getNextApiBase();
+  }
+
+  // Other FastAPI routes (AI, recommendations, embeddings, personality)
   const fastApiPaths = [
     '/recommendations',
     '/embeddings',
     '/personality',
     '/ai/',
-    '/profiling',  // FastAPI profiling endpoints
   ];
 
   // Recipes: list (/recipes) and detail (/recipes/{slug}) go to Next.js local API.

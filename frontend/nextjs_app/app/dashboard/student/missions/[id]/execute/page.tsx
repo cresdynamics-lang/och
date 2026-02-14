@@ -73,6 +73,20 @@ export default function MissionExecutePage() {
   const [isPaused, setIsPaused] = useState(false)
   const [artifacts, setArtifacts] = useState<File[]>([])
   const [notes, setNotes] = useState('')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  // Live timer: count up from initial time_spent_minutes (updates every second)
+  useEffect(() => {
+    if (!progress) return
+    const initialSeconds = (progress.time_spent_minutes || 0) * 60
+    const start = Date.now()
+    const tick = () => {
+      setElapsedSeconds(Math.floor((Date.now() - start) / 1000) + initialSeconds)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [progress?.id])
 
   // Check authentication
   useEffect(() => {
@@ -124,8 +138,19 @@ export default function MissionExecutePage() {
     }
   }
 
+  // Validate: must have notes OR evidence (files) before moving forward
+  const canCompleteCurrentSubtask = () => {
+    const hasNotes = notes.trim().length >= 20
+    const hasEvidence = artifacts.length > 0
+    return hasNotes || hasEvidence
+  }
+
   const handleCompleteSubtask = async () => {
     if (!progress) return
+    if (!canCompleteCurrentSubtask()) {
+      alert('Please add notes (at least 20 characters) or upload evidence files before proceeding to the next step.')
+      return
+    }
 
     setSaving(true)
     try {
@@ -358,9 +383,33 @@ export default function MissionExecutePage() {
 
                     {/* Work Area */}
                     <div className="mt-6 space-y-4">
+                      {/* Clear requirement banner - only show when NOT met */}
+                      {!canCompleteCurrentSubtask() ? (
+                        <div className="p-4 rounded-lg bg-amber-500/15 border-2 border-amber-500/40">
+                          <p className="text-amber-200 font-semibold mb-1">Required before continuing</p>
+                          <p className="text-amber-200/90 text-sm">
+                            Add notes (at least 20 characters) <span className="text-white font-medium">or</span> upload at least one evidence file.
+                          </p>
+                          <div className="mt-2 flex items-center gap-4 text-xs text-amber-300/80">
+                            <span>
+                              Notes: {notes.trim().length}/20 chars
+                              {notes.trim().length >= 20 && <CheckCircle2 className="inline w-3.5 h-3.5 ml-1 text-och-mint" />}
+                            </span>
+                            <span>
+                              Files: {artifacts.length}
+                              {artifacts.length > 0 && <CheckCircle2 className="inline w-3.5 h-3.5 ml-1 text-och-mint" />}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-lg bg-och-mint/10 border border-och-mint/30 text-och-mint text-sm flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                          <span>Ready to proceed — you&apos;ve added notes or evidence.</span>
+                        </div>
+                      )}
                       <div>
                         <label className="block text-sm font-semibold text-white mb-2">
-                          Notes & Documentation
+                          Notes & Documentation <span className="text-amber-400">*</span>
                         </label>
                         <textarea
                           value={notes}
@@ -374,7 +423,7 @@ export default function MissionExecutePage() {
                       {/* File Upload */}
                       <div>
                         <label className="block text-sm font-semibold text-white mb-2">
-                          Upload Artifacts (Screenshots, Files, Evidence)
+                          Upload Artifacts <span className="text-amber-400">*</span> (Screenshots, Files, Evidence)
                         </label>
                         <div className="relative">
                           <input
@@ -420,20 +469,30 @@ export default function MissionExecutePage() {
                         Previous
                       </Button>
 
-                      <Button
-                        onClick={handleCompleteSubtask}
-                        disabled={saving}
-                        variant="defender"
-                        className="px-8"
-                      >
-                        {saving ? (
-                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
-                        ) : currentSubtaskIndex === subtasks.length - 1 ? (
-                          <><Flag className="w-4 h-4 mr-2" /> Complete Mission</>
-                        ) : (
-                          <><CheckCircle2 className="w-4 h-4 mr-2" /> Mark Complete</>
-                        )}
-                      </Button>
+                      {canCompleteCurrentSubtask() ? (
+                        <Button
+                          onClick={handleCompleteSubtask}
+                          disabled={saving}
+                          variant="defender"
+                          className="px-8"
+                        >
+                          {saving ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                          ) : currentSubtaskIndex === subtasks.length - 1 ? (
+                            <><Flag className="w-4 h-4 mr-2" /> Complete Mission</>
+                          ) : (
+                            <><CheckCircle2 className="w-4 h-4 mr-2" /> Mark Complete</>
+                          )}
+                        </Button>
+                      ) : (
+                        <div
+                          className="px-8 py-2.5 rounded-lg bg-och-steel/20 text-och-steel/60 cursor-not-allowed text-sm font-semibold flex items-center gap-2"
+                          title="Add notes (20+ chars) or upload files to unlock"
+                        >
+                          <CheckCircle2 className="w-4 h-4 opacity-50" />
+                          {currentSubtaskIndex === subtasks.length - 1 ? 'Complete Mission' : 'Mark Complete'}
+                        </div>
+                      )}
                     </div>
                   </Card>
                 </motion.div>
@@ -483,13 +542,16 @@ export default function MissionExecutePage() {
                   {subtasks.map((subtask, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setCurrentSubtaskIndex(idx)}
+                      onClick={() => {
+                        // Only allow clicking current or completed subtasks — restrict moving forward
+                        if (idx <= currentSubtaskIndex) setCurrentSubtaskIndex(idx)
+                      }}
                       className={`w-full text-left p-3 rounded-lg transition-all ${
                         idx === currentSubtaskIndex
                           ? 'bg-och-defender/20 border border-och-defender/40'
                           : idx < currentSubtaskIndex
                           ? 'bg-och-mint/10 border border-och-mint/20'
-                          : 'bg-och-midnight/40 border border-och-steel/10 hover:border-och-steel/30'
+                          : 'bg-och-midnight/40 border border-och-steel/10 cursor-not-allowed opacity-60'
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -516,27 +578,35 @@ export default function MissionExecutePage() {
               </Card>
             </motion.div>
 
-            {/* Timer */}
-            {progress.mission.estimated_duration_minutes && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <Card className="p-6 bg-och-midnight/60 border border-och-steel/20">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold text-white">Time</h3>
-                    <Clock className="w-4 h-4 text-och-gold" />
-                  </div>
-                  <p className="text-2xl font-bold text-och-gold">
-                    {progress.time_spent_minutes || 0} min
-                  </p>
-                  <p className="text-xs text-och-steel mt-1">
-                    Est. {Math.ceil(progress.mission.estimated_duration_minutes / 60)}h total
-                  </p>
-                </Card>
-              </motion.div>
-            )}
+            {/* Timer - elapsed (count-up) + remaining (count-down) */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Card className="p-6 bg-och-midnight/60 border border-och-steel/20">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-white">Time</h3>
+                  <Clock className="w-4 h-4 text-och-gold" />
+                </div>
+                <p className="text-2xl font-bold text-och-gold tabular-nums">
+                  {Math.floor(elapsedSeconds / 60)}m {elapsedSeconds % 60}s
+                </p>
+                <p className="text-xs text-och-steel mt-1">
+                  {progress.mission.estimated_duration_minutes ? (
+                    <>
+                      Est. {Math.ceil(progress.mission.estimated_duration_minutes / 60)}h total
+                      {' · '}
+                      <span className="text-och-mint/90">
+                        ~{Math.max(0, Math.floor((progress.mission.estimated_duration_minutes * 60 - elapsedSeconds) / 60))}m left
+                      </span>
+                    </>
+                  ) : (
+                    'Elapsed'
+                  )}
+                </p>
+              </Card>
+            </motion.div>
           </div>
         </div>
       </div>

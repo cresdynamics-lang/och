@@ -11,24 +11,36 @@ import {
   Users, 
   Search, 
   ArrowLeft, 
-  Filter, 
   Shield, 
-  Target, 
-  Zap, 
-  Award, 
   LayoutGrid, 
   List,
-  Globe,
   TrendingUp,
-  ExternalLink,
-  ChevronRight
+  ExternalLink
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
+import { apiGateway } from '@/services/apiGateway';
 import clsx from 'clsx';
+
+interface CohortPeer {
+  id: string;
+  name: string;
+  handle: string;
+  track: string;
+  readiness: number;
+  health: number;
+  items: number;
+  status: 'job_ready' | 'emerging' | 'building';
+}
+
+interface CohortPeersResponse {
+  peers: CohortPeer[];
+  cohortName: string | null;
+  averageReadiness: number;
+  totalOutcomes: number;
+}
 
 export default function CohortPortfoliosPage() {
   const router = useRouter();
@@ -36,26 +48,32 @@ export default function CohortPortfoliosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [trackFilter, setTrackFilter] = useState('all');
-  const [peers, setPeers] = useState<any[]>([]);
+  const [peers, setPeers] = useState<CohortPeer[]>([]);
+  const [cohortName, setCohortName] = useState<string | null>(null);
+  const [averageReadiness, setAverageReadiness] = useState(0);
+  const [totalOutcomes, setTotalOutcomes] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch real peer data from backend
   useEffect(() => {
     const fetchPeers = async () => {
       try {
         setIsLoading(true);
-        // TODO: Replace with actual API endpoint when available
-        // const response = await apiGateway.get('/community/cohort/peers');
-        // setPeers(response || []);
-        setPeers([]); // Empty for now until API is ready
+        const response = await apiGateway.get<CohortPeersResponse>('/student/dashboard/portfolio/cohort-peers');
+        setPeers(response?.peers ?? []);
+        setCohortName(response?.cohortName ?? null);
+        setAverageReadiness(response?.averageReadiness ?? 0);
+        setTotalOutcomes(response?.totalOutcomes ?? 0);
       } catch (error) {
-        console.error('Failed to fetch peers:', error);
+        console.error('Failed to fetch cohort peers:', error);
         setPeers([]);
+        setCohortName(null);
+        setAverageReadiness(0);
+        setTotalOutcomes(0);
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     fetchPeers();
   }, []);
 
@@ -91,7 +109,7 @@ export default function CohortPortfoliosPage() {
               <div className="flex items-center gap-4">
                 <p className="text-och-steel text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-och-mint" />
-                  {user?.cohort_id || 'Alpha 2026'} Cohort
+                  {cohortName ?? 'No cohort'} Cohort
                 </p>
                 <div className="h-4 w-px bg-och-steel/20" />
                 <p className="text-och-steel text-xs font-black uppercase tracking-[0.2em]">
@@ -109,7 +127,7 @@ export default function CohortPortfoliosPage() {
               </div>
               <div>
                 <p className="text-[10px] text-och-steel font-black uppercase tracking-widest mb-1.5">Average Readiness</p>
-                <span className="text-2xl font-black text-white leading-none">78%</span>
+                <span className="text-2xl font-black text-white leading-none">{averageReadiness}%</span>
               </div>
             </div>
             <div className="flex-1 min-w-[200px] px-6 py-4 rounded-2xl bg-och-steel/5 border border-och-steel/10 flex items-center gap-4">
@@ -118,7 +136,7 @@ export default function CohortPortfoliosPage() {
               </div>
               <div>
                 <p className="text-[10px] text-och-steel font-black uppercase tracking-widest mb-1.5">Total Outcomes</p>
-                <span className="text-2xl font-black text-white leading-none">142</span>
+                <span className="text-2xl font-black text-white leading-none">{totalOutcomes}</span>
               </div>
             </div>
           </div>
@@ -172,7 +190,12 @@ export default function CohortPortfoliosPage() {
         </div>
 
         {/* PEER GRID */}
-        {filteredPeers.length > 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-och-steel/10 rounded-[3rem]">
+            <div className="w-12 h-12 rounded-2xl border-2 border-och-gold/30 border-t-och-gold animate-spin mb-4" />
+            <p className="text-och-steel font-black uppercase tracking-widest text-xs">Loading peers...</p>
+          </div>
+        ) : filteredPeers.length > 0 ? (
           <div className={clsx(
             viewMode === 'grid' 
               ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" 
@@ -240,8 +263,14 @@ export default function CohortPortfoliosPage() {
         ) : (
           <div className="flex flex-col items-center justify-center py-32 text-center border-2 border-dashed border-och-steel/10 rounded-[3rem]">
             <Users className="w-12 h-12 text-och-steel/30 mb-4" />
-            <h3 className="text-xl font-black text-white uppercase tracking-tighter mb-2">No Peers Detected</h3>
-            <p className="text-och-steel text-sm max-w-md italic">"No peer profiles matching your current search parameters."</p>
+            <h3 className="text-xl font-black text-white uppercase tracking-tighter mb-2">
+              {cohortName ? 'No Peers Detected' : 'No Cohort'}
+            </h3>
+            <p className="text-och-steel text-sm max-w-md italic">
+              {cohortName
+                ? 'No peer profiles matching your current search parameters.'
+                : 'You are not enrolled in a cohort yet. Peers will appear here once you join a cohort.'}
+            </p>
           </div>
         )}
       </div>

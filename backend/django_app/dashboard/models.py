@@ -8,7 +8,7 @@ User = get_user_model()
 
 class ReadinessScore(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='readiness_scores')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='readiness_scores')
     score = models.IntegerField(default=0)
     max_score = models.IntegerField(default=100)
     trend = models.FloatField(default=0.0)
@@ -28,7 +28,7 @@ class ReadinessScore(models.Model):
 
 class CohortProgress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, to_field='uuid_id', on_delete=models.CASCADE, related_name='cohort_progress')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cohort_progress')
     cohort_id = models.UUIDField(null=True, blank=True, db_index=True)
     percentage = models.FloatField(default=0.0)
     current_module = models.CharField(max_length=255, blank=True)

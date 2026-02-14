@@ -109,20 +109,33 @@ export function MissionsGridView({ missions, loading, onMissionClick }: Props) {
             transition={{ delay: index * 0.03, duration: 0.25 }}
           >
             <Card
-              className={`h-full flex flex-col overflow-hidden transition-all duration-300 ${
+              className={`h-full flex flex-col overflow-hidden transition-all duration-300 relative ${
                 mission.is_locked 
-                  ? 'opacity-60 cursor-not-allowed bg-och-midnight/30 border-och-steel/10' 
+                  ? 'opacity-75 cursor-not-allowed bg-och-midnight/30 border-och-steel/10' 
                   : 'cursor-pointer hover:shadow-lg hover:shadow-och-defender/20 hover:-translate-y-0.5 bg-och-midnight/50 border-och-steel/20 hover:border-och-steel/40'
               }`}
               onClick={() => !mission.is_locked && onMissionClick(mission.id)}
             >
+              {/* Hovering padlock overlay for locked missions */}
+              {mission.is_locked && (
+                <div
+                  className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+                  aria-hidden
+                >
+                  <div className="flex flex-col items-center justify-center w-14 h-14 rounded-full bg-och-midnight/95 border-2 border-amber-500/50 shadow-lg shadow-black/50">
+                    <Lock className="h-7 w-7 text-amber-400" />
+                  </div>
+                </div>
+              )}
               {/* Compact Header with gradient */}
               <div className={`bg-gradient-to-r ${diffConfig.color} p-3 text-white flex-shrink-0`}>
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-1">
                       <DiffIcon className="h-4 w-4 flex-shrink-0" />
-                      <span className="font-mono text-xs font-bold truncate">{mission.code}</span>
+                      {mission.code && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(mission.code) && (
+                        <span className="font-mono text-xs font-bold truncate">{mission.code}</span>
+                      )}
                     </div>
                     <h3 className="text-sm font-bold leading-snug line-clamp-2">{mission.title}</h3>
                   </div>
@@ -178,6 +191,13 @@ export function MissionsGridView({ missions, loading, onMissionClick }: Props) {
                     <Clock className="h-3.5 w-3.5 flex-shrink-0" />
                     <span>{mission.estimated_time_minutes < 60 ? `${mission.estimated_time_minutes}m` : `${Math.floor(mission.estimated_time_minutes / 60)}h`}</span>
                   </div>
+                )}
+
+                {/* Lock reason when mission is locked by tier/track */}
+                {mission.is_locked && mission.lock_reason && (
+                  <p className="text-[11px] text-amber-400/90 mt-1 line-clamp-2" title={mission.lock_reason}>
+                    {mission.lock_reason}
+                  </p>
                 )}
               </div>
 
