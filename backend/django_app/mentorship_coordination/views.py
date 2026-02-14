@@ -1701,10 +1701,6 @@ def mentor_sessions(request, mentor_id):
                     'cleaned_data': cleaned_data,
                 }
                 logger.error(f"Serializer validation failed: {error_details}")
-                # Also print to console for immediate visibility
-                import sys
-                print(f"VALIDATION ERROR: {error_dict}", file=sys.stderr)
-                print(f"Data received: {cleaned_data}", file=sys.stderr)
                 # Return errors in a format that's easy to debug
                 response_data = {
                     'error': 'Validation failed',
@@ -1870,10 +1866,7 @@ def mentor_sessions(request, mentor_id):
             
         except Exception as e:
             logger.error(f"Exception during serializer validation or session creation: {str(e)}", exc_info=True)
-            import sys
             import traceback
-            print(f"EXCEPTION: {str(e)}", file=sys.stderr)
-            print(traceback.format_exc(), file=sys.stderr)
             return Response(
                 {
                     'error': 'Error processing request',

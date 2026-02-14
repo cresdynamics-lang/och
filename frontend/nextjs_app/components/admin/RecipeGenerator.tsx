@@ -50,7 +50,6 @@ export function RecipeGenerator({ missions, onRecipeGenerated }: RecipeGenerator
         onRecipeGenerated();
       }
     } catch (err: any) {
-      console.error('Recipe generation failed:', err);
       setError(err.message || 'Failed to generate recipe');
     } finally {
       setIsGenerating(false);

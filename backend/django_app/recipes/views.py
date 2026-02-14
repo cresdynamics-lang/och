@@ -98,7 +98,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
                             'is_free_sample': bool(row[14])
                         })
                     except Exception as e:
-                        print(f"Error processing row {row[0]}: {e}")
+                        logger.error(f"Error processing row {row[0]}: {e}")
                         continue
 
                 # Stamp per-recipe bookmark status and get total bookmark count
@@ -124,7 +124,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
                     'page_size': len(recipes)
                 })
         except Exception as e:
-            print(f"Database error: {e}")
+            logger.error(f"Database error: {e}")
             return Response({'error': 'Database error'}, status=500)
 
     def get_queryset(self):

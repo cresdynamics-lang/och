@@ -176,10 +176,7 @@ class DirectorDashboardViewSet(viewsets.ViewSet):
         POST /api/v1/director/students/link-sponsor/
         Link students to a sponsor.
         """
-        print("=== LINK SPONSOR METHOD CALLED ===")
         try:
-            print("Starting link_students_to_sponsor")
-            
             student_ids = request.data.get('student_ids', [])
             sponsor_id = request.data.get('sponsor_id')
             
