@@ -66,6 +66,8 @@ export default function MissionsClient() {
 
   // State management
   const [missions, setMissions] = useState<Mission[]>([])
+  const [myMissions, setMyMissions] = useState<Mission[]>([])
+  const [myMissionsLoading, setMyMissionsLoading] = useState(false)
   const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(true)
@@ -174,11 +176,33 @@ export default function MissionsClient() {
     }
   }
 
+  // Load my missions (missions with progress for "My Missions" section)
+  const loadMyMissions = async () => {
+    if (!isAuthenticated) return
+    setMyMissionsLoading(true)
+    try {
+      const response = await missionsClient.getAllMissions({
+        page: 1,
+        page_size: 100,
+      })
+      const all = response.results || []
+      const withProgress = all.filter(
+        (m: Mission) => m.status && m.status !== 'not_started'
+      )
+      setMyMissions(withProgress)
+    } catch {
+      setMyMissions([])
+    } finally {
+      setMyMissionsLoading(false)
+    }
+  }
+
   // Initial load
   useEffect(() => {
     if (isAuthenticated && filtersInitialized) {
       loadProfile()
       loadMissions()
+      loadMyMissions()
     } else if (!isAuthenticated) {
       setLoading(false)
       setProfileLoading(false)
@@ -261,6 +285,56 @@ export default function MissionsClient() {
           Complete hands-on cybersecurity challenges to build your skills
         </p>
       </div>
+
+      {/* My Missions - progress status */}
+      <Card className="p-6 mb-6 bg-och-midnight/50 border border-och-steel/20">
+        <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+          <Target className="w-5 h-5 text-och-defender" />
+          My Missions
+        </h2>
+        <p className="text-sm text-och-steel mb-4">
+          Missions you have started or submitted. Click to open and continue.
+        </p>
+        {myMissionsLoading ? (
+          <div className="flex items-center gap-2 text-och-steel text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading your missions…
+          </div>
+        ) : myMissions.length === 0 ? (
+          <p className="text-sm text-och-steel">
+            You have not started any missions yet. Pick one from the grid below to begin.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {myMissions.map((mission) => (
+              <button
+                key={mission.id}
+                type="button"
+                onClick={() => handleMissionClick(mission.id)}
+                className="w-full flex items-center justify-between gap-4 p-3 rounded-lg bg-och-midnight border border-och-steel/20 hover:border-och-defender/40 hover:bg-och-midnight/70 transition-colors text-left"
+              >
+                <span className="text-white font-medium truncate">{mission.title}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-xs px-2 py-1 rounded capitalize ${
+                      mission.status === 'approved'
+                        ? 'bg-och-mint/20 text-och-mint'
+                        : mission.status === 'submitted' || mission.status === 'ai_reviewed' || mission.status === 'in_mentor_review' || mission.status === 'in_ai_review'
+                        ? 'bg-och-defender/20 text-och-defender'
+                        : mission.status === 'needs_revision' || mission.status === 'rejected' || mission.status === 'failed'
+                        ? 'bg-och-orange/20 text-och-orange'
+                        : 'bg-och-steel/20 text-och-steel'
+                    }`}
+                  >
+                    {mission.status?.replace(/_/g, ' ') ?? 'In progress'}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-och-steel" />
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Stats Overview */}
       {studentProfile && (

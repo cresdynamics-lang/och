@@ -76,7 +76,7 @@ export const mentorClient = {
    * Get mission submission queue (only Professional tier submissions)
    */
   async getMissionSubmissionQueue(mentorId: string, params?: {
-    status?: 'pending_review' | 'in_review' | 'all'
+    status?: 'pending_review' | 'in_review' | 'reviewed' | 'all'
     limit?: number
     offset?: number
   }): Promise<{ results: MissionSubmission[]; count: number }> {
@@ -134,7 +134,7 @@ export const mentorClient = {
     score_breakdown?: Record<string, number>
     recommended_next_missions?: string[]
   }): Promise<MissionReview> {
-    return apiGateway.post(`/mentors/missions/submissions/${submissionId}/review`, data)
+    return apiGateway.post(`/mentor/missions/${submissionId}/review`, data)
   },
 
   /**

@@ -1,18 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { mentorClient } from '@/services/mentorClient'
+import { recipesClient } from '@/services/recipesClient'
+import { useAuth } from '@/hooks/useAuth'
 import type { MissionSubmission } from '@/services/types/mentor'
+
+export type RecommendationItem = { type: 'mission' | 'recipe'; id: string; label: string }
 
 interface MissionReviewFormProps {
   submission: MissionSubmission
   onReviewComplete: () => void
 }
 
+interface MissionOption {
+  id: string
+  title: string
+}
+
+interface RecipeOption {
+  slug: string
+  title: string
+}
+
 export function MissionReviewForm({ submission, onReviewComplete }: MissionReviewFormProps) {
+  const { user } = useAuth()
+  const mentorId = user?.id?.toString()
   const [overallStatus, setOverallStatus] = useState<'pass' | 'fail' | 'needs_revision'>('pass')
   const [writtenFeedback, setWrittenFeedback] = useState('')
   const [comments, setComments] = useState<Array<{ comment: string; section?: string }>>([])
@@ -23,10 +39,54 @@ export function MissionReviewForm({ submission, onReviewComplete }: MissionRevie
   const [scoreBreakdown, setScoreBreakdown] = useState<Record<string, number>>({})
   const [newScoreKey, setNewScoreKey] = useState('')
   const [newScoreValue, setNewScoreValue] = useState('')
-  const [recommendedMissions, setRecommendedMissions] = useState<string[]>([])
-  const [newRecommendedMission, setNewRecommendedMission] = useState('')
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([])
+  const [recommendationType, setRecommendationType] = useState<'mission' | 'recipe'>('mission')
+  const [selectedMissionId, setSelectedMissionId] = useState('')
+  const [selectedRecipeSlug, setSelectedRecipeSlug] = useState('')
+  const [missionsList, setMissionsList] = useState<MissionOption[]>([])
+  const [recipesList, setRecipesList] = useState<RecipeOption[]>([])
+  const [loadingOptions, setLoadingOptions] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!mentorId) return
+    let cancelled = false
+    setLoadingOptions(true)
+    Promise.all([
+      mentorClient.getCohortMissions(mentorId, { page_size: 200 }).then((res) => {
+        const list = (res.results || []).map((m: any) => ({
+          id: m.id ?? m.mission_id ?? String(m),
+          title: m.title ?? m.mission_title ?? String(m),
+        }))
+        return list
+      }),
+      recipesClient.getRecipes().then((list) =>
+        (list || []).map((r: any) => ({
+          slug: r.slug ?? r.id ?? String(r),
+          title: r.title ?? String(r),
+        }))
+      ),
+    ])
+      .then(([missions, recipes]) => {
+        if (!cancelled) {
+          setMissionsList(missions)
+          setRecipesList(recipes)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMissionsList([])
+          setRecipesList([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingOptions(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mentorId])
 
   const addComment = () => {
     if (!newComment.trim()) return
@@ -64,14 +124,24 @@ export function MissionReviewForm({ submission, onReviewComplete }: MissionRevie
     setScoreBreakdown(updated)
   }
 
-  const addRecommendedMission = () => {
-    if (!newRecommendedMission.trim() || recommendedMissions.includes(newRecommendedMission)) return
-    setRecommendedMissions([...recommendedMissions, newRecommendedMission])
-    setNewRecommendedMission('')
+  const addRecommendation = () => {
+    if (recommendationType === 'mission') {
+      if (!selectedMissionId) return
+      const mission = missionsList.find((m) => m.id === selectedMissionId)
+      if (!mission || recommendations.some((r) => r.type === 'mission' && r.id === selectedMissionId)) return
+      setRecommendations([...recommendations, { type: 'mission', id: selectedMissionId, label: mission.title }])
+      setSelectedMissionId('')
+    } else {
+      if (!selectedRecipeSlug) return
+      const recipe = recipesList.find((r) => r.slug === selectedRecipeSlug)
+      if (!recipe || recommendations.some((r) => r.type === 'recipe' && r.id === selectedRecipeSlug)) return
+      setRecommendations([...recommendations, { type: 'recipe', id: selectedRecipeSlug, label: recipe.title }])
+      setSelectedRecipeSlug('')
+    }
   }
 
-  const removeRecommendedMission = (mission: string) => {
-    setRecommendedMissions(recommendedMissions.filter(m => m !== mission))
+  const removeRecommendation = (index: number) => {
+    setRecommendations(recommendations.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async () => {
@@ -84,7 +154,10 @@ export function MissionReviewForm({ submission, onReviewComplete }: MissionRevie
         comments: comments.length > 0 ? comments : undefined,
         technical_competencies: technicalCompetencies.length > 0 ? technicalCompetencies : undefined,
         score_breakdown: Object.keys(scoreBreakdown).length > 0 ? scoreBreakdown : undefined,
-        recommended_next_missions: recommendedMissions.length > 0 ? recommendedMissions : undefined,
+        recommended_next_missions:
+          recommendations.length > 0
+            ? recommendations.map((r) => `${r.type}:${r.id}`)
+            : undefined,
       })
       onReviewComplete()
     } catch (err: any) {
@@ -504,28 +577,81 @@ export function MissionReviewForm({ submission, onReviewComplete }: MissionRevie
           Next Steps: Recommended Missions & Recipes
         </label>
         <p className="text-xs text-och-steel mb-3">
-          Recommend next missions or suggested actions based on your review. If you detect a specific skill gap, 
-          recommend recipes (micro-skill units) to bridge the technical challenge.
+          Recommend next missions or suggested actions based on your review. If you detect a specific skill gap,
+          recommend recipes (micro-skill units) to bridge the technical challenge. Choose Mission or Recipe below and pick from the dropdown.
         </p>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={newRecommendedMission}
-            onChange={(e) => setNewRecommendedMission(e.target.value)}
-            placeholder="Mission ID, title, or recipe name..."
-            className="flex-1 px-3 py-2 rounded-lg bg-och-midnight border border-och-steel/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
-            onKeyPress={(e) => e.key === 'Enter' && addRecommendedMission()}
-          />
-          <Button variant="outline" size="sm" onClick={addRecommendedMission}>Add</Button>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-och-steel whitespace-nowrap">Type</label>
+            <select
+              value={recommendationType}
+              onChange={(e) => {
+                setRecommendationType(e.target.value as 'mission' | 'recipe')
+                setSelectedMissionId('')
+                setSelectedRecipeSlug('')
+              }}
+              className="px-3 py-2 rounded-lg bg-och-midnight border border-och-steel/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender min-w-[120px]"
+            >
+              <option value="mission">Mission</option>
+              <option value="recipe">Recipe</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 min-w-0 flex-1 min-w-[200px]">
+            <label className="text-xs text-och-steel whitespace-nowrap sr-only">
+              {recommendationType === 'mission' ? 'Mission' : 'Recipe'}
+            </label>
+            <select
+              value={recommendationType === 'mission' ? selectedMissionId : selectedRecipeSlug}
+              onChange={(e) =>
+                recommendationType === 'mission'
+                  ? setSelectedMissionId(e.target.value)
+                  : setSelectedRecipeSlug(e.target.value)
+              }
+              disabled={loadingOptions}
+              className="flex-1 px-3 py-2 rounded-lg bg-och-midnight border border-och-steel/20 text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
+            >
+              <option value="">
+                {loadingOptions
+                  ? 'Loading...'
+                  : recommendationType === 'mission'
+                    ? 'Select a mission...'
+                    : 'Select a recipe...'}
+              </option>
+              {recommendationType === 'mission'
+                ? missionsList.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.title}
+                    </option>
+                  ))
+                : recipesList.map((r) => (
+                    <option key={r.slug} value={r.slug}>
+                      {r.title}
+                    </option>
+                  ))}
+            </select>
+            <Button variant="outline" size="sm" onClick={addRecommendation} disabled={loadingOptions}>
+              Add
+            </Button>
+          </div>
         </div>
-        {recommendedMissions.length > 0 && (
+        {recommendations.length > 0 && (
           <div className="space-y-2 mt-3">
-          {recommendedMissions.map((mission) => (
-              <div key={mission} className="p-2 bg-och-midnight/50 rounded flex justify-between items-center border border-och-steel/20">
-                <span className="text-sm text-white">→ {mission}</span>
-              <Button variant="outline" size="sm" onClick={() => removeRecommendedMission(mission)}>Remove</Button>
-            </div>
-          ))}
+            {recommendations.map((rec, index) => (
+              <div
+                key={`${rec.type}-${rec.id}-${index}`}
+                className="p-2 bg-och-midnight/50 rounded flex justify-between items-center border border-och-steel/20"
+              >
+                <span className="text-sm text-white flex items-center gap-2">
+                  <span className="text-och-steel text-xs font-medium">
+                    {rec.type === 'mission' ? 'Mission' : 'Recipe'}:
+                  </span>
+                  {rec.label}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => removeRecommendation(index)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
           </div>
         )}
       </div>

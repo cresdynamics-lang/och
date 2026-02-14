@@ -2049,60 +2049,90 @@ def review_mission(request, submission_id):
     """
     POST /api/v1/mentor/missions/{submission_id}/review
     Review and approve/reject a mission submission.
+    Accepts frontend payload: overall_status (pass|fail|needs_revision), feedback.written, technical_competencies.
     """
     mentor = get_current_mentor(request.user)
-    
+    mentee_user = None
+
     try:
         submission = MissionSubmission.objects.get(id=submission_id)
+        mentee_user = submission.student
     except MissionSubmission.DoesNotExist:
         return Response(
             {'error': 'Mission submission not found'},
             status=status.HTTP_404_NOT_FOUND
         )
-    
-    # Verify assignment
+
+    # Verify assignment (MissionSubmission uses student, not user)
     assignment = MenteeMentorAssignment.objects.filter(
         mentor=mentor,
-        mentee=submission.user,
+        mentee=mentee_user,
         status='active'
     ).first()
-    
+
     if not assignment:
         return Response(
             {'error': 'Mentee not assigned to this mentor'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
-    serializer = MissionReviewSerializer(data=request.data)
+
+    # Normalize frontend payload to serializer shape
+    data = request.data
+    if 'overall_status' in data:
+        approved = data.get('overall_status') == 'pass'
+        score = 100 if approved else (50 if data.get('overall_status') == 'needs_revision' else 0)
+        feedback_text = (data.get('feedback') or {})
+        if isinstance(feedback_text, dict):
+            feedback_text = feedback_text.get('written', '') or ''
+        else:
+            feedback_text = str(feedback_text or '')
+        competencies = data.get('technical_competencies') or data.get('competencies') or []
+        payload = {
+            'score': score,
+            'feedback': feedback_text,
+            'approved': approved,
+            'competencies': competencies,
+        }
+    else:
+        payload = {
+            'score': data.get('score', 0),
+            'feedback': data.get('feedback', ''),
+            'approved': data.get('approved', False),
+            'competencies': data.get('competencies', []),
+        }
+
+    serializer = MissionReviewSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
-    
-    # Update submission
-    submission.mentor_feedback = serializer.validated_data['feedback']
+
+    # Update submission (MissionSubmission uses feedback, not mentor_feedback)
+    submission.feedback = serializer.validated_data['feedback']
     submission.status = 'approved' if serializer.validated_data['approved'] else 'rejected'
     submission.reviewed_at = timezone.now()
+    if serializer.validated_data.get('score') is not None:
+        submission.score = serializer.validated_data['score']
     submission.save()
-    
+
     # Complete work queue item
     work_item = MentorWorkQueue.objects.filter(
         mentor=mentor,
-        mentee=submission.user,
+        mentee=mentee_user,
         type='mission_review',
         reference_id=submission_id,
         status__in=['pending', 'in_progress']
     ).first()
-    
+
     if work_item:
         work_item.status = 'completed'
         work_item.completed_at = timezone.now()
         work_item.save()
-    
+
     # Trigger dashboard refresh (would update readiness score)
     DashboardAggregationService.queue_update(
-        submission.user,
+        mentee_user,
         'mission_reviewed',
         'high'
     )
-    
+
     return Response({
         'status': 'success',
         'submission_id': str(submission.id),
@@ -2209,23 +2239,33 @@ def mentor_mission_submissions(request, mentor_id):
         queryset = queryset.filter(status__in=['submitted', 'ai_reviewed'])
     elif status_filter == 'in_review':
         queryset = queryset.filter(status='in_review')
+    elif status_filter == 'reviewed':
+        queryset = queryset.filter(status__in=['approved', 'rejected', 'needs_revision']).order_by('-reviewed_at')
+
+    if status_filter != 'reviewed':
+        queryset = queryset.order_by('-submitted_at')
 
     total_count = queryset.count()
-    submissions = queryset.order_by('-submitted_at')[offset:offset + limit]
-    
+    submissions = queryset[offset:offset + limit]
+
     submissions_data = []
     for submission in submissions:
-        submissions_data.append({
+        item = {
             'id': str(submission.id),
             'mission_id': str(submission.assignment.mission_id) if submission.assignment else None,
             'mission_title': submission.assignment.mission.title if submission.assignment and submission.assignment.mission else 'Unknown',
             'mentee_id': str(submission.student.id),
             'mentee_name': submission.student.get_full_name() or submission.student.email,
+            'mentee_email': getattr(submission.student, 'email', ''),
             'status': submission.status,
             'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
             'ai_score': float(submission.score) if submission.score else None,
             'mentor_score': float(submission.score) if submission.score else None,
-        })
+        }
+        if status_filter == 'reviewed' or submission.status in ('approved', 'rejected', 'needs_revision'):
+            item['reviewed_at'] = submission.reviewed_at.isoformat() if getattr(submission, 'reviewed_at', None) else None
+            item['feedback'] = (submission.feedback or '')[:500] if getattr(submission, 'feedback', None) else ''
+        submissions_data.append(item)
     
     return Response({
         'results': submissions_data,

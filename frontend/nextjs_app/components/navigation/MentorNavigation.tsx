@@ -11,9 +11,16 @@ interface NavItem {
   badge?: number
 }
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard/mentor' },
+const missionsSection: NavItem[] = [
   { label: 'Missions', href: '/dashboard/mentor/missions' },
+]
+
+const reviewsSection: NavItem[] = [
+  { label: 'Reviews', href: '/dashboard/mentor/reviews' },
+]
+
+const mainNavItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard/mentor' },
   { label: 'Cohorts & Tracks', href: '/dashboard/mentor/cohorts-tracks' },
   { label: 'Sessions', href: '/dashboard/mentor/sessions' },
   { label: 'Messages', href: '/dashboard/mentor/messages' },
@@ -77,8 +84,101 @@ export function MentorNavigation() {
           </div>
 
           {/* Navigation Items */}
-          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-            {navItems.map((item) => {
+          <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Main nav */}
+            {mainNavItems.slice(0, 1).map((item) => {
+              const active = isActive(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={clsx(
+                    'flex items-center px-4 py-3 rounded-lg transition-all duration-200',
+                    'hover:bg-och-defender/20 hover:text-och-mint',
+                    active
+                      ? 'bg-och-defender/30 text-och-mint border-l-4 border-och-mint'
+                      : 'text-och-steel'
+                  )}
+                >
+                  <span className="font-medium">{item.label}</span>
+                  {item.badge && item.badge > 0 && (
+                    <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+
+            {/* Missions section */}
+            <div>
+              <div className="px-4 py-2 text-xs font-semibold text-och-steel/70 uppercase tracking-wider">
+                Missions
+              </div>
+              <div className="space-y-2">
+                {missionsSection.map((item) => {
+                  const active = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={clsx(
+                        'flex items-center px-4 py-3 rounded-lg transition-all duration-200',
+                        'hover:bg-och-defender/20 hover:text-och-mint',
+                        active
+                          ? 'bg-och-defender/30 text-och-mint border-l-4 border-och-mint'
+                          : 'text-och-steel'
+                      )}
+                    >
+                      <span className="font-medium">{item.label}</span>
+                      {item.badge && item.badge > 0 && (
+                        <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Reviews section */}
+            <div>
+              <div className="px-4 py-2 text-xs font-semibold text-och-steel/70 uppercase tracking-wider">
+                Reviews
+              </div>
+              <div className="space-y-2">
+                {reviewsSection.map((item) => {
+                  const active = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={clsx(
+                        'flex items-center px-4 py-3 rounded-lg transition-all duration-200',
+                        'hover:bg-och-defender/20 hover:text-och-mint',
+                        active
+                          ? 'bg-och-defender/30 text-och-mint border-l-4 border-och-mint'
+                          : 'text-och-steel'
+                      )}
+                    >
+                      <span className="font-medium">{item.label}</span>
+                      {item.badge && item.badge > 0 && (
+                        <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Rest of main nav */}
+            {mainNavItems.slice(1).map((item) => {
               const active = isActive(item.href)
               return (
                 <Link

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { mentorClient } from '@/services/mentorClient'
 import { MentorshipMessaging } from '@/components/mentor/MentorshipMessaging'
@@ -9,6 +10,8 @@ import { programsClient } from '@/services/programsClient'
 
 export default function MentorMessagesPage() {
   const { user } = useAuth()
+  const searchParams = useSearchParams()
+  const menteeIdFromUrl = searchParams.get('mentee')
   const [mentees, setMentees] = useState<Array<{
     id: string
     assignmentId: string
@@ -31,7 +34,7 @@ export default function MentorMessagesPage() {
     }, 30000)
     
     return () => clearInterval(intervalId)
-  }, [user?.id])
+  }, [user?.id, menteeIdFromUrl])
 
   const loadMenteesSilently = async () => {
     if (!user?.id) return
@@ -96,9 +99,18 @@ export default function MentorMessagesPage() {
       
       setMentees(menteesList)
       
-      // Auto-select first mentee if none selected
-      if (!selectedMentee && menteesList.length > 0) {
-        setSelectedMentee(menteesList[0].assignmentId)
+      // Auto-select mentee: prefer ?mentee= from URL, then first in list
+      if (menteesList.length > 0) {
+        if (menteeIdFromUrl) {
+          const match = menteesList.find(m => m.id === menteeIdFromUrl)
+          if (match) {
+            setSelectedMentee(match.assignmentId)
+          } else {
+            setSelectedMentee(menteesList[0].assignmentId)
+          }
+        } else {
+          setSelectedMentee(menteesList[0].assignmentId)
+        }
       }
       
       // Mark initial load as complete

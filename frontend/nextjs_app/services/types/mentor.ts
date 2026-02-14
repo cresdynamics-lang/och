@@ -47,10 +47,12 @@ export interface MissionSubmission {
   mission_title: string
   mentee_id: string
   mentee_name: string
-  mentee_email: string
+  mentee_email?: string
   submitted_at: string
   status: 'pending_review' | 'in_review' | 'approved' | 'rejected' | 'needs_revision'
-  submission_data: {
+  reviewed_at?: string
+  feedback?: string
+  submission_data?: {
     answers?: Record<string, any>
     files?: Array<{
       id: string

@@ -1,232 +1,220 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { Suspense, useCallback, useEffect, useState, useMemo } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
-import { MissionsPending } from '@/components/mentor/MissionsPending'
-import { MissionReviewForm } from '@/components/mentor/MissionReviewForm'
-import { CapstoneScoringForm } from '@/components/mentor/CapstoneScoringForm'
-import { mentorClient } from '@/services/mentorClient'
-import { useAuth } from '@/hooks/useAuth'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import type { MissionSubmission, CapstoneProject } from '@/services/types/mentor'
+import { missionsClient } from '@/services/missionsClient'
+import type { MissionTemplate } from '@/services/missionsClient'
 
-function MissionsPageInner() {
-  const { user } = useAuth()
-  const mentorId = user?.id?.toString()
+export default function MissionsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [selectedSubmission, setSelectedSubmission] = useState<MissionSubmission | null>(null)
-  const [selectedCapstone, setSelectedCapstone] = useState<CapstoneProject | null>(null)
-  const [capstones, setCapstones] = useState<CapstoneProject[]>([])
-  const [loadingCapstones, setLoadingCapstones] = useState(false)
-  const [loadingSubmission, setLoadingSubmission] = useState(false)
-  const [submissionError, setSubmissionError] = useState<string | null>(null)
-  
-  // Cohort missions state
-  const [cohortMissions, setCohortMissions] = useState<any[]>([])
-  const [loadingMissions, setLoadingMissions] = useState(false)
-  const [missionsError, setMissionsError] = useState<string | null>(null)
-  const [missionsFilters, setMissionsFilters] = useState({
+  const [missions, setMissions] = useState<MissionTemplate[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filters, setFilters] = useState({
     difficulty: 'all',
-    track: 'all',
+    type: 'all',
+    track_key: 'all',
     search: '',
   })
-  const [missionsPagination, setMissionsPagination] = useState({
+  const [pagination, setPagination] = useState({
     page: 1,
-    page_size: 20,
+    page_size: 24,
     total: 0,
     has_next: false,
     has_previous: false,
   })
 
-  const loadCapstones = useCallback(async () => {
-    if (!mentorId) return
-    setLoadingCapstones(true)
+  const loadMissions = async () => {
+    setIsLoading(true)
+    setError(null)
     try {
-      const data = await mentorClient.getCapstoneProjects(mentorId, { status: 'pending_scoring' })
-      const list = Array.isArray(data) ? data : (data as any)?.results ?? (data as any)?.data ?? []
-      setCapstones(Array.isArray(list) ? list : [])
-    } catch (err: any) {
-      // 404 is expected if mentor has no capstones - handle gracefully
-      if (err?.status === 404 || err?.response?.status === 404) {
-        console.log('[loadCapstones] No capstones found for mentor (404) - this is normal');
-      } else {
-        console.error('Failed to load capstones:', err);
+      const params: Record<string, unknown> = {
+        page: pagination.page,
+        page_size: pagination.page_size,
       }
-      setCapstones([])
+      if (filters.difficulty !== 'all') params.difficulty = filters.difficulty
+      if (filters.type !== 'all') params.type = filters.type
+      if (filters.track_key !== 'all') params.track_key = filters.track_key
+      if (filters.search.trim()) params.search = filters.search.trim()
+
+      const response = await missionsClient.getAllMissions(params)
+      setMissions(response.results || [])
+      setPagination({
+        ...pagination,
+        total: response.count || 0,
+        has_next: !!response.next,
+        has_previous: !!response.previous,
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load missions. Please try again.'
+      setError(msg)
     } finally {
-      setLoadingCapstones(false)
+      setIsLoading(false)
     }
-  }, [mentorId])
-
-  useEffect(() => {
-    loadCapstones()
-  }, [loadCapstones])
-
-  const loadCohortMissions = useCallback(async () => {
-    if (!mentorId) return
-    setLoadingMissions(true)
-    setMissionsError(null)
-    try {
-      const params: any = {
-        page: missionsPagination.page,
-        page_size: missionsPagination.page_size,
-      }
-      if (missionsFilters.difficulty !== 'all') {
-        params.difficulty = missionsFilters.difficulty
-      }
-      if (missionsFilters.track !== 'all') {
-        params.track = missionsFilters.track
-      }
-      if (missionsFilters.search) {
-        params.search = missionsFilters.search
-      }
-      
-      const data = await mentorClient.getCohortMissions(mentorId, params)
-      setCohortMissions(data.results || [])
-      setMissionsPagination({
-        page: data.page || 1,
-        page_size: data.page_size || 20,
-        total: data.total || data.count || 0,
-        has_next: data.has_next || false,
-        has_previous: data.has_previous || false,
-      })
-    } catch (err: any) {
-      console.error('Failed to load cohort missions:', err)
-      setMissionsError(err?.message || 'Failed to load missions')
-    } finally {
-      setLoadingMissions(false)
-    }
-  }, [mentorId, missionsPagination.page, missionsFilters])
-
-  useEffect(() => {
-    loadCohortMissions()
-  }, [loadCohortMissions])
-
-  // If a submission id is provided (e.g. from the dashboard "Review now" button), open it directly.
-  useEffect(() => {
-    const submissionId = searchParams.get('submission')
-    if (!submissionId) return
-    if (selectedSubmission?.id === submissionId) return
-
-    let cancelled = false
-    setLoadingSubmission(true)
-    setSubmissionError(null)
-
-    mentorClient
-      .getMissionSubmission(submissionId)
-      .then((data) => {
-        if (cancelled) return
-        setSelectedSubmission(data)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        const message =
-          err instanceof Error ? err.message : (typeof err === 'string' ? err : 'Failed to load submission')
-        setSubmissionError(message)
-      })
-      .finally(() => {
-        if (cancelled) return
-        setLoadingSubmission(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [searchParams, selectedSubmission?.id])
-
-  if (loadingSubmission && !selectedSubmission) {
-    return (
-      <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-        <div className="text-och-steel text-sm">Loading submission…</div>
-      </div>
-    )
   }
 
-  if (submissionError && !selectedSubmission) {
-    return (
-      <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-        <div className="text-och-orange text-sm">Error: {submissionError}</div>
-      </div>
-    )
+  useEffect(() => {
+    loadMissions()
+  }, [pagination.page, filters.difficulty, filters.type, filters.track_key])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPagination((p) => ({ ...p, page: 1 }))
+      loadMissions()
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [filters.search])
+
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'beginner':
+        return 'mint'
+      case 'intermediate':
+        return 'defender'
+      case 'advanced':
+        return 'orange'
+      case 'capstone':
+        return 'gold'
+      default:
+        return 'steel'
+    }
   }
 
-  if (selectedSubmission) {
-    return (
-      <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-        <MissionReviewForm
-          submission={selectedSubmission}
-          onReviewComplete={() => setSelectedSubmission(null)}
-        />
-      </div>
-    )
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'lab':
+        return '🔬'
+      case 'scenario':
+        return '🎯'
+      case 'project':
+        return '🚀'
+      case 'capstone':
+        return '🏆'
+      default:
+        return '📋'
+    }
   }
 
-  if (selectedCapstone) {
+  const formatTime = (minutes?: number, hours?: number) => {
+    if (hours) return `${hours}h`
+    if (minutes) {
+      if (minutes < 60) return `${minutes}m`
+      const h = Math.floor(minutes / 60)
+      const m = minutes % 60
+      return m > 0 ? `${h}h ${m}m` : `${h}h`
+    }
+    return null
+  }
+
+  const filteredMissions = useMemo(() => {
+    if (!filters.search.trim()) return missions
+    const searchLower = filters.search.toLowerCase()
+    return missions.filter(
+      (mission) =>
+        mission.title?.toLowerCase().includes(searchLower) ||
+        mission.code?.toLowerCase().includes(searchLower) ||
+        mission.description?.toLowerCase().includes(searchLower)
+    )
+  }, [missions, filters.search])
+
+  if (isLoading && missions.length === 0) {
     return (
-      <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-        <CapstoneScoringForm
-          capstone={selectedCapstone}
-          onScoringComplete={() => {
-            setSelectedCapstone(null)
-            loadCapstones()
-          }}
-        />
+      <div className="w-full max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold mb-2 text-och-mint">Mission Hall</h1>
+          <p className="text-och-steel">Browse all available missions</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Card key={i} className="p-6 animate-pulse">
+              <div className="h-6 bg-och-steel/20 rounded w-3/4 mb-4"></div>
+              <div className="h-4 bg-och-steel/20 rounded w-full mb-2"></div>
+              <div className="h-4 bg-och-steel/20 rounded w-2/3"></div>
+            </Card>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold text-och-mint">Mission Review</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/mentor/profile?tab=guide')}>
-            Guide
-          </Button>
-          <Button
-            variant="defender"
-            onClick={() => router.push('/dashboard/mentor/missions/hall')}
-            className="flex items-center gap-2 shrink-0"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    <div className="w-full max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 text-och-mint flex items-center gap-3">
+              <span>🏛️</span>
+              Mission Hall
+            </h1>
+            <p className="text-och-steel">Explore all available missions across tracks and programs</p>
+          </div>
+          <Button variant="outline" onClick={() => router.push('/dashboard/mentor/reviews')} className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
-            Mission Hall
+            Back to Reviews
           </Button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="p-4 bg-gradient-to-br from-och-mint/10 to-och-mint/5 border-och-mint/30">
+            <div className="text-sm text-och-steel mb-1">Total Missions</div>
+            <div className="text-2xl font-bold text-och-mint">{pagination.total}</div>
+          </Card>
+          <Card className="p-4 bg-gradient-to-br from-och-defender/10 to-och-defender/5 border-och-defender/30">
+            <div className="text-sm text-och-steel mb-1">Showing</div>
+            <div className="text-2xl font-bold text-och-defender">{missions.length}</div>
+          </Card>
+          <Card className="p-4 bg-gradient-to-br from-och-orange/10 to-och-orange/5 border-och-orange/30">
+            <div className="text-sm text-och-steel mb-1">Page</div>
+            <div className="text-2xl font-bold text-och-orange">
+              {pagination.page} / {Math.ceil(pagination.total / pagination.page_size) || 1}
+            </div>
+          </Card>
+          <Card className="p-4 bg-gradient-to-br from-och-gold/10 to-och-gold/5 border-och-gold/30">
+            <div className="text-sm text-och-steel mb-1">Filters Active</div>
+            <div className="text-2xl font-bold text-och-gold">
+              {[filters.difficulty, filters.type, filters.track_key].filter((f) => f !== 'all').length}
+            </div>
+          </Card>
         </div>
       </div>
 
-      <div className="space-y-6">
-        <MissionsPending onReviewClick={(submission) => setSelectedSubmission(submission)} />
-        
-        {/* Cohort Missions - Read-Only View */}
-        <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-white">Cohort Missions</h2>
-            <button
-              onClick={loadCohortMissions}
-              className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-opacity-90 text-sm"
-            >
-              {loadingMissions ? 'Loading...' : 'Refresh'}
-            </button>
-          </div>
-
-          {/* Filters */}
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Card className="mb-6 bg-och-midnight/50 border border-och-steel/20">
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-white mb-2">Search Missions</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  placeholder="Search by title, code, or description..."
+                  className="w-full px-4 py-2 pl-10 bg-och-midnight border border-och-steel/20 rounded-lg text-white placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-defender"
+                />
+                <svg
+                  className="absolute left-3 top-2.5 w-5 h-5 text-och-steel"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
             <div>
-              <label className="block text-sm font-medium text-och-steel mb-2">Difficulty</label>
+              <label className="block text-sm font-medium text-white mb-2">Difficulty</label>
               <select
-                value={missionsFilters.difficulty}
+                value={filters.difficulty}
                 onChange={(e) => {
-                  setMissionsFilters({ ...missionsFilters, difficulty: e.target.value })
-                  setMissionsPagination({ ...missionsPagination, page: 1 })
+                  setFilters({ ...filters, difficulty: e.target.value })
+                  setPagination({ ...pagination, page: 1 })
                 }}
-                className="w-full px-3 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
               >
                 <option value="all">All Difficulties</option>
                 <option value="beginner">Beginner</option>
@@ -236,196 +224,176 @@ function MissionsPageInner() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-och-steel mb-2">Track</label>
+              <label className="block text-sm font-medium text-white mb-2">Type</label>
               <select
-                value={missionsFilters.track}
+                value={filters.type}
                 onChange={(e) => {
-                  setMissionsFilters({ ...missionsFilters, track: e.target.value })
-                  setMissionsPagination({ ...missionsPagination, page: 1 })
+                  setFilters({ ...filters, type: e.target.value })
+                  setPagination({ ...pagination, page: 1 })
                 }}
-                className="w-full px-3 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
               >
-                <option value="all">All Tracks</option>
-                <option value="defender">Defender</option>
-                <option value="builder">Builder</option>
-                <option value="analyst">Analyst</option>
+                <option value="all">All Types</option>
+                <option value="lab">Lab</option>
+                <option value="scenario">Scenario</option>
+                <option value="project">Project</option>
+                <option value="capstone">Capstone</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-och-steel mb-2">Search</label>
-              <input
-                type="text"
-                value={missionsFilters.search}
-                onChange={(e) => {
-                  setMissionsFilters({ ...missionsFilters, search: e.target.value })
-                  setMissionsPagination({ ...missionsPagination, page: 1 })
-                }}
-                placeholder="Search missions..."
-                className="w-full px-3 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white text-sm placeholder-och-steel focus:outline-none focus:ring-2 focus:ring-och-defender"
-              />
-            </div>
           </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-white mb-2">Track</label>
+            <select
+              value={filters.track_key}
+              onChange={(e) => {
+                setFilters({ ...filters, track_key: e.target.value })
+                setPagination({ ...pagination, page: 1 })
+              }}
+              className="w-full px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-och-defender"
+            >
+              <option value="all">All Tracks</option>
+              <option value="defender">Defender</option>
+              <option value="builder">Builder</option>
+              <option value="analyst">Analyst</option>
+            </select>
+          </div>
+        </div>
+      </Card>
 
-          {missionsError && (
-            <div className="mb-4 p-3 bg-och-orange/10 border border-och-orange/50 rounded-lg text-och-orange text-sm">
-              {missionsError}
-            </div>
-          )}
+      {error && (
+        <Card className="mb-6 border-och-orange/50 bg-och-orange/10">
+          <div className="p-4 text-och-orange">{error}</div>
+        </Card>
+      )}
 
-          {loadingMissions && cohortMissions.length === 0 ? (
-            <div className="text-och-steel text-sm">Loading missions...</div>
-          ) : cohortMissions.length === 0 ? (
-            <div className="text-och-steel text-sm">No missions found in your assigned cohorts.</div>
-          ) : (
-            <>
-              <div className="mb-4 text-sm text-och-steel">
-                Showing {cohortMissions.length} of {missionsPagination.total} missions
-              </div>
-              <div className="space-y-3">
-                {cohortMissions.map((mission: any) => (
-                  <Card
-                    key={mission.id}
-                    className="bg-och-midnight/50 border border-och-steel/20 hover:border-och-defender/40 transition-all"
-                  >
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-lg font-semibold text-white">{mission.title}</h3>
-                            <Badge variant={mission.difficulty === 'beginner' ? 'mint' : mission.difficulty === 'intermediate' ? 'defender' : mission.difficulty === 'advanced' ? 'orange' : 'gold'} className="text-xs capitalize">
-                              {mission.difficulty}
-                            </Badge>
-                            {mission.code && (
-                              <span className="text-sm text-och-steel font-mono bg-och-midnight px-2 py-1 rounded">
-                                {mission.code}
-                              </span>
-                            )}
-                          </div>
-                          {mission.description && (
-                            <p className="text-sm text-och-steel mb-3 line-clamp-2">{mission.description}</p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-och-steel">
-                            {mission.type && <span className="capitalize">{mission.type}</span>}
-                            {mission.estimated_time_minutes && (
-                              <span>⏱ {mission.estimated_time_minutes < 60 ? `${mission.estimated_time_minutes} min` : `${Math.floor(mission.estimated_time_minutes / 60)}h ${mission.estimated_time_minutes % 60}m`}</span>
-                            )}
-                            {mission.track_name && (
-                              <span>Track: {mission.track_name}</span>
-                            )}
-                            {mission.program_name && (
-                              <span>Program: {mission.program_name}</span>
-                            )}
-                          </div>
-                          {mission.competencies && mission.competencies.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-3">
-                              {mission.competencies.slice(0, 5).map((tag: string, idx: number) => (
-                                <Badge key={idx} variant="steel" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {mission.competencies.length > 5 && (
-                                <Badge variant="steel" className="text-xs">
-                                  +{mission.competencies.length - 5} more
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+      {filteredMissions.length === 0 && !isLoading ? (
+        <Card className="p-12 text-center">
+          <div className="text-6xl mb-4">🔍</div>
+          <h3 className="text-xl font-bold text-white mb-2">No missions found</h3>
+          <p className="text-och-steel">Try adjusting your filters or search terms to find missions.</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredMissions.map((mission) => (
+            <Card
+              key={mission.id}
+              className="bg-och-midnight/50 border border-och-steel/20 hover:border-och-defender/40 hover:shadow-lg transition-all group"
+            >
+              <div className="p-6 h-full flex flex-col">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="text-2xl">{getTypeIcon(mission.type || 'lab')}</span>
+                      <Badge variant={getDifficultyColor(mission.difficulty) as 'mint' | 'defender' | 'orange' | 'gold' | 'steel'} className="text-xs capitalize shrink-0">
+                        {mission.difficulty}
+                      </Badge>
+                      {mission.code && (
+                        <span className="text-xs text-och-steel font-mono bg-och-midnight px-2 py-1 rounded shrink-0">
+                          {mission.code}
+                        </span>
+                      )}
                     </div>
-                  </Card>
-                ))}
-              </div>
-              
-              {/* Pagination */}
-              {missionsPagination.total > missionsPagination.page_size && (
-                <div className="flex items-center justify-between pt-4 border-t border-och-steel/20 mt-4">
-                  <div className="text-sm text-och-steel">
-                    Page {missionsPagination.page} of {Math.ceil(missionsPagination.total / missionsPagination.page_size)}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMissionsPagination({ ...missionsPagination, page: missionsPagination.page - 1 })}
-                      disabled={!missionsPagination.has_previous || loadingMissions}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setMissionsPagination({ ...missionsPagination, page: missionsPagination.page + 1 })}
-                      disabled={!missionsPagination.has_next || loadingMissions}
-                    >
-                      Next
-                    </Button>
+                    <h3 className="text-lg font-bold text-white group-hover:text-och-defender transition-colors line-clamp-2">
+                      {mission.title}
+                    </h3>
                   </div>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-        
-        <div className="bg-och-midnight border border-och-steel/20 rounded-xl p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-white">Capstone Projects</h2>
-            <button
-              onClick={loadCapstones}
-              className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-opacity-90 text-sm"
-            >
-              {loadingCapstones ? 'Loading...' : 'Refresh Capstones'}
-            </button>
-          </div>
-
-          {(capstones ?? []).length === 0 && !loadingCapstones && (
-            <div className="text-och-steel text-sm">No capstones pending scoring.</div>
-          )}
-
-          {(capstones ?? []).length > 0 && (
-            <div className="space-y-3">
-              {(capstones ?? []).map((capstone) => (
-                <div
-                  key={capstone.id}
-                  className="p-4 bg-och-midnight/50 rounded-lg flex justify-between items-center hover:bg-och-midnight/70 transition-colors"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-semibold text-white">{capstone.title}</h3>
-                      <span className="px-2 py-1 bg-och-orange/20 text-och-orange text-xs rounded">Capstone</span>
-                    </div>
-                    <p className="text-sm text-och-steel mt-1">
-                      <span className="text-white font-medium">{capstone.mentee_name}</span> • 
-                      Submitted: {new Date(capstone.submitted_at).toLocaleString()}
-                    </p>
-                    {capstone.rubric_id && (
-                      <p className="text-xs text-och-mint mt-1">
-                        ✓ Rubric assigned for scoring
-                      </p>
+                {mission.description && (
+                  <p className="text-sm text-och-steel mb-4 line-clamp-3 flex-1">{mission.description}</p>
+                )}
+                <div className="space-y-2 mb-4 pt-4 border-t border-och-steel/20">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-och-steel">
+                    {formatTime(mission.estimated_time_minutes, mission.est_hours) && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {formatTime(mission.estimated_time_minutes, mission.est_hours)}
+                      </span>
+                    )}
+                    {mission.track_name && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        </svg>
+                        {mission.track_name}
+                      </span>
+                    )}
+                    {mission.program_name && (
+                      <span className="flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        {mission.program_name}
+                      </span>
                     )}
                   </div>
-                  <button
-                    onClick={() => setSelectedCapstone(capstone)}
-                    className="px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-opacity-90 text-sm shrink-0"
-                  >
-                    Score with Rubric
-                  </button>
+                  {mission.competencies && mission.competencies.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {mission.competencies.slice(0, 3).map((comp, idx) => (
+                        <Badge key={idx} variant="steel" className="text-xs">
+                          {comp}
+                        </Badge>
+                      ))}
+                      {mission.competencies.length > 3 && (
+                        <Badge variant="steel" className="text-xs">
+                          +{mission.competencies.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="mt-auto pt-4 border-t border-och-steel/20">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => router.push(`/dashboard/mentor/missions/${mission.id}`)}
+                  >
+                    View Details
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
-      </div>
+      )}
+
+      {pagination.total > pagination.page_size && (
+        <div className="mt-8 flex items-center justify-between">
+          <div className="text-sm text-och-steel">
+            Showing {((pagination.page - 1) * pagination.page_size) + 1} to{' '}
+            {Math.min(pagination.page * pagination.page_size, pagination.total)} of {pagination.total} missions
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+              disabled={!pagination.has_previous || isLoading}
+            >
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+              disabled={!pagination.has_next || isLoading}
+            >
+              Next
+              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-export default function MissionsPage() {
-  return (
-    <Suspense fallback={<div className="w-full max-w-7xl py-6 px-4 sm:px-6 lg:px-6 xl:px-8 text-och-steel">Loading missions…</div>}>
-      <MissionsPageInner />
-    </Suspense>
-  )
-}
-
-

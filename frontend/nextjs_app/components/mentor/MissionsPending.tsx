@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -92,20 +93,24 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
   }
 
   return (
-    <Card className="mb-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-        <div>
-          <h2 className="text-xl font-bold text-white">Mission Review Inbox</h2>
+    <Card className="mb-6 bg-och-midnight/50 border border-och-steel/20 rounded-xl overflow-hidden">
+      <div className="p-6 border-b border-och-steel/20 bg-och-midnight/30">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-white">Reviews Inbox</h2>
+            <p className="text-sm text-och-steel mt-1">
+              {totalCount} submission{totalCount !== 1 ? 's' : ''} awaiting your review
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleBulkApprove}>
+              Bulk Approve
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleBulkApprove}>
-            Bulk Approve
-          </Button>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap gap-3">
+        {/* Filters */}
+        <div className="mt-4 flex flex-wrap gap-3">
         <div>
           <label className="block text-xs text-och-steel mb-1">Mission Type</label>
           <select
@@ -151,7 +156,9 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
           />
         </div>
       </div>
+      </div>
 
+      <div className="p-6">
       {successMessage && (
         <div className="mb-4 p-3 bg-och-defender/20 border border-och-defender/40 rounded-lg text-och-defender text-sm">
           {successMessage}
@@ -175,8 +182,8 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
       )}
 
       {!isLoading && !error && filteredMissions.length > 0 && (
-        <div className="space-y-3">
-          {filteredMissions.map((m) => {
+        <div className="space-y-0 divide-y divide-och-steel/20">
+          {filteredMissions.map((m, index) => {
             // Count evidence types
             const submissionData = m.submission_data as any
             const evidenceCount = {
@@ -192,14 +199,19 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
             const rubricId = (m as any).rubric_id
             const aiFeedback = (m as any).ai_feedback
 
+            const itemNumber = (page - 1) * pageSize + index + 1
             return (
             <div
               key={m.id}
-                className="p-4 bg-och-midnight/50 rounded-lg hover:bg-och-midnight/70 transition-colors border border-och-steel/20"
+              className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 hover:bg-och-midnight/50 transition-colors group"
             >
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-              <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {/* Number */}
+                <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-och-defender/20 border border-och-defender/40 flex items-center justify-center text-och-defender font-bold text-sm">
+                    {itemNumber}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="text-white font-semibold">{m.mission_title}</span>
                       <Badge 
                         variant={
@@ -229,7 +241,7 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
                         <Badge variant="defender" className="text-[11px]">Rubric Required</Badge>
                       )}
                     </div>
-                    <div className="text-xs text-och-steel mb-2">
+                    <div className="text-xs text-och-steel">
                       <span className="text-white font-medium">{m.mentee_name}</span> • 
                       Submitted: {new Date(m.submitted_at).toLocaleString()}
                       {(m.status === 'in_review' || aiFeedback) && (
@@ -264,26 +276,38 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
                           <span className="flex items-center gap-1">
                             📸 {evidenceCount.screenshot} screenshot{evidenceCount.screenshot !== 1 ? 's' : ''}
                           </span>
-                  )}
-                </div>
+                        )}
+                      </div>
                     )}
                     {/* AI Feedback Preview */}
                     {aiFeedback && (
                       <div className="mt-2 p-2 bg-och-defender/10 border border-och-defender/30 rounded text-xs">
                         <span className="text-och-steel font-medium">AI Feedback: </span>
                         <span className="text-white">
-                          {typeof aiFeedback === 'string' 
+                          {typeof aiFeedback === 'string'
                             ? aiFeedback.substring(0, 100) + (aiFeedback.length > 100 ? '...' : '')
                             : (aiFeedback as any)?.summary || 'Available (view in review)'}
                         </span>
-                </div>
+                      </div>
                     )}
-              </div>
-                  <div className="flex gap-2 shrink-0">
-                <Button variant="outline" size="sm" onClick={() => handleReview(m)}>
-                  Review
-                </Button>
                   </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 shrink-0 sm:ml-auto">
+                  {m.mentee_id && (
+                    <Link href={`/dashboard/mentor/messages?mentee=${encodeURIComponent(m.mentee_id)}`}>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Message
+                      </Button>
+                    </Link>
+                  )}
+                  <Button variant="defender" size="sm" onClick={() => handleReview(m)}>
+                    Review
+                  </Button>
                 </div>
               </div>
             )
@@ -314,7 +338,7 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
 
       {/* Pagination (backend-driven) */}
       {!isLoading && !error && totalCount > pageSize && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-och-steel/20">
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-och-steel/20">
           <div className="text-xs text-och-steel">
             Page {page} of {Math.ceil(totalCount / pageSize)}
           </div>
@@ -333,6 +357,7 @@ export function MissionsPending({ onReviewClick }: MissionsPendingProps) {
           </div>
         </div>
       )}
+      </div>
     </Card>
   )
 }

@@ -157,7 +157,7 @@ export default function MentorClient() {
   }, [mentees])
 
   const handleReviewNow = (submissionId: string) => {
-    router.push(`/dashboard/mentor/missions?submission=${encodeURIComponent(submissionId)}`)
+    router.push(`/dashboard/mentor/reviews?submission=${encodeURIComponent(submissionId)}`)
   }
 
   const handleOpenMentee = (menteeId: string) => {
@@ -198,7 +198,7 @@ export default function MentorClient() {
           <div className="text-xs text-och-steel mb-1">Pending Reviews</div>
           <div className="text-2xl font-bold text-white">{pendingCount || 0}</div>
           <div className="mt-2">
-            <Link href="/dashboard/mentor/missions">
+            <Link href="/dashboard/mentor/reviews">
               <Button variant="outline" size="sm">Open Review Queue</Button>
             </Link>
           </div>
@@ -243,7 +243,7 @@ export default function MentorClient() {
                   Start here: the items that unblock your mentees fastest.
                 </p>
               </div>
-              <Link href="/dashboard/mentor/missions">
+              <Link href="/dashboard/mentor/reviews">
                 <Button variant="outline" size="sm">View All</Button>
               </Link>
             </div>
@@ -424,7 +424,7 @@ export default function MentorClient() {
                 Browse missions in your assigned track(s) and jump into review when submissions arrive.
               </p>
             </div>
-            <Link href="/dashboard/mentor/missions">
+            <Link href="/dashboard/mentor/reviews">
               <Button variant="outline" size="sm">Open Mission Review</Button>
             </Link>
           </div>
@@ -493,10 +493,10 @@ export default function MentorClient() {
                         {m.description && <div className="text-xs text-och-steel mt-1 line-clamp-2">{m.description}</div>}
                       </div>
                       <div className="flex gap-2 shrink-0">
-                        <Link href="/dashboard/mentor/missions">
+                        <Link href="/dashboard/mentor/reviews">
                           <Button variant="outline" size="sm">Review</Button>
                         </Link>
-                        <Link href={`/dashboard/mentor/missions`}>
+                        <Link href="/dashboard/mentor/missions">
                           <Button variant="outline" size="sm">Open</Button>
                         </Link>
                       </div>

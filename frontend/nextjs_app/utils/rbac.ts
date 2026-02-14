@@ -34,6 +34,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/mentor/profile', roles: ['mentor'] },
   { path: '/dashboard/mentor/sessions', roles: ['mentor'] },
   { path: '/dashboard/mentor/missions', roles: ['mentor'] },
+  { path: '/dashboard/mentor/reviews', roles: ['mentor'] },
   { path: '/dashboard/mentor/scoring', roles: ['mentor'] },
   { path: '/dashboard/mentor/talentscope', roles: ['mentor'] },
   { path: '/dashboard/mentor/mentees', roles: ['mentor'] },

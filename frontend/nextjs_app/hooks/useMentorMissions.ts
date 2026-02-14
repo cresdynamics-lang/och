@@ -7,7 +7,7 @@ import type { MissionSubmission } from '@/services/types/mentor'
 const USE_MOCK_DATA = false // Backend is ready
 
 export function useMentorMissions(mentorId: string | undefined, params?: {
-  status?: 'pending_review' | 'in_review' | 'all'
+  status?: 'pending_review' | 'in_review' | 'reviewed' | 'all'
   limit?: number
   offset?: number
 }) {
