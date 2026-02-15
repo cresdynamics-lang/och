@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'missions',
     'dashboard',
     'subscriptions',
+    'django_apscheduler',       # Periodic jobs (grace period, renewals)
     'mentorship_coordination',
     'mentors',
     'programs',

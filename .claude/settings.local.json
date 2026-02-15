@@ -28,7 +28,27 @@
       "Bash(powershell:*)",
       "Bash(git rm:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(pg_restore:*)",
+      "Read(//c/Users/HP/PycharmProjects/och/**)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/pg_restore.exe\" -l /c/Users/HP/PycharmProjects/och/ochdb14th)",
+      "Bash(\"/c/Program Files/PostgreSQL/17/bin/psql.exe\" -U postgres -d ongozacyberhub -t -c \"SELECT tablename FROM pg_tables WHERE schemaname=''public'' ORDER BY tablename;\")",
+      "Bash(PGPASSWORD=brian001 \"/c/Program Files/PostgreSQL/17/bin/psql.exe\":*)",
+      "Bash(comm:*)",
+      "Bash(PGPASSWORD=brian001 \"/c/Program Files/PostgreSQL/17/bin/pg_restore.exe\":*)",
+      "Bash(npx tsc:*)",
+      "Bash(printf:*)",
+      "Bash(ls:*)",
+      "Bash(PGPASSWORD=brian001 psql:*)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d ongozacyberhub -c \"\n-- 1. Ensure the finance role row exists in ''roles'' table\nINSERT INTO roles \\(name, display_name, description, is_system_role, created_at, updated_at\\)\nVALUES \\(''finance'', ''Finance'', ''Finance team — billing, transactions, subscription management'', true, NOW\\(\\), NOW\\(\\)\\)\nON CONFLICT \\(name\\) DO NOTHING;\n\n-- 2. Get the role id\nSELECT id, name FROM roles WHERE name = ''finance'';\n\")",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d ongozacyberhub -c \"INSERT INTO roles \\(name, display_name, description, is_system_role, created_at, updated_at\\) VALUES \\(''finance'', ''Finance'', ''Finance team'', true, NOW\\(\\), NOW\\(\\)\\) ON CONFLICT \\(name\\) DO NOTHING; SELECT id, name FROM roles WHERE name = ''finance'';\")",
+      "Bash(cmd /c \"set PGPASSWORD=brian001 && \"\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\"\" -U postgres -d ongozacyberhub -t -c \"\"INSERT INTO roles \\(name, display_name, description, is_system_role, created_at, updated_at\\) VALUES \\(''finance'', ''Finance'', ''Finance team'', true, NOW\\(\\), NOW\\(\\)\\) ON CONFLICT \\(name\\) DO NOTHING;\"\"\")",
+      "Bash(cmd /c \"set PGPASSWORD=brian001 && \"\"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\"\" -U postgres -d ongozacyberhub -t -c \"\"SELECT id FROM roles WHERE name = ''finance'';\"\"\")",
+      "Bash(source:*)",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(./venv/Scripts/pip.exe install:*)",
+      "Bash(./venv/Scripts/pip.exe list:*)",
+      "Bash(./venv/Scripts/python.exe:*)"
     ]
   }
 }

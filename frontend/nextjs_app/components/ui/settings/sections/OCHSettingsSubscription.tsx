@@ -23,12 +23,27 @@ interface SubscriptionData {
   features: string[];
 }
 
+interface Plan {
+  id: string;
+  name: string;
+  tier: string;
+  price_monthly: number;
+  features: string[];
+  enhanced_access_days: number | null;
+  mentorship_access: boolean;
+  talentscope_access: string;
+  missions_access_type: string;
+  mode_note: string;
+}
+
 export function OCHSettingsSubscription() {
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [upgrading, setUpgrading] = useState(false);
 
   useEffect(() => {
     loadSubscription();
@@ -36,22 +51,27 @@ export function OCHSettingsSubscription() {
 
   const loadSubscription = async () => {
     if (!user?.id) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      const data = await apiGateway.get<any>('/subscription/status');
+      const [statusData, plansData] = await Promise.all([
+        apiGateway.get<any>('/subscription/status'),
+        apiGateway.get<Plan[]>('/subscription/plans'),
+      ]);
+
       setSubscription({
-        tier: (data as any).tier || 'free',
-        status: (data as any).status || 'inactive',
-        enhanced_access_until: (data as any).enhanced_access_until,
-        days_enhanced_left: (data as any).days_enhanced_left,
-        next_payment: (data as any).next_payment,
-        grace_period_until: (data as any).grace_period_until,
-        can_upgrade: (data as any).can_upgrade !== false,
-        features: (data as any).features || [],
+        tier: statusData.tier || 'free',
+        status: statusData.status || 'inactive',
+        enhanced_access_until: statusData.enhanced_access_until,
+        days_enhanced_left: statusData.days_enhanced_left,
+        next_payment: statusData.next_payment,
+        grace_period_until: statusData.grace_period_until,
+        can_upgrade: statusData.can_upgrade !== false,
+        features: statusData.features || [],
       });
+      setPlans(Array.isArray(plansData) ? plansData : []);
     } catch (err: any) {
       console.error('Failed to load subscription:', err);
       setError(err?.message || 'Failed to load subscription data');
@@ -63,6 +83,20 @@ export function OCHSettingsSubscription() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpgradeOrDowngrade = async (planName: string, action: 'upgrade' | 'downgrade') => {
+    setUpgrading(true);
+    setError(null);
+    try {
+      await apiGateway.post('/subscription/simulate-payment', { plan: planName });
+      await loadSubscription();
+      alert(`Successfully ${action}d to ${planName} plan!`);
+    } catch (err: any) {
+      setError(err?.message || `${action.charAt(0).toUpperCase() + action.slice(1)} failed`);
+    } finally {
+      setUpgrading(false);
     }
   };
 
@@ -317,92 +351,87 @@ export function OCHSettingsSubscription() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Free Tier */}
-            <div className="p-6 bg-white/5 border border-white/5 rounded-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white">Free</h3>
-                <Badge variant="steel">Current</Badge>
-              </div>
-              <p className="text-sm text-och-steel mb-4">Basic access to OCH platform</p>
-              <ul className="space-y-2 mb-6">
-                <li className="flex items-center gap-2 text-sm text-och-steel">
-                  <CheckCircle2 className="w-4 h-4 text-och-mint" />
-                  Basic profile access
-                </li>
-                <li className="flex items-center gap-2 text-sm text-och-steel">
-                  <CheckCircle2 className="w-4 h-4 text-och-mint" />
-                  Community features
-                </li>
-              </ul>
-            </div>
+            {plans.map(plan => {
+              const isCurrent = plan.tier === subscription?.tier ||
+                (plan.tier === 'premium' && subscription?.tier === 'professional')
 
-            {/* Starter Tier */}
-            <div className="p-6 bg-och-mint/5 border border-och-mint/20 rounded-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white">Starter</h3>
-                {subscription?.tier === 'starter' && <Badge variant="mint">Current</Badge>}
-              </div>
-              <p className="text-sm text-och-steel mb-4">6 months of Enhanced Access included</p>
-              <ul className="space-y-2 mb-6">
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-mint" />
-                  All Free features
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-mint" />
-                  Enhanced Access (6 months)
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-mint" />
-                  Advanced TalentScope
-                </li>
-              </ul>
-              {subscription?.tier !== 'starter' && subscription?.tier !== 'professional' && (
-                <Button
-                  variant="mint"
-                  className="w-full"
-                  onClick={() => router.push('/dashboard/student/subscription')}
-                >
-                  Upgrade to Starter
-                </Button>
-              )}
-            </div>
+              // Determine if this is an upgrade or downgrade
+              const TIER_LEVEL: Record<string, number> = { free: 0, starter: 1, premium: 2, professional: 2 }
+              const currentTierLevel = TIER_LEVEL[subscription?.tier || 'free'] ?? 0
+              const planTierLevel = TIER_LEVEL[plan.tier] ?? 0
+              const isUpgrade = planTierLevel > currentTierLevel
+              const isDowngrade = planTierLevel < currentTierLevel
 
-            {/* Professional Tier */}
-            <div className="p-6 bg-och-gold/5 border border-och-gold/20 rounded-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-white">Professional</h3>
-                {subscription?.tier === 'professional' && <Badge variant="gold">Current</Badge>}
-              </div>
-              <p className="text-sm text-och-steel mb-4">Full access with human mentorship</p>
-              <ul className="space-y-2 mb-6">
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                  All Starter features
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                  Human mentorship access
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                  Full TalentScope analytics
-                </li>
-                <li className="flex items-center gap-2 text-sm text-white">
-                  <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                  Priority support
-                </li>
-              </ul>
-              {subscription?.tier !== 'professional' && (
-                <Button
-                  variant="gold"
-                  className="w-full"
-                  onClick={() => router.push('/dashboard/student/subscription')}
-                >
-                  Upgrade to Professional
-                </Button>
-              )}
-            </div>
+              const tierColors = {
+                free: { bg: 'bg-white/5', border: 'border-white/5', badge: 'steel' as const },
+                starter: { bg: 'bg-och-mint/5', border: 'border-och-mint/20', badge: 'mint' as const },
+                premium: { bg: 'bg-och-gold/5', border: 'border-och-gold/20', badge: 'gold' as const },
+              }
+              const colors = tierColors[plan.tier as keyof typeof tierColors] || tierColors.free
+
+              return (
+                <div key={plan.id} className={`p-6 ${colors.bg} border ${colors.border} rounded-xl`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-white capitalize">{plan.name}</h3>
+                    {isCurrent && <Badge variant={colors.badge}>Current</Badge>}
+                  </div>
+
+                  <div className="mb-4">
+                    <span className="text-2xl font-bold text-white">${plan.price_monthly.toFixed(0)}</span>
+                    <span className="text-sm text-och-steel">/month</span>
+                  </div>
+
+                  {plan.mode_note && (
+                    <p className="text-sm text-och-steel mb-4">{plan.mode_note}</p>
+                  )}
+
+                  <ul className="space-y-2 mb-6 min-h-[120px]">
+                    {plan.features.slice(0, 4).map((feature, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm text-white">
+                        <CheckCircle2 className={`w-4 h-4 ${plan.tier === 'premium' ? 'text-och-gold' : 'text-och-mint'}`} />
+                        {feature.replace(/_/g, ' ')}
+                      </li>
+                    ))}
+                    {plan.mentorship_access && (
+                      <li className="flex items-center gap-2 text-sm text-white">
+                        <CheckCircle2 className="w-4 h-4 text-och-gold" />
+                        Human mentorship
+                      </li>
+                    )}
+                    {plan.enhanced_access_days && (
+                      <li className="flex items-center gap-2 text-sm text-och-gold">
+                        <CheckCircle2 className="w-4 h-4 text-och-gold" />
+                        {Math.round(plan.enhanced_access_days / 30)}mo Enhanced Access
+                      </li>
+                    )}
+                  </ul>
+
+                  {isCurrent ? (
+                    <Button variant="outline" className="w-full" disabled>
+                      Current Plan
+                    </Button>
+                  ) : isUpgrade ? (
+                    <Button
+                      variant={plan.tier === 'premium' ? 'gold' : 'mint'}
+                      className="w-full"
+                      disabled={upgrading}
+                      onClick={() => handleUpgradeOrDowngrade(plan.name, 'upgrade')}
+                    >
+                      {upgrading ? 'Processing...' : `Upgrade — $${plan.price_monthly.toFixed(0)}/mo`}
+                    </Button>
+                  ) : isDowngrade ? (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      disabled={upgrading}
+                      onClick={() => handleUpgradeOrDowngrade(plan.name, 'downgrade')}
+                    >
+                      {upgrading ? 'Processing...' : 'Downgrade'}
+                    </Button>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
         </Card>
       </div>

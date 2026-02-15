@@ -46,6 +46,14 @@ export const profilerClient = {
   },
 
   /**
+   * Get Future You insights with AI-generated career analysis
+   * GET /api/v1/profiler/future-you/insights
+   */
+  async getFutureYouInsights(): Promise<any> {
+    return apiGateway.get('/profiler/future-you/insights')
+  },
+
+  /**
    * Get comprehensive profiler results for a mentee (mentor/coaching OS access)
    * GET /api/v1/profiler/mentees/{menteeId}/results
    */

@@ -1,12 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { apiGateway } from '@/services/apiGateway'
 
 export default function SubscriptionOverviewClient() {
+  const [stats, setStats] = useState({
+    total: '-', active: '-', revenue: '-', gateways: '-'
+  })
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [subsRes, txnRes, gwRes] = await Promise.all([
+          apiGateway.get('/admin/subscriptions/') as Promise<any>,
+          apiGateway.get('/admin/transactions/') as Promise<any>,
+          apiGateway.get('/admin/gateways/') as Promise<any>,
+        ])
+        const subs: any[] = Array.isArray(subsRes) ? subsRes : (subsRes.results || [])
+        const txns: any[] = Array.isArray(txnRes) ? txnRes : (txnRes.results || [])
+        const gws: any[] = Array.isArray(gwRes) ? gwRes : (gwRes.results || [])
+        const activeSubs = subs.filter((s: any) => s.status === 'active')
+        const completedTxns = txns.filter((t: any) => t.status === 'completed')
+        const revenue = completedTxns.reduce((sum: number, t: any) => sum + parseFloat(t.amount || '0'), 0)
+        setStats({
+          total: String(subs.length),
+          active: String(activeSubs.length),
+          revenue: `$${revenue.toFixed(2)}`,
+          gateways: String(gws.filter((g: any) => g.enabled).length),
+        })
+      } catch {
+        // Stats unavailable — keep dashes
+      }
+    }
+    load()
+  }, [])
+
   return (
     <div className="space-y-6">
       <div>
@@ -97,19 +129,19 @@ export default function SubscriptionOverviewClient() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-och-midnight/50 p-4 rounded-lg">
               <div className="text-sm text-och-steel mb-1">Total Subscriptions</div>
-              <div className="text-2xl font-bold text-white">-</div>
+              <div className="text-2xl font-bold text-white">{stats.total}</div>
             </div>
             <div className="bg-och-midnight/50 p-4 rounded-lg">
               <div className="text-sm text-och-steel mb-1">Active Subscriptions</div>
-              <div className="text-2xl font-bold text-och-mint">-</div>
+              <div className="text-2xl font-bold text-och-mint">{stats.active}</div>
             </div>
             <div className="bg-och-midnight/50 p-4 rounded-lg">
-              <div className="text-sm text-och-steel mb-1">Monthly Revenue</div>
-              <div className="text-2xl font-bold text-och-defender">-</div>
+              <div className="text-sm text-och-steel mb-1">Total Revenue</div>
+              <div className="text-2xl font-bold text-och-defender">{stats.revenue}</div>
             </div>
             <div className="bg-och-midnight/50 p-4 rounded-lg">
-              <div className="text-sm text-och-steel mb-1">Payment Gateways</div>
-              <div className="text-2xl font-bold text-white">-</div>
+              <div className="text-sm text-och-steel mb-1">Active Gateways</div>
+              <div className="text-2xl font-bold text-white">{stats.gateways}</div>
             </div>
           </div>
         </div>

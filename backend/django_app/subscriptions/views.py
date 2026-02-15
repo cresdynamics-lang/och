@@ -45,22 +45,27 @@ def subscription_status(request):
             'status': 'active',
         })
     
-    # Check if can upgrade
-    can_upgrade = subscription.plan.name not in ['professional_7', 'premium']
-    
-    # Return plan name as tier for frontend compatibility
-    # Frontend expects: 'free', 'starter_3', 'professional_7'
-    tier = subscription.plan.name
-    
+    # Map DB tier to frontend tier name
+    # DB: free | starter | premium   →   Frontend: free | starter | professional
+    TIER_MAP = {'free': 'free', 'starter': 'starter', 'premium': 'professional'}
+    tier = TIER_MAP.get(plan.tier, plan.tier)
+
+    # Can upgrade if not already on premium/professional
+    can_upgrade = plan.tier not in ('premium',)
+
     return Response({
-        'tier': tier,  # Use plan name as tier for frontend compatibility
-        'plan_name': subscription.plan.name,
+        'tier': tier,
+        'plan_name': plan.name,
+        'plan_tier': plan.tier,
         'days_enhanced_left': subscription.days_enhanced_left,
+        'enhanced_access_until': subscription.enhanced_access_expires_at,
         'can_upgrade': can_upgrade,
-        'features': subscription.plan.features or [],
+        'features': plan.features or [],
         'next_payment': subscription.current_period_end,
         'next_billing_date': subscription.current_period_end,
         'status': subscription.status,
+        'current_period_start': subscription.current_period_start,
+        'current_period_end': subscription.current_period_end,
     }, status=status.HTTP_200_OK)
 
 
@@ -356,4 +361,176 @@ def billing_history(request):
     return Response({
         'billing_history': billing_history,
         'total': len(billing_history),
+    }, status=status.HTTP_200_OK)
+
+
+# ── NEW ENDPOINTS ────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_plans(request):
+    """
+    GET /api/v1/subscription/plans
+    Return all active subscription plans for the pricing/upgrade UI.
+    """
+    plans = SubscriptionPlan.objects.all().order_by('price_monthly')
+    data = []
+    for p in plans:
+        mode_note = ''
+        if p.tier == 'starter':
+            mode_note = 'First 6 months: Enhanced Access (full features). After: Normal Mode (limited).'
+        data.append({
+            'id': str(p.id),
+            'name': p.name,
+            'tier': p.tier,
+            'price_monthly': float(p.price_monthly or 0),
+            'features': p.features or [],
+            'ai_coach_daily_limit': p.ai_coach_daily_limit,
+            'portfolio_item_limit': p.portfolio_item_limit,
+            'missions_access_type': p.missions_access_type,
+            'mentorship_access': p.mentorship_access,
+            'talentscope_access': p.talentscope_access,
+            'marketplace_contact': p.marketplace_contact,
+            'enhanced_access_days': p.enhanced_access_days,
+            'mode_note': mode_note,
+        })
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def simulate_payment(request):
+    """
+    POST /api/v1/subscription/simulate-payment
+    Simulates a full payment checkout (no real gateway).
+    Body: { "plan": "starter_3" | "professional_7" | "free" }
+
+    Flow mirrors a real payment success:
+      1. Resolve plan
+      2. Create/update UserSubscription (status=active, 30-day period)
+      3. Set enhanced_access_expires_at for starter tier (180 days, first time only)
+      4. Log a completed PaymentTransaction (sim_...)
+      5. Sync MarketplaceProfile tier
+    """
+    plan_identifier = request.data.get('plan')
+    if not plan_identifier:
+        return Response({'error': 'plan is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        plan = SubscriptionPlan.objects.get(name=plan_identifier)
+    except SubscriptionPlan.DoesNotExist:
+        # Map old tier names or use tier directly
+        tier_map = {'starter_3': 'starter', 'professional_7': 'premium', 'free': 'free'}
+        tier = tier_map.get(plan_identifier, plan_identifier)
+        plan = SubscriptionPlan.objects.filter(tier=tier).first()
+        if not plan:
+            available = list(SubscriptionPlan.objects.values_list('name', 'tier', flat=False))
+            return Response(
+                {'error': f'Plan "{plan_identifier}" not found. Available: {available}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    user = request.user
+    now = timezone.now()
+
+    try:
+        with transaction.atomic():
+            existing = UserSubscription.objects.filter(user=user).first()
+
+            # Enhanced access: only set once per lifetime on first starter subscription
+            enhanced_until = None
+            if plan.tier == 'starter':
+                if existing and existing.enhanced_access_expires_at:
+                    enhanced_until = existing.enhanced_access_expires_at  # keep original window
+                else:
+                    enhanced_until = now + timezone.timedelta(days=180)
+
+            subscription, _ = UserSubscription.objects.update_or_create(
+                user=user,
+                defaults={
+                    'plan': plan,
+                    'status': 'active',
+                    'current_period_start': now,
+                    'current_period_end': now + timezone.timedelta(days=30),
+                    'enhanced_access_expires_at': enhanced_until,
+                }
+            )
+
+            # Log simulated payment transaction
+            import uuid as _uuid
+            sim_tx_id = f'sim_{_uuid.uuid4().hex[:12]}'
+            PaymentTransaction.objects.create(
+                user=user,
+                subscription=subscription,
+                amount=plan.price_monthly or 0,
+                currency='USD',
+                status='completed',
+                gateway_transaction_id=sim_tx_id,
+                gateway_response={'simulated': True, 'plan': plan.name},
+                processed_at=now,
+            )
+
+            # Sync MarketplaceProfile
+            mp_map = {'free': 'free', 'starter': 'starter', 'premium': 'professional'}
+            mp_tier = mp_map.get(plan.tier, 'free')
+            try:
+                mp = user.marketplace_profile
+                mp.tier = mp_tier
+                mp.last_updated_at = now
+                mp.save(update_fields=['tier', 'last_updated_at'])
+            except Exception:
+                pass
+
+            days_left = subscription.days_enhanced_left
+            if plan.tier == 'premium':
+                mode = 'professional'
+            elif days_left and days_left > 0:
+                mode = 'enhanced'
+            else:
+                mode = 'normal'
+
+            logger.info(f'[simulate_payment] {user.email} → {plan.name} | tx={sim_tx_id} | mode={mode}')
+
+            return Response({
+                'success': True,
+                'transaction_id': sim_tx_id,
+                'plan': plan.name,
+                'tier': plan.tier,
+                'mode': mode,
+                'enhanced_access_days_left': days_left,
+                'period_end': subscription.current_period_end,
+                'message': f'Payment simulated. You are now on the {plan.name} plan.',
+            }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f'[simulate_payment] Error for {user.email}: {e}')
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_subscription(request):
+    """
+    POST /api/v1/subscription/cancel
+    Marks subscription as canceled. Access continues until current_period_end;
+    the scheduler then downgrades to Free Tier automatically.
+    """
+    user = request.user
+    try:
+        subscription = user.subscription
+    except UserSubscription.DoesNotExist:
+        return Response({'error': 'No active subscription found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if subscription.status == 'canceled':
+        return Response({'error': 'Subscription is already canceled'}, status=status.HTTP_400_BAD_REQUEST)
+
+    subscription.status = 'canceled'
+    subscription.save(update_fields=['status', 'updated_at'])
+
+    logger.info(f'[cancel_subscription] {user.email} canceled. Access until {subscription.current_period_end}')
+
+    return Response({
+        'success': True,
+        'message': 'Subscription canceled. You retain access until the end of your billing period.',
+        'access_until': subscription.current_period_end,
     }, status=status.HTTP_200_OK)
