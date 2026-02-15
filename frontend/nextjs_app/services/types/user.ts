@@ -26,6 +26,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   roles?: UserRole[];
+  permissions?: string[];
   consent_scopes?: string[];
   entitlements?: string[];
   preferred_learning_style?: string;

@@ -1114,9 +1114,20 @@ class MeView(APIView):
         except Exception:
             pass
 
+        # RBAC: aggregate permission names from all active roles (for sidebar/route visibility)
+        permission_names = set()
+        for user_role in user.user_roles.filter(is_active=True).select_related('role'):
+            for perm in user_role.role.permissions.all().values_list('name', flat=True):
+                permission_names.add(perm)
+        # Staff/superuser get all permissions for UI (backend still enforces)
+        if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+            from users.models import Permission
+            permission_names = set(Permission.objects.values_list('name', flat=True))
+
         payload = {
             'user': user_response,
             'roles': roles,
+            'permissions': sorted(permission_names),
             'consent_scopes': formatted_consents,
             'entitlements': entitlements,
         }

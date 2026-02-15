@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigation } from '@/hooks/useNavigation'
-import { getPrimaryRole } from '@/utils/rbac'
+import { getPrimaryRole, hasPermission } from '@/utils/rbac'
 
 // Helper function to get role display name
 function getRoleDisplayName(role: string | null): string {
@@ -32,57 +32,74 @@ interface NavItem {
   href: string
   icon: string
   badge?: number
+  permission?: string
   children?: NavItem[]
 }
 
 const navItems: NavItem[] = [
-  { label: 'Overview', href: '/dashboard/admin', icon: '📊' },
-  { 
-    label: 'User Management', 
-    href: '/dashboard/admin/users', 
-    icon: '👥',
+  { label: 'Overview', href: '/dashboard/admin', icon: '', permission: 'read_analytics' },
+  {
+    label: 'User Management',
+    href: '/dashboard/admin/users',
+    icon: '',
+    permission: 'list_users',
     children: [
-      { label: 'All Users', href: '/dashboard/admin/users', icon: '👤' },
-      { label: 'Program Directors', href: '/dashboard/admin/users/directors', icon: '👔' },
-      { label: 'Mentors', href: '/dashboard/admin/users/mentors', icon: '🎯' },
-      { label: 'Finance Directors', href: '/dashboard/admin/users/finance', icon: '💰' },
-      { label: 'Students', href: '/dashboard/admin/users/mentees', icon: '🎓' },
+      { label: 'All Users', href: '/dashboard/admin/users', icon: '', permission: 'list_users' },
+      { label: 'Program Directors', href: '/dashboard/admin/users/directors', icon: '', permission: 'list_users' },
+      { label: 'Mentors', href: '/dashboard/admin/users/mentors', icon: '', permission: 'list_users' },
+      { label: 'Finance Directors', href: '/dashboard/admin/users/finance', icon: '', permission: 'list_users' },
+      { label: 'Students', href: '/dashboard/admin/users/mentees', icon: '', permission: 'list_users' },
     ]
   },
   {
     label: 'Subscriptions',
     href: '/dashboard/admin/subscriptions',
-    icon: '💳',
+    icon: '',
+    permission: 'read_billing',
     children: [
-      { label: 'Plans & Tiers', href: '/dashboard/admin/subscriptions/plans', icon: '📦' },
-      { label: 'User Subscriptions', href: '/dashboard/admin/subscriptions/users', icon: '👤' },
-      { label: 'Payment Gateways', href: '/dashboard/admin/subscriptions/gateways', icon: '🌐' },
-      { label: 'Transactions', href: '/dashboard/admin/subscriptions/transactions', icon: '💰' },
-      { label: 'Rules & Settings', href: '/dashboard/admin/subscriptions/rules', icon: '⚙️' },
+      { label: 'Plans & Tiers', href: '/dashboard/admin/subscriptions/plans', icon: '', permission: 'read_billing' },
+      { label: 'User Subscriptions', href: '/dashboard/admin/subscriptions/users', icon: '', permission: 'read_billing' },
+      { label: 'Payment Gateways', href: '/dashboard/admin/subscriptions/gateways', icon: '', permission: 'read_billing' },
+      { label: 'Transactions', href: '/dashboard/admin/subscriptions/transactions', icon: '', permission: 'read_billing' },
+      { label: 'Rules & Settings', href: '/dashboard/admin/subscriptions/rules', icon: '', permission: 'read_billing' },
     ]
   },
   {
     label: 'AI Recipe Engine',
     href: '/dashboard/admin/recipes',
-    icon: '🤖'
+    icon: '',
+    permission: 'manage_users'
   },
   {
     label: 'Marketplace',
     href: '/dashboard/admin/marketplace',
-    icon: '💼',
+    icon: '',
+    permission: 'list_organizations',
     children: [
-      { label: 'Overview', href: '/dashboard/admin/marketplace', icon: '📊' },
-      { label: 'Employer Directory', href: '/dashboard/admin/marketplace/employers', icon: '🏢' },
-      { label: 'Audit View', href: '/dashboard/admin/marketplace/audit', icon: '📋' },
-      { label: 'Governance Console', href: '/dashboard/admin/marketplace/governance', icon: '⚙️' },
-      { label: 'Analytics & Insights', href: '/dashboard/admin/marketplace/analytics', icon: '📈' },
+      { label: 'Overview', href: '/dashboard/admin/marketplace', icon: '', permission: 'list_organizations' },
+      { label: 'Employer Directory', href: '/dashboard/admin/marketplace/employers', icon: '', permission: 'list_organizations' },
+      { label: 'Audit View', href: '/dashboard/admin/marketplace/audit', icon: '', permission: 'read_analytics' },
+      { label: 'Governance Console', href: '/dashboard/admin/marketplace/governance', icon: '', permission: 'manage_organizations' },
+      { label: 'Analytics & Insights', href: '/dashboard/admin/marketplace/analytics', icon: '', permission: 'read_analytics' },
     ]
   },
-  { label: 'Roles & Permissions', href: '/dashboard/admin/roles', icon: '🔐' },
-  { label: 'Audit Logs', href: '/dashboard/admin/audit', icon: '📋' },
-  { label: 'Platform Settings', href: '/dashboard/admin/settings', icon: '⚙️' },
-  { label: 'API Keys', href: '/dashboard/admin/api-keys', icon: '🔑' },
+  { label: 'Roles & Permissions', href: '/dashboard/admin/roles', icon: '', permission: 'manage_users' },
+  { label: 'Audit Logs', href: '/dashboard/admin/audit', icon: '', permission: 'read_analytics' },
+  { label: 'Platform Settings', href: '/dashboard/admin/settings', icon: '', permission: 'manage_users' },
+  { label: 'API Keys', href: '/dashboard/admin/api-keys', icon: '', permission: 'list_api_keys' },
 ]
+
+function filterNavByPermission(items: NavItem[], user: { permissions?: string[]; roles?: unknown } | null): NavItem[] {
+  if (!user) return []
+  const check = (item: NavItem) => !item.permission || hasPermission(user as any, item.permission!)
+  return items
+    .filter((item) => check(item))
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((c) => check(c)),
+    }))
+    .filter((item) => !item.children || item.children.length > 0)
+}
 
 export function AdminNavigation() {
   const pathname = usePathname()
@@ -102,6 +119,13 @@ export function AdminNavigation() {
   // Get primary role dynamically
   const primaryRole = useMemo(() => getPrimaryRole(user), [user])
   const roleDisplayName = useMemo(() => getRoleDisplayName(primaryRole), [primaryRole])
+
+  // Filter nav items by user permissions (sidebar visibility by permission)
+  const baseNavItems = searchQuery ? filteredNavItems : navItems
+  const visibleNavItems = useMemo(
+    () => filterNavByPermission(baseNavItems, user),
+    [baseNavItems, user]
+  )
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -255,7 +279,6 @@ export function AdminNavigation() {
         {/* Logo/Brand */}
         <div className="p-6 border-b border-och-steel/20">
           <Link href="/dashboard/admin" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
-            <span className="text-2xl">🛡️</span>
             <span className="text-xl font-bold text-och-gold">Admin Panel</span>
           </Link>
         </div>
@@ -312,7 +335,7 @@ export function AdminNavigation() {
 
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          {(searchQuery ? filteredNavItems : navItems).map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item.href)
             const hasChildren = item.children && item.children.length > 0
             const isExpanded = expandedItems.has(item.label)
@@ -332,7 +355,7 @@ export function AdminNavigation() {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-xl">{item.icon}</span>
+                        {item.icon ? <span className="text-xl">{item.icon}</span> : null}
                         <span className="font-medium">{item.label}</span>
                       </div>
                       <span className="text-och-steel">
@@ -361,7 +384,7 @@ export function AdminNavigation() {
                                   : 'text-och-steel'
                               )}
                             >
-                              <span className="text-lg">{child.icon}</span>
+                              {child.icon ? <span className="text-lg">{child.icon}</span> : null}
                               <span>{child.label}</span>
                             </Link>
                           )
@@ -381,7 +404,7 @@ export function AdminNavigation() {
                         : 'text-och-steel'
                     )}
                   >
-                    <span className="text-xl">{item.icon}</span>
+                    {item.icon ? <span className="text-xl">{item.icon}</span> : null}
                     <span className="font-medium">{item.label}</span>
                     {item.badge !== undefined && item.badge > 0 && (
                       <span className="ml-auto px-2 py-0.5 text-xs bg-och-orange text-white rounded-full">

@@ -79,15 +79,15 @@ export const djangoClient = {
      * Returns user with roles, consents, and entitlements
      * Backend returns: { user: {...}, roles: [...], consent_scopes: [...], entitlements: [...] }
      */
-    async getCurrentUser(): Promise<User & { roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] }> {
-      const response = await apiGateway.get<{ user: any; roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] }>('/auth/me');
+    async getCurrentUser(): Promise<User & { roles?: UserRole[]; permissions?: string[]; consent_scopes?: string[]; entitlements?: string[] }> {
+      const response = await apiGateway.get<{ user: any; roles?: UserRole[]; permissions?: string[]; consent_scopes?: string[]; entitlements?: string[] }>('/auth/me');
       
-      // Backend returns: { user: {...}, roles: [...], consent_scopes: [...], entitlements: [...] }
-      // We need to merge roles into the user object
+      // Backend returns: { user: {...}, roles: [...], permissions: [...], consent_scopes: [...], entitlements: [...] }
       const userData = response.user || response;
       const mergedUser = {
         ...userData,
         roles: response.roles || userData.roles || [],
+        permissions: response.permissions || userData.permissions || [],
         consent_scopes: response.consent_scopes || userData.consent_scopes || [],
         entitlements: response.entitlements || userData.entitlements || [],
       };
@@ -99,7 +99,7 @@ export const djangoClient = {
         console.warn('[djangoClient] User missing track_key:', mergedUser.email, 'Available fields:', Object.keys(mergedUser));
       }
       
-      return mergedUser as User & { roles?: UserRole[]; consent_scopes?: string[]; entitlements?: string[] };
+      return mergedUser as User & { roles?: UserRole[]; permissions?: string[]; consent_scopes?: string[]; entitlements?: string[] };
     },
 
     /**

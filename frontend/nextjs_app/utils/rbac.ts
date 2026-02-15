@@ -1,11 +1,60 @@
 /**
  * Role-Based Access Control (RBAC) utilities
- * Maps roles to allowed routes and features
+ * Maps roles and permissions to allowed routes and sidebar visibility
  */
 
 import { User, UserRole } from '@/services/types/user'
 
 export type Role = 'mentee' | 'student' | 'mentor' | 'admin' | 'program_director' | 'sponsor_admin' | 'analyst' | 'employer' | 'finance'
+
+/**
+ * Check if user has a given permission (by name).
+ * Admin role or staff is treated as having all permissions for UI.
+ */
+export function hasPermission(user: User | null, permissionName: string): boolean {
+  if (!user) return false
+  const perms = user.permissions
+  if (Array.isArray(perms) && perms.length > 0) {
+    if (perms.includes(permissionName)) return true
+    // Admin/staff get all permissions (backend may still enforce)
+    const roles = getUserRoles(user)
+    if (roles.includes('admin')) return true
+    return false
+  }
+  // No permissions loaded: fall back to role-based (e.g. admin sees all)
+  const roles = getUserRoles(user)
+  if (roles.includes('admin')) return true
+  return false
+}
+
+/**
+ * Admin sidebar: path or href -> required permission name (from backend permissions table).
+ * Sidebar items are shown only if user has the required permission (or is admin).
+ */
+export const ADMIN_NAV_PERMISSIONS: Record<string, string> = {
+  '/dashboard/admin': 'read_analytics',
+  '/dashboard/admin/users': 'list_users',
+  '/dashboard/admin/users/directors': 'list_users',
+  '/dashboard/admin/users/mentors': 'list_users',
+  '/dashboard/admin/users/finance': 'list_users',
+  '/dashboard/admin/users/mentees': 'list_users',
+  '/dashboard/admin/subscriptions': 'read_billing',
+  '/dashboard/admin/subscriptions/plans': 'read_billing',
+  '/dashboard/admin/subscriptions/users': 'read_billing',
+  '/dashboard/admin/subscriptions/gateways': 'read_billing',
+  '/dashboard/admin/subscriptions/transactions': 'read_billing',
+  '/dashboard/admin/subscriptions/rules': 'read_billing',
+  '/dashboard/admin/recipes': 'manage_users',
+  '/dashboard/admin/marketplace': 'list_organizations',
+  '/dashboard/admin/marketplace/employers': 'list_organizations',
+  '/dashboard/admin/marketplace/audit': 'read_analytics',
+  '/dashboard/admin/marketplace/governance': 'manage_organizations',
+  '/dashboard/admin/marketplace/analytics': 'read_analytics',
+  '/dashboard/admin/roles': 'manage_users',
+  '/dashboard/admin/audit': 'read_analytics',
+  '/dashboard/admin/settings': 'manage_users',
+  '/dashboard/admin/api-keys': 'list_api_keys',
+}
 
 export interface RoutePermission {
   path: string

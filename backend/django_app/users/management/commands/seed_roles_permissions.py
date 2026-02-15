@@ -80,6 +80,7 @@ class Command(BaseCommand):
             ('read_invoice', 'invoice', 'read', 'Read invoice details'),
             ('update_invoice', 'invoice', 'update', 'Update invoices'),
             ('list_invoices', 'invoice', 'list', 'List invoices'),
+            ('delete_invoice', 'invoice', 'delete', 'Delete invoices'),
             
             # API Key permissions
             ('create_api_key', 'api_key', 'create', 'Create API keys'),

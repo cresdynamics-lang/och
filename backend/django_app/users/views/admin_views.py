@@ -20,10 +20,12 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     GET /api/v1/permissions/ - List all permissions (admin / user.manage only).
     Read-only; permissions are managed via roles.
+    No pagination so the admin roles UI can show all permissions at once.
     """
     queryset = Permission.objects.all().order_by('resource_type', 'action')
     permission_classes = [permissions.IsAuthenticated, CanManageRoles]
     serializer_class = PermissionSerializer
+    pagination_class = None
 
 
 class RoleViewSet(viewsets.ModelViewSet):
