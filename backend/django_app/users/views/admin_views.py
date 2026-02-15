@@ -1,41 +1,75 @@
 """
 Admin and organization management views.
+Role and permission management use CanManageRoles (RBAC user.manage or is_staff).
 """
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from organizations.models import Organization, OrganizationMember
-from users.models import Role, UserRole
+from users.models import Role, UserRole, Permission
 from users.api_models import APIKey
+from users.permissions import CanManageRoles
 from django.utils import timezone
-from users.serializers import UserSerializer, RoleSerializer
+from users.serializers import UserSerializer, RoleSerializer, PermissionSerializer
 
 User = get_user_model()
 
 
+class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/v1/permissions/ - List all permissions (admin / user.manage only).
+    Read-only; permissions are managed via roles.
+    """
+    queryset = Permission.objects.all().order_by('resource_type', 'action')
+    permission_classes = [permissions.IsAuthenticated, CanManageRoles]
+    serializer_class = PermissionSerializer
+
+
 class RoleViewSet(viewsets.ModelViewSet):
     """
-    GET /api/v1/roles - List roles
-    POST /api/v1/roles - Create role (admin only)
+    GET /api/v1/roles/ - List roles (with permissions)
+    GET /api/v1/roles/<id>/ - Retrieve role with permissions
+    POST /api/v1/roles/ - Create role (admin / user.manage only)
+    PATCH /api/v1/roles/<id>/ - Update role and assign permissions (admin / user.manage only)
+    PUT /api/v1/roles/<id>/ - Full update (admin / user.manage only)
     """
-    queryset = Role.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
+    queryset = Role.objects.all().prefetch_related('permissions')
+    permission_classes = [permissions.IsAuthenticated, CanManageRoles]
     serializer_class = RoleSerializer
-    
-    def create(self, request):
-        """Create a new role (admin only)."""
-        if not request.user.is_staff:
-            return Response(
-                {'detail': 'Only administrators can create roles'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+
+    def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         role = serializer.save()
-        
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if getattr(instance, 'is_system_role', True):
+            return Response(
+                {'detail': 'System roles cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserRoleAssignmentView(viewsets.ViewSet):

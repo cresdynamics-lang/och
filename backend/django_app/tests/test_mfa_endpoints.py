@@ -18,13 +18,10 @@ class TestMFAEnrollEndpoint:
 
     def test_enroll_mfa_success(self, authenticated_client, test_user):
         """Test enrolling in MFA successfully."""
-        data = {
-            'method': 'totp',
-            'device_name': 'Test Device'
-        }
+        data = {'method': 'totp'}
         response = authenticated_client.post('/api/v1/auth/mfa/enroll', data, format='json')
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_201_CREATED]
-        assert 'secret' in response.data or 'qr_code' in response.data
+        assert 'secret' in response.data or 'qr_code_uri' in response.data
 
     def test_enroll_mfa_invalid_method(self, authenticated_client):
         """Test enrolling with invalid MFA method."""
@@ -52,12 +49,16 @@ class TestMFAEnrollEndpoint:
         # Create existing MFA method
         MFAMethod.objects.create(
             user=test_user,
-            method='totp',
-            is_active=True
+            method_type='totp',
+            enabled=True
         )
-        data = {'method': 'totp', 'device_name': 'Another Device'}
+        test_user.mfa_enabled = True
+        test_user.mfa_method = 'totp'
+        test_user.save()
+        data = {'method': 'totp'}
         response = authenticated_client.post('/api/v1/auth/mfa/enroll', data, format='json')
-        assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_200_OK]
+        # May get 201 (new pending TOTP) or 400 (unique constraint)
+        assert response.status_code in [status.HTTP_400_BAD_REQUEST, status.HTTP_201_CREATED]
 
 
 @pytest.mark.django_db
@@ -68,7 +69,7 @@ class TestMFAVerifyEndpoint:
     def test_verify_mfa_success(self, authenticated_client, test_user):
         """Test verifying MFA code successfully."""
         # First enroll
-        enroll_data = {'method': 'totp', 'device_name': 'Test Device'}
+        enroll_data = {'method': 'totp'}
         enroll_response = authenticated_client.post('/api/v1/auth/mfa/enroll', enroll_data, format='json')
         
         if enroll_response.status_code in [200, 201]:
@@ -120,17 +121,18 @@ class TestMFADisableEndpoint:
         # First create MFA method
         MFAMethod.objects.create(
             user=test_user,
-            method='totp',
-            is_active=True
+            method_type='totp',
+            enabled=True
         )
-        data = {'method': 'totp'}
-        response = authenticated_client.post('/api/v1/auth/mfa/disable', data, format='json')
+        test_user.mfa_enabled = True
+        test_user.mfa_method = 'totp'
+        test_user.save()
+        response = authenticated_client.post('/api/v1/auth/mfa/disable', {}, format='json')
         assert response.status_code == status.HTTP_200_OK
 
     def test_disable_mfa_not_enrolled(self, authenticated_client):
         """Test disabling MFA when not enrolled."""
-        data = {'method': 'totp'}
-        response = authenticated_client.post('/api/v1/auth/mfa/disable', data, format='json')
+        response = authenticated_client.post('/api/v1/auth/mfa/disable', {}, format='json')
         assert response.status_code in [
             status.HTTP_400_BAD_REQUEST,
             status.HTTP_404_NOT_FOUND
@@ -138,7 +140,6 @@ class TestMFADisableEndpoint:
 
     def test_disable_mfa_unauthenticated(self, api_client):
         """Test disabling MFA without authentication."""
-        data = {'method': 'totp'}
-        response = api_client.post('/api/v1/auth/mfa/disable', data, format='json')
+        response = api_client.post('/api/v1/auth/mfa/disable', {}, format='json')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 

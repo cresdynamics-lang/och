@@ -23,6 +23,28 @@ import type {
   UpdateProgressRequest,
 } from './types';
 
+/** RBAC permission (resource_type + action) */
+export interface Permission {
+  id: number;
+  name: string;
+  resource_type: string;
+  action: string;
+  description?: string;
+  created_at?: string;
+}
+
+/** Role with its assigned permissions */
+export interface RoleWithPermissions {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string;
+  is_system_role: boolean;
+  permissions: Array<{ id: number; name: string; resource_type: string; action: string }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /**
  * Django API Client
  */
@@ -287,14 +309,29 @@ export const djangoClient = {
   },
 
   /**
-   * Role endpoints
+   * Role and permission endpoints (RBAC – admin / user.manage only)
    */
   roles: {
     /**
-     * List all roles
+     * List all roles (with permissions)
      */
-    async listRoles(): Promise<{ results: Array<{ id: number; name: string; display_name: string; description: string }> }> {
-      return apiGateway.get('/roles');
+    async listRoles(): Promise<RoleWithPermissions[]> {
+      const data = await apiGateway.get<RoleWithPermissions[] | { results: RoleWithPermissions[] }>('/roles');
+      return Array.isArray(data) ? data : (data?.results ?? []);
+    },
+
+    /**
+     * Get a single role with permissions
+     */
+    async getRole(id: number): Promise<RoleWithPermissions> {
+      return apiGateway.get<RoleWithPermissions>(`/roles/${id}`);
+    },
+
+    /**
+     * Update role (display_name, description, permission_ids)
+     */
+    async updateRole(id: number, data: Partial<{ display_name: string; description: string; permission_ids: number[] }>): Promise<RoleWithPermissions> {
+      return apiGateway.patch<RoleWithPermissions>(`/roles/${id}`, data);
     },
 
     /**
@@ -309,6 +346,16 @@ export const djangoClient = {
      */
     async revokeRole(userId: number, roleId: number): Promise<{ detail: string }> {
       return apiGateway.delete(`/users/${userId}/roles/${roleId}`);
+    },
+  },
+
+  /**
+   * Permissions (RBAC) – list all permissions
+   */
+  permissions: {
+    async listPermissions(): Promise<Permission[]> {
+      const data = await apiGateway.get<Permission[] | { results: Permission[] }>('/permissions');
+      return Array.isArray(data) ? data : (data?.results ?? []);
     },
   },
 

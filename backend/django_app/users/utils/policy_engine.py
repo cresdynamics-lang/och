@@ -31,8 +31,8 @@ def evaluate_policy(user, resource, action, context=None):
     policies = [p for p in policies if action in p.actions]
     
     if not policies:
-        # No policies = deny by default
-        return False, "No policy found for this resource/action"
+        # No policies = allow (RBAC already granted; ABAC has no extra restrictions)
+        return True, "No policy; access allowed by RBAC"
     
     # Evaluate each policy
     for policy in policies:

@@ -55,6 +55,7 @@ class Command(BaseCommand):
             ('manage_portfolios', 'portfolio', 'manage', 'Manage all portfolios'),
             
             # Profiling permissions
+            ('create_profiling', 'profiling', 'create', 'Create profiling data'),
             ('read_profiling', 'profiling', 'read', 'Read profiling data'),
             ('update_profiling', 'profiling', 'update', 'Update profiling data'),
             ('list_profiling', 'profiling', 'list', 'List profiling data'),
@@ -198,6 +199,16 @@ class Command(BaseCommand):
                     'read_organization', 'update_organization',  # Own organization
                     'read_portfolio', 'list_portfolios',  # With consent
                     'read_profiling', 'list_profiling',  # With consent
+                ],
+            },
+            {
+                'name': 'employer',
+                'display_name': 'Employer',
+                'description': 'Browse talent, filter by skill/readiness; contact Professional-tier mentees; post assignments',
+                'permissions': [
+                    'read_user', 'list_users',  # Limited to talent visibility
+                    'read_portfolio', 'list_portfolios',
+                    'read_organization', 'list_organizations',
                 ],
             },
             {

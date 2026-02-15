@@ -376,6 +376,7 @@ class Role(models.Model):
         ('mentor', 'Mentor'),
         ('mentee', 'Mentee'),
         ('student', 'Student'),
+        ('employer', 'Employer'),
         ('finance', 'Finance'),
         ('finance_admin', 'Finance Admin'),
         ('sponsor_admin', 'Sponsor/Employer Admin'),

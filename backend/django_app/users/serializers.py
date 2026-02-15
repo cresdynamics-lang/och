@@ -4,7 +4,7 @@ User serializers for DRF - Updated for comprehensive auth system.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from .models import Role, UserRole, ConsentScope, Entitlement
+from .models import Role, UserRole, ConsentScope, Entitlement, Permission
 from .identity_models import UserIdentity
 from .auth_models import MFAMethod, UserSession
 from .audit_models import AuditLog
@@ -112,10 +112,26 @@ class UserSerializer(serializers.ModelSerializer):
             return None
 
 
+class PermissionSerializer(serializers.ModelSerializer):
+    """Serializer for Permission model (RBAC)."""
+    class Meta:
+        model = Permission
+        fields = ['id', 'name', 'resource_type', 'action', 'description', 'created_at']
+        read_only_fields = ['id', 'name', 'resource_type', 'action', 'description', 'created_at']
+
+
 class RoleSerializer(serializers.ModelSerializer):
     """
-    Serializer for Role model.
+    Serializer for Role model. Includes permissions (read) and permission_ids (write for update).
     """
+    permissions = serializers.SerializerMethodField()
+    permission_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Role
         fields = [
@@ -124,10 +140,35 @@ class RoleSerializer(serializers.ModelSerializer):
             'display_name',
             'description',
             'is_system_role',
+            'permissions',
+            'permission_ids',
             'created_at',
             'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_permissions(self, obj):
+        """Return list of permission dicts for this role."""
+        return [
+            {'id': p.id, 'name': p.name, 'resource_type': p.resource_type, 'action': p.action}
+            for p in obj.permissions.all()
+        ]
+
+    def create(self, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
+        instance = super().create(validated_data)
+        if permission_ids is not None:
+            instance.permissions.set(permission_ids)
+        return instance
+
+    def update(self, instance, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if permission_ids is not None:
+            instance.permissions.set(permission_ids)
+        return instance
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

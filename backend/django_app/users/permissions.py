@@ -1,9 +1,49 @@
 """
 Custom permissions for OCH platform.
 Role-based access control for different user types.
+Uses RBAC (Role→Permission) + ABAC (policy_engine) when HasResourcePermission is used.
 """
 from rest_framework.permissions import BasePermission
 from django.core.exceptions import ObjectDoesNotExist
+
+
+class HasResourcePermission(BasePermission):
+    """
+    Permission class that checks (resource_type, action) via the central RBAC+ABAC engine.
+    Use for full RBAC: ensure roles have the right Permission and policies allow.
+    """
+    resource_type = None
+    action = None
+
+    def __init__(self, resource_type=None, action=None):
+        self.resource_type = resource_type or getattr(self.__class__, 'resource_type', None)
+        self.action = action or getattr(self.__class__, 'action', None)
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        resource_type = self.resource_type or getattr(view, 'required_resource_type', None)
+        action = self.action or getattr(view, 'required_action', None)
+        if not resource_type or not action:
+            return False
+        from users.utils.policy_engine import check_permission
+        allowed, _ = check_permission(request.user, resource_type, action, context=None)
+        return allowed
+
+
+class CanManageRoles(BasePermission):
+    """
+    Allow staff or any user with RBAC permission user.manage (e.g. admin role).
+    Use for role/permission management endpoints.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if getattr(request.user, 'is_staff', False):
+            return True
+        from users.utils.policy_engine import check_permission
+        allowed, _ = check_permission(request.user, 'user', 'manage', context=None)
+        return allowed
 
 
 class IsMentor(BasePermission):

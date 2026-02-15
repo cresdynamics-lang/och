@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { djangoClient } from '@/services/djangoClient'
-import { apiGateway } from '@/services/apiGateway'
+import { djangoClient, type RoleWithPermissions, type Permission } from '@/services/djangoClient'
 
 interface Role {
   id: number
@@ -132,26 +131,61 @@ const SYSTEM_ROLES: SystemRole[] = [
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'roles' | 'rbac' | 'abac' | 'security' | 'compliance'>('roles')
+  const [activeTab, setActiveTab] = useState<'roles' | 'rbac' | 'abac' | 'security' | 'compliance'>('rbac')
   const [selectedRole, setSelectedRole] = useState<SystemRole | null>(null)
+
+  // RBAC: manage roles and permissions (admin only)
+  const [apiRoles, setApiRoles] = useState<RoleWithPermissions[]>([])
+  const [apiPermissions, setApiPermissions] = useState<Permission[]>([])
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null)
+  const [permissionIdsForRole, setPermissionIdsForRole] = useState<number[]>([])
+  const [rbacLoading, setRbacLoading] = useState(false)
+  const [rbacSaving, setRbacSaving] = useState(false)
+  const [rbacError, setRbacError] = useState<string | null>(null)
+  const [rbacSuccess, setRbacSuccess] = useState<string | null>(null)
+
+  const permissionsByResource = useMemo(() => {
+    const map = new Map<string, Permission[]>()
+    for (const p of apiPermissions) {
+      const key = p.resource_type
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(p)
+    }
+    const sorted = Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+    return Object.fromEntries(sorted)
+  }, [apiPermissions])
 
   useEffect(() => {
     loadRoles()
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'rbac') {
+      loadRbacData()
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (selectedRoleId != null) {
+      const role = apiRoles.find((r) => r.id === selectedRoleId)
+      setPermissionIdsForRole(role ? role.permissions.map((p) => p.id) : [])
+    } else {
+      setPermissionIdsForRole([])
+    }
+  }, [selectedRoleId, apiRoles])
 
   const loadRoles = async () => {
     try {
       setIsLoading(true)
       const data = await djangoClient.roles.listRoles()
       const rolesArray = Array.isArray(data) ? data : (data?.results || [])
-      // Map to ensure all required Role fields are present
       const mappedRoles: Role[] = rolesArray.map((role: any) => ({
         id: role.id,
         name: role.name,
         display_name: role.display_name,
         description: role.description || '',
         role_type: role.role_type || 'custom',
-        is_system: role.is_system || false,
+        is_system: role.is_system ?? role.is_system_role ?? false,
       }))
       setRoles(mappedRoles)
     } catch (error) {
@@ -160,6 +194,52 @@ export default function RolesPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const loadRbacData = async () => {
+    setRbacError(null)
+    setRbacLoading(true)
+    try {
+      const [rolesData, permsData] = await Promise.all([
+        djangoClient.roles.listRoles(),
+        djangoClient.permissions.listPermissions(),
+      ])
+      setApiRoles(rolesData)
+      setApiPermissions(permsData)
+      if (selectedRoleId == null && rolesData.length > 0) {
+        setSelectedRoleId(rolesData[0].id)
+      }
+    } catch (err: any) {
+      setRbacError(err?.message || 'Failed to load roles and permissions')
+      setApiRoles([])
+      setApiPermissions([])
+    } finally {
+      setRbacLoading(false)
+    }
+  }
+
+  const saveRolePermissions = async () => {
+    if (selectedRoleId == null) return
+    setRbacError(null)
+    setRbacSuccess(null)
+    setRbacSaving(true)
+    try {
+      await djangoClient.roles.updateRole(selectedRoleId, { permission_ids: permissionIdsForRole })
+      setRbacSuccess('Permissions saved.')
+      const updated = await djangoClient.roles.getRole(selectedRoleId)
+      setApiRoles((prev) => prev.map((r) => (r.id === selectedRoleId ? updated : r)))
+      setPermissionIdsForRole(updated.permissions.map((p) => p.id))
+    } catch (err: any) {
+      setRbacError(err?.message || 'Failed to save permissions')
+    } finally {
+      setRbacSaving(false)
+    }
+  }
+
+  const togglePermission = (permId: number) => {
+    setPermissionIdsForRole((prev) =>
+      prev.includes(permId) ? prev.filter((id) => id !== permId) : [...prev, permId]
+    )
   }
 
   if (isLoading) {
@@ -340,9 +420,93 @@ export default function RolesPage() {
 
           {activeTab === 'rbac' && (
             <div className="space-y-6">
+              {/* Manage roles and permissions – admin only */}
               <Card>
                 <div className="p-6">
-                  <h2 className="text-2xl font-bold text-white mb-4">Role-Based Access Control (RBAC)</h2>
+                  <h2 className="text-2xl font-bold text-white mb-2">Manage Roles & Permissions</h2>
+                  <p className="text-och-steel text-sm mb-6">
+                    Assign permissions to each role. Changes apply immediately; users get access based on their role&apos;s permissions.
+                  </p>
+                  {rbacError && (
+                    <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                      {rbacError}
+                    </div>
+                  )}
+                  {rbacSuccess && (
+                    <div className="mb-4 p-3 rounded-lg bg-och-mint/10 border border-och-mint/30 text-och-mint text-sm">
+                      {rbacSuccess}
+                    </div>
+                  )}
+                  {rbacLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-och-mint"></div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-6">
+                        <label className="block text-sm font-medium text-och-steel mb-2">Select role</label>
+                        <select
+                          value={selectedRoleId ?? ''}
+                          onChange={(e) => setSelectedRoleId(e.target.value ? Number(e.target.value) : null)}
+                          className="w-full max-w-xs bg-och-midnight border border-och-steel/30 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-och-gold focus:border-transparent"
+                        >
+                          <option value="">— Select role —</option>
+                          {apiRoles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.display_name} ({r.name})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {selectedRoleId != null && (
+                        <>
+                          <div className="mb-4 flex flex-wrap gap-2 items-center justify-between">
+                            <span className="text-och-steel text-sm">
+                              {permissionIdsForRole.length} permission(s) selected
+                            </span>
+                            <Button
+                              onClick={saveRolePermissions}
+                              disabled={rbacSaving}
+                            >
+                              {rbacSaving ? 'Saving…' : 'Save permissions'}
+                            </Button>
+                          </div>
+                          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                            {Object.entries(permissionsByResource).map(([resource, perms]) => (
+                              <div
+                                key={resource}
+                                className="p-4 rounded-lg border border-och-steel/20 bg-och-midnight/50"
+                              >
+                                <h4 className="text-white font-semibold mb-3 capitalize">{resource.replace(/_/g, ' ')}</h4>
+                                <ul className="space-y-2">
+                                  {perms.map((p) => (
+                                    <li key={p.id} className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        id={`perm-${p.id}`}
+                                        checked={permissionIdsForRole.includes(p.id)}
+                                        onChange={() => togglePermission(p.id)}
+                                        className="h-4 w-4 rounded border-och-steel/50 bg-och-midnight text-och-gold focus:ring-och-gold"
+                                      />
+                                      <label htmlFor={`perm-${p.id}`} className="text-sm text-och-steel cursor-pointer">
+                                        {p.action}
+                                      </label>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </Card>
+
+              <Card>
+                <div className="p-6">
+                  <h2 className="text-2xl font-bold text-white mb-4">RBAC Overview</h2>
                   <p className="text-och-steel text-sm mb-6">
                     Authorization is governed by RBAC. Roles define permissions that grant access to resources and actions.
                   </p>

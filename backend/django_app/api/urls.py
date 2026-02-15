@@ -5,6 +5,7 @@ from django.urls import path, include
 from .views import health_check
 from users.views.admin_views import (
     RoleViewSet,
+    PermissionViewSet,
     UserRoleAssignmentView,
     OrganizationViewSet,
     APIKeyViewSet,
@@ -27,8 +28,15 @@ urlpatterns = [
     # Authentication endpoints (includes password reset)
     path('', include('users.urls')),
     
-    # Admin/Management endpoints
+    # Admin/Management endpoints (RBAC: roles and permissions)
+    path('permissions/', PermissionViewSet.as_view({'get': 'list'}), name='permissions-list'),
     path('roles/', RoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='roles-list'),
+    path('roles/<int:pk>/', RoleViewSet.as_view({
+        'get': 'retrieve',
+        'put': 'update',
+        'patch': 'partial_update',
+        'delete': 'destroy',
+    }), name='roles-detail'),
     path('users/<int:id>/roles', UserRoleAssignmentView.as_view({'post': 'create'}), name='user-role-assign'),
     path('users/<int:id>/roles/<int:role_id>', UserRoleAssignmentView.as_view({'delete': 'destroy'}), name='user-role-revoke'),
     path('orgs/', OrganizationViewSet.as_view({'get': 'list', 'post': 'create'}), name='orgs-list'),
