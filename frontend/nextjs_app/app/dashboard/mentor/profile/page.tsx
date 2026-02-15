@@ -10,6 +10,7 @@ import { programsClient } from '@/services/programsClient'
 import { useAuth } from '@/hooks/useAuth'
 import type { User, UserRole } from '@/services/types'
 import { MentorSupportAndHelp } from '@/components/mentor/MentorSupportAndHelp'
+import { OCHSettingsSecurity } from '@/components/ui/settings/sections/OCHSettingsSecurity'
 import toast, { Toaster } from 'react-hot-toast'
 
 interface ProfileData extends User {
@@ -63,10 +64,11 @@ export default function MentorProfilePage() {
   const searchParams = useSearchParams()
   const tabFromUrl = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState<'profile' | 'mentor' | 'account' | 'security' | 'guide'>(
-    tabFromUrl === 'guide' ? 'guide' : 'profile'
+    tabFromUrl === 'guide' ? 'guide' : tabFromUrl === 'security' ? 'security' : 'profile'
   )
   useEffect(() => {
     if (tabFromUrl === 'guide') setActiveTab('guide')
+    if (tabFromUrl === 'security') setActiveTab('security')
   }, [tabFromUrl])
   const [isEditing, setIsEditing] = useState(false)
   const [newSpecialty, setNewSpecialty] = useState('')
@@ -958,6 +960,15 @@ export default function MentorProfilePage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Multi-Factor Authentication - Mentor role requires at least 2 methods */}
+            <div className="pt-6 border-t border-och-steel/20">
+              <h3 className="text-lg font-semibold mb-2 text-white">Multi-Factor Authentication (MFA)</h3>
+              <p className="text-sm text-och-steel mb-4">
+                Your role requires at least two MFA methods to sign in. Add or manage methods below; you must always keep at least two.
+              </p>
+              <OCHSettingsSecurity />
             </div>
 
             {/* Login Information */}

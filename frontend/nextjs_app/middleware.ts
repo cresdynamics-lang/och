@@ -186,6 +186,10 @@ export function middleware(request: NextRequest) {
 
   // Server-side RBAC for dashboard routes (best effort; falls back to client guard if roles cookie missing)
   // Skip RBAC check for student routes - they're open routes and should be accessible
+  // Allow /dashboard/mfa-required and /dashboard/mfa-required/setup for any authenticated user
+  if (hasToken && (pathname === '/dashboard/mfa-required' || pathname.startsWith('/dashboard/mfa-required/'))) {
+    return NextResponse.next();
+  }
   if (hasToken && pathname.startsWith('/dashboard') && roles.length > 0 && !pathname.startsWith('/dashboard/student')) {
     // Redirect /dashboard to role home
     if (pathname === '/dashboard' || pathname === '/dashboard/') {

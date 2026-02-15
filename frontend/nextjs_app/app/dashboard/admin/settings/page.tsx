@@ -5,6 +5,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import Link from 'next/link'
+import { OCHSettingsSecurity } from '@/components/ui/settings/sections/OCHSettingsSecurity'
 
 export default function SettingsPage() {
   return (
@@ -14,6 +15,13 @@ export default function SettingsPage() {
           <div className="mb-8">
             <h1 className="text-4xl font-bold mb-2 text-och-gold">Platform Settings</h1>
             <p className="text-och-steel">Configure system settings and integrations</p>
+          </div>
+
+          <div className="mb-8">
+            <p className="text-sm text-och-steel mb-4">
+              Your role requires at least two MFA methods to sign in. Add or manage methods below; you must always keep at least two.
+            </p>
+            <OCHSettingsSecurity />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

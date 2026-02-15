@@ -235,6 +235,7 @@ export function useAuth() {
       console.error('Logout error:', error);
     } finally {
       clearAuthTokens();
+      if (typeof window !== 'undefined') window.sessionStorage.removeItem('mfa_compliant');
       setState({ user: null, isLoading: false, isAuthenticated: false });
       router.push('/login');
     }

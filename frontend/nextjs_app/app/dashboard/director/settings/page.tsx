@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useAuth } from '@/hooks/useAuth'
 import { apiGateway } from '@/services/apiGateway'
+import { OCHSettingsSecurity } from '@/components/ui/settings/sections/OCHSettingsSecurity'
 import type { User } from '@/services/types'
 
 interface AuditLog {
@@ -29,7 +30,7 @@ export default function DirectorSettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'avatar'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'avatar' | 'security'>('profile')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   
@@ -296,6 +297,16 @@ export default function DirectorSettingsPage() {
                 }`}
               >
                 Profile Picture
+              </button>
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  activeTab === 'security'
+                    ? 'text-och-mint border-b-2 border-och-mint'
+                    : 'text-och-steel hover:text-white'
+                }`}
+              >
+                Security & MFA
               </button>
             </div>
 
@@ -608,6 +619,16 @@ export default function DirectorSettingsPage() {
                   )}
                 </div>
               </Card>
+            )}
+
+            {/* Security & MFA Tab - Director/Mentor/Admin/Finance require at least 2 methods */}
+            {activeTab === 'security' && (
+              <div className="space-y-6">
+                <p className="text-sm text-och-steel">
+                  Your role requires at least two MFA methods to sign in. Add or manage methods below; you must always keep at least two.
+                </p>
+                <OCHSettingsSecurity />
+              </div>
             )}
 
             {/* Account Updates History */}

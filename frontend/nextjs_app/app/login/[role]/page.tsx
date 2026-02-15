@@ -504,6 +504,26 @@ function LoginForm() {
           }
         }
       }
+
+      // Before redirect: if destination requires 2 MFA, check now so we never show dashboard URL with "Verifying..."
+      const ROUTES_REQUIRING_TWO_MFA = ['/dashboard/director', '/dashboard/mentor', '/dashboard/admin', '/dashboard/finance', '/dashboard/analyst'];
+      const needsMfaCheck = ROUTES_REQUIRING_TWO_MFA.some((r) => route === r || route.startsWith(r + '/'));
+      if (needsMfaCheck) {
+        try {
+          const { djangoClient } = await import('@/services/djangoClient');
+          const res = await djangoClient.auth.getMFAMethods();
+          const count = (res.methods || []).length;
+          if (count < 2) {
+            route = '/dashboard/mfa-required';
+            if (typeof window !== 'undefined') window.sessionStorage.removeItem('mfa_compliant');
+          } else {
+            if (typeof window !== 'undefined') window.sessionStorage.setItem('mfa_compliant', '1');
+          }
+        } catch (_e) {
+          route = '/dashboard/mfa-required';
+          if (typeof window !== 'undefined') window.sessionStorage.removeItem('mfa_compliant');
+        }
+      }
       
       console.log('[Login] Redirecting to:', route);
       console.log('[Login] User object:', { 
