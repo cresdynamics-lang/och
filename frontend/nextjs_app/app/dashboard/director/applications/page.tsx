@@ -28,6 +28,7 @@ interface Application {
   reviewer_mentor_name?: string | null
   review_score?: number | null
   review_status?: string
+  interview_mentor_name?: string | null
   interview_score?: number | null
   interview_status?: string | null
   enrollment_status?: string
@@ -61,18 +62,27 @@ function ApplicationDetailsModal({
   if (!application) return null
 
   const formEntries = application.form_data
-    ? Object.entries(application.form_data).filter(([, v]) => v != null && String(v).trim() !== '')
+    ? Object.entries(application.form_data).filter(
+        ([k, v]) =>
+          v != null &&
+          String(v).trim() !== '' &&
+          !['review_notes', 'interview_notes', 'support_documents'].includes(k)
+      )
     : []
+
+  const reviewNotes = application.form_data?.review_notes as string | undefined
+  const interviewNotes = application.form_data?.interview_notes as string | undefined
+  const supportDocuments = application.form_data?.support_documents as string | string[] | undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md border-och-steel/20 bg-och-midnight">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col border-och-steel/20 bg-och-midnight">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-white">
             {application.applicant_type === 'student' ? 'Student' : 'Sponsor'} Application Details
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 text-sm">
+        <div className="space-y-4 text-sm overflow-y-auto flex-1 min-h-0 pr-2">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="text-och-steel">Name</span>
@@ -99,6 +109,43 @@ function ApplicationDetailsModal({
               </p>
             </div>
           </div>
+
+          {application.applicant_type === 'student' && (
+            <div className="space-y-4 border-t border-och-steel/20 pt-4">
+              <h4 className="text-sm font-medium text-white">Mentor feedback</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-lg bg-och-midnight/50 border border-och-steel/20 p-3">
+                  <span className="text-xs text-och-steel block mb-1">Application review</span>
+                  <p className="text-white font-medium">
+                    Score: {(application as Application).review_score != null ? (application as Application).review_score : '—'}
+                  </p>
+                  {(application as Application).reviewer_mentor_name && (
+                    <p className="text-xs text-och-steel mt-1">By {(application as Application).reviewer_mentor_name}</p>
+                  )}
+                  {reviewNotes && (
+                    <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">{reviewNotes}</p>
+                  )}
+                </div>
+                <div className="rounded-lg bg-och-midnight/50 border border-och-steel/20 p-3">
+                  <span className="text-xs text-och-steel block mb-1">Interview</span>
+                  <p className="text-white font-medium">
+                    Score: {(application as Application).interview_score != null ? (application as Application).interview_score : '—'}
+                  </p>
+                  {(application as Application).interview_mentor_name && (
+                    <p className="text-xs text-och-steel mt-1">By {(application as Application).interview_mentor_name}</p>
+                  )}
+                  {interviewNotes && (
+                    <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">{interviewNotes}</p>
+                  )}
+                  {supportDocuments && (
+                    <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">
+                      Docs: {Array.isArray(supportDocuments) ? supportDocuments.join('\n') : supportDocuments}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {formEntries.length > 0 && (
             <div>
@@ -380,10 +427,26 @@ export default function ApplicationsPage() {
     setSettingCutoff(true)
     try {
       const endpoint = phase === 'review' ? '/director/public-applications/set-review-cutoff/' : '/director/public-applications/set-interview-cutoff/'
-      await apiGateway.post(endpoint, { cohort_id: cohortId, cutoff_grade: val })
+      const res = await apiGateway.post<{ eligible_count?: number; passed_count?: number; failed_count?: number; graded_count?: number }>(endpoint, { cohort_id: cohortId, cutoff_grade: val })
       setShowCutoffModal(null)
       setCutoffGrade('')
       fetchApplications()
+      const data = res as { eligible_count?: number; passed_count?: number; failed_count?: number; graded_count?: number }
+      if (phase === 'review') {
+        const passed = data?.passed_count ?? 0
+        const failed = data?.failed_count ?? 0
+        alert(`Review cutoff set. ${passed} passed, ${failed} failed.`)
+      } else {
+        const eligible = data?.eligible_count ?? 0
+        const graded = data?.graded_count ?? 0
+        if (eligible > 0) {
+          alert(`${eligible} application(s) are now eligible for enrollment.`)
+        } else if (graded === 0) {
+          alert('Cutoff set. No applications had graded interviews yet — mentors must grade interviews first (mentor dashboard → Application Review).')
+        } else {
+          alert(`Cutoff set. ${graded} application(s) did not meet the cutoff and were marked as failed.`)
+        }
+      }
     } catch (err: unknown) {
       alert((err as { message?: string })?.message || 'Failed')
     } finally {

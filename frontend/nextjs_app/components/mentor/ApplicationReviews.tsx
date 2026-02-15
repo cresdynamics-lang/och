@@ -23,13 +23,16 @@ interface Application {
   review_score?: number | null
   interview_status?: string | null
   interview_score?: number | null
+  enrollment_status?: string | null
 }
 
 function getStatusLabel(app: Application): string {
+  if (app.enrollment_status === 'enrolled') return 'Enrolled'
+  if (app.enrollment_status === 'eligible') return 'Interview graded; eligible for enrollment'
+  if (app.interview_status === 'failed') return 'Failed interview (did not meet cutoff)'
   if (app.review_status === 'passed') {
-    if (app.interview_status === 'completed') {
-      return 'Interview graded; awaiting admin cutoff'
-    }
+    const interviewDone = app.interview_status === 'completed' || app.interview_status === 'passed'
+    if (interviewDone) return 'Interview graded; awaiting admin cutoff'
     return 'Passed application; interview marks pending'
   }
   if (app.review_status === 'reviewed') return 'Graded; awaiting admin cutoff'
@@ -38,8 +41,8 @@ function getStatusLabel(app: Application): string {
 }
 
 function getStatusVariant(app: Application): 'defender' | 'orange' | 'steel' {
+  if (app.interview_status === 'failed' || app.review_status === 'failed') return 'orange'
   if (app.review_status === 'passed') return 'defender'
-  if (app.review_status === 'failed') return 'orange'
   return 'steel'
 }
 
@@ -48,6 +51,7 @@ export function ApplicationReviews() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Application | null>(null)
   const [score, setScore] = useState<string>('')
+  const [reviewNotes, setReviewNotes] = useState('')
   const [interviewNotes, setInterviewNotes] = useState('')
   const [supportDocuments, setSupportDocuments] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -104,6 +108,7 @@ export function ApplicationReviews() {
         ? `/mentor/applications-to-review/${selected.id}/grade/`
         : `/mentor/applications-to-review/${selected.id}/grade-interview/`
       const body: Record<string, unknown> = { score: s }
+      if (phase === 'review' && reviewNotes) body.review_notes = reviewNotes
       if (phase === 'interview') {
         if (interviewNotes) body.interview_notes = interviewNotes
         if (supportDocuments) body.support_documents = supportDocuments.split('\n').filter(Boolean)
@@ -111,6 +116,7 @@ export function ApplicationReviews() {
       await apiGateway.post(endpoint, body)
       setSelected(null)
       setScore('')
+      setReviewNotes('')
       setInterviewNotes('')
       setSupportDocuments('')
       setApplications((prev) =>
@@ -134,7 +140,12 @@ export function ApplicationReviews() {
   }
 
   const formEntries = selected?.form_data
-    ? Object.entries(selected.form_data).filter(([, v]) => v != null && String(v).trim() !== '')
+    ? Object.entries(selected.form_data).filter(
+        ([k, v]) =>
+          v != null &&
+          String(v).trim() !== '' &&
+          !['review_notes', 'interview_notes', 'support_documents'].includes(k)
+      )
     : []
 
   return (
@@ -268,8 +279,9 @@ export function ApplicationReviews() {
                         onClick={() => {
                           setSelected(app)
                           setScore(app.review_status === 'reviewed' || app.review_status === 'passed' ? String(app.interview_score ?? app.review_score ?? '') : '')
-                          setInterviewNotes('')
-                          setSupportDocuments('')
+                          setReviewNotes(String(app.form_data?.review_notes ?? ''))
+                          setInterviewNotes(String(app.form_data?.interview_notes ?? ''))
+                          setSupportDocuments(Array.isArray(app.form_data?.support_documents) ? (app.form_data.support_documents as string[]).join('\n') : String(app.form_data?.support_documents ?? ''))
                         }}
                       >
                         {app.review_status === 'pending' ? 'Grade' : app.review_status === 'passed' && (!app.interview_status || app.interview_status === 'pending') ? 'Grade Interview' : 'View'}
@@ -284,12 +296,12 @@ export function ApplicationReviews() {
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-lg border-och-steel/20 bg-och-midnight">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col border-och-steel/20 bg-och-midnight">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-white">Application: {selected?.name || selected?.email}</DialogTitle>
           </DialogHeader>
           {selected && (
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-2">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-och-steel">Cohort</span>
@@ -315,6 +327,51 @@ export function ApplicationReviews() {
                 </div>
               )}
 
+              {/* Application progress & your feedback - shown when mentor has submitted any feedback */}
+              {(selected.review_status === 'reviewed' || selected.review_status === 'passed') && (
+                <div className="space-y-4 border-t border-och-steel/20 pt-4">
+                  <h4 className="text-sm font-medium text-white">Application progress & your feedback</h4>
+                  <div className="grid grid-cols-1 gap-4">
+                    {(selected.review_status === 'reviewed' || selected.review_status === 'passed') && (
+                      <div className="rounded-lg bg-och-midnight/50 border border-och-steel/20 p-3">
+                        <span className="text-xs text-och-steel block mb-1">Application review</span>
+                        <p className="text-white font-medium">
+                          Score: {selected.review_score != null ? selected.review_score : '—'}
+                        </p>
+                        {selected.form_data?.review_notes && (
+                          <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">{String(selected.form_data.review_notes)}</p>
+                        )}
+                      </div>
+                    )}
+                    {(selected.interview_status === 'completed' || selected.interview_status === 'passed') && (
+                      <div className="rounded-lg bg-och-midnight/50 border border-och-steel/20 p-3">
+                        <span className="text-xs text-och-steel block mb-1">Interview</span>
+                        <p className="text-white font-medium">
+                          Score: {selected.interview_score != null ? selected.interview_score : '—'}
+                        </p>
+                        {selected.form_data?.interview_notes && (
+                          <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">{String(selected.form_data.interview_notes)}</p>
+                        )}
+                        {selected.form_data?.support_documents && (
+                          <p className="text-sm text-white mt-2 pt-2 border-t border-och-steel/20 whitespace-pre-wrap">
+                            Support docs: {Array.isArray(selected.form_data.support_documents) ? (selected.form_data.support_documents as string[]).join('\n') : String(selected.form_data.support_documents)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {selected.review_status === 'reviewed' && (
+                    <p className="text-och-steel text-sm">Awaiting director to set cutoff. Applications above cutoff will move to interview.</p>
+                  )}
+                  {(selected.interview_status === 'completed' || selected.interview_status === 'passed') && selected.enrollment_status !== 'enrolled' && (
+                    <p className="text-och-steel text-sm">Interview graded. Awaiting director to set cutoff and enroll.</p>
+                  )}
+                  {selected.enrollment_status === 'enrolled' && (
+                    <p className="text-och-mint text-sm font-medium">Enrolled</p>
+                  )}
+                </div>
+              )}
+
               {(selected.review_status === 'pending' || (selected.review_status === 'passed' && (!selected.interview_status || selected.interview_status === 'pending'))) && (
                 <div className="space-y-4">
                   <div>
@@ -330,6 +387,20 @@ export function ApplicationReviews() {
                       className="w-24 px-2 py-2 bg-och-midnight border border-och-steel/30 rounded text-white"
                     />
                   </div>
+                  {selected.review_status === 'pending' && (
+                    <div>
+                      <label className="block text-och-steel text-sm mb-2 flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5" /> Review comment / notes
+                      </label>
+                      <textarea
+                        value={reviewNotes}
+                        onChange={(e) => setReviewNotes(e.target.value)}
+                        placeholder="Add your feedback for the director..."
+                        rows={3}
+                        className="w-full px-3 py-2 bg-och-midnight border border-och-steel/30 rounded text-white text-sm"
+                      />
+                    </div>
+                  )}
                   {selected.review_status === 'passed' && (!selected.interview_status || selected.interview_status === 'pending') && (
                     <>
                       <div>
@@ -373,13 +444,6 @@ export function ApplicationReviews() {
                 </div>
               )}
 
-              {selected.review_status === 'reviewed' && (
-                <p className="text-och-steel text-sm">Awaiting director to set cutoff. Applications above cutoff will move to interview.</p>
-              )}
-
-              {selected.interview_status === 'completed' && (
-                <p className="text-och-steel text-sm">Interview marks uploaded. Awaiting director to set cutoff and enroll.</p>
-              )}
             </div>
           )}
         </DialogContent>

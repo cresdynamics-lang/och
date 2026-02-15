@@ -289,7 +289,7 @@ def grade_application(request, application_id):
     """
     POST /api/v1/mentor/applications-to-review/{id}/grade/
     Mentor grades an application (review step).
-    Body: { score: number (0-100) }
+    Body: { score: number (0-100), review_notes?: string }
     """
     app = get_object_or_404(CohortPublicApplication, id=application_id)
     if app.reviewer_mentor_id != request.user.id:
@@ -308,7 +308,15 @@ def grade_application(request, application_id):
     app.review_score = score_val
     app.review_graded_at = timezone.now()
     app.review_status = 'reviewed'
-    app.save(update_fields=['review_score', 'review_graded_at', 'review_status', 'updated_at'])
+
+    review_notes = (request.data.get('review_notes') or '').strip()
+    if review_notes:
+        fd = dict(app.form_data or {})
+        fd['review_notes'] = review_notes
+        app.form_data = fd
+        app.save(update_fields=['review_score', 'review_graded_at', 'review_status', 'form_data', 'updated_at'])
+    else:
+        app.save(update_fields=['review_score', 'review_graded_at', 'review_status', 'updated_at'])
 
     return Response({'success': True, 'review_score': float(score_val)})
 
@@ -401,7 +409,7 @@ def set_review_cutoff(request):
         applicant_type='student',
         review_status='reviewed',
         review_score__lt=cutoff_val,
-    ).update(review_status='failed')
+    ).update(review_status='failed', status='rejected')
 
     return Response({
         'success': True,
@@ -436,20 +444,21 @@ def set_interview_cutoff(request):
     cohort.interview_cutoff_grade = cutoff_val
     cohort.save(update_fields=['interview_cutoff_grade'])
 
-    updated = CohortPublicApplication.objects.filter(
+    # Process all applications with interview scores (including re-runs when director changes cutoff)
+    graded_qs = CohortPublicApplication.objects.filter(
         cohort_id=cohort_id,
         applicant_type='student',
-        interview_status='completed',
-        interview_score__gte=cutoff_val,
-    ).update(interview_status='passed', enrollment_status='eligible')
-    CohortPublicApplication.objects.filter(
-        cohort_id=cohort_id,
-        applicant_type='student',
-        interview_status='completed',
-        interview_score__lt=cutoff_val,
-    ).update(interview_status='failed')
+        interview_score__isnull=False,
+    ).exclude(enrollment_status='enrolled')
+    graded_count = graded_qs.count()
+    updated = graded_qs.filter(interview_score__gte=cutoff_val).update(interview_status='passed', enrollment_status='eligible')
+    graded_qs.filter(interview_score__lt=cutoff_val).update(interview_status='failed', enrollment_status='none', status='rejected')
 
-    return Response({'success': True, 'eligible_count': updated})
+    return Response({
+        'success': True,
+        'eligible_count': updated,
+        'graded_count': graded_count,
+    })
 
 
 @api_view(['POST'])
