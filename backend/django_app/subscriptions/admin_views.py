@@ -20,9 +20,16 @@ User = get_user_model()
 
 
 class IsAdmin(permissions.BasePermission):
-    """Permission check for admin users."""
+    """Permission check for admin users — is_staff OR admin role in user_roles."""
     def has_permission(self, request, view):
-        return request.user and request.user.is_staff
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        from users.models import UserRole
+        return UserRole.objects.filter(
+            user=request.user, role__name='admin', is_active=True
+        ).exists()
 
 
 class SubscriptionPlanViewSet(viewsets.ModelViewSet):
@@ -274,24 +281,30 @@ class PaymentTransactionViewSet(viewsets.ModelViewSet):
     
     def get_serializer_class(self):
         from rest_framework import serializers
-        
+
         class PaymentTransactionSerializer(serializers.ModelSerializer):
             user_email = serializers.CharField(source='user.email', read_only=True)
-            gateway_name = serializers.CharField(source='gateway.name', read_only=True)
-            
+            gateway_name = serializers.SerializerMethodField()
+
+            def get_gateway_name(self, obj):
+                return obj.gateway.name if obj.gateway else None
+
             class Meta:
                 model = PaymentTransaction
                 fields = '__all__'
                 read_only_fields = ['id', 'created_at', 'updated_at']
-        
+
         return PaymentTransactionSerializer
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Filter by user
+        # Filter by user — accepts user ID (int/uuid) or email substring
         user_search = self.request.query_params.get('user', None)
         if user_search:
-            queryset = queryset.filter(user__email__icontains=user_search)
+            try:
+                queryset = queryset.filter(user__id=int(user_search))
+            except (ValueError, TypeError):
+                queryset = queryset.filter(user__email__icontains=user_search)
         # Filter by status
         status_filter = self.request.query_params.get('status', None)
         if status_filter:

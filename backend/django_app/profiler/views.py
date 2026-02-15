@@ -2323,3 +2323,515 @@ def reject_retake_request(request, request_id):
         },
         status=status.HTTP_200_OK
     )
+
+
+# ─────────────────────────────────────────────────────────
+# Future-You Insights Endpoint (GPT-powered + Fallback)
+# ─────────────────────────────────────────────────────────
+
+# Track-specific fallback data used when GPT is unavailable
+_TRACK_FALLBACK = {
+    'defender': {
+        'personas': [
+            ('The Digital Guardian',     'Cyber Defender',         'Beginner'),
+            ('The Network Protector',    'Junior SOC Analyst',     'Junior'),
+            ('The Threat Responder',     'Security Engineer',      'Mid-level'),
+            ('The Security Sentinel',   'Senior SOC Engineer',    'Senior'),
+        ],
+        'projected_skills': ['Network Defense', 'Threat Detection', 'Incident Response', 'Vulnerability Management', 'Log Analysis', 'Security Monitoring'],
+        'predicted_roles':  ['SOC Analyst', 'Security Engineer', 'Network Defender'],
+        'gaps': [
+            {'gap': 'Hands-on Lab Practice',              'priority': 'high',   'description': 'Complete more hands-on security labs in the curriculum to build practical skills.'},
+            {'gap': 'Network Forensics Knowledge',         'priority': 'high',   'description': 'Study network traffic analysis and packet inspection techniques.'},
+            {'gap': 'Malware Analysis Fundamentals',      'priority': 'medium', 'description': 'Learn to identify and analyse common malware behaviours.'},
+            {'gap': 'Log Analysis & SIEM Usage',          'priority': 'medium', 'description': 'Practice reading and correlating security event logs.'},
+            {'gap': 'Incident Response Procedures',       'priority': 'low',    'description': 'Study formal IR playbooks and runbooks used in enterprise SOCs.'},
+        ],
+        'next_steps': [
+            'Complete all Tier 0 and Tier 1 Defender missions to build core fundamentals.',
+            'Set up a home lab with a SIEM tool (Splunk Free or ELK) to practice log analysis.',
+            'Study the MITRE ATT&CK framework to understand how attackers operate.',
+            'Aim for at least 80% on your next three missions to sharpen your score average.',
+            'Join the OCH community circle to discuss real-world Defender scenarios with peers.',
+        ],
+    },
+    'offensive': {
+        'personas': [
+            ('The Cyber Infiltrator',    'Security Researcher',    'Beginner'),
+            ('The Exploit Developer',   'Junior Pen Tester',      'Junior'),
+            ('The Red Team Operator',   'Penetration Tester',     'Mid-level'),
+            ('The Adversary Emulator',  'Senior Red Teamer',      'Senior'),
+        ],
+        'projected_skills': ['Penetration Testing', 'Exploitation Techniques', 'Web App Security', 'OSINT', 'Scripting for Security', 'Privilege Escalation'],
+        'predicted_roles':  ['Penetration Tester', 'Red Team Operator', 'Vulnerability Researcher'],
+        'gaps': [
+            {'gap': 'Scripting & Automation Skills',      'priority': 'high',   'description': 'Learn Python or Bash scripting to automate common offensive tasks.'},
+            {'gap': 'Web Application Attack Techniques',  'priority': 'high',   'description': 'Study OWASP Top 10 and practice on vulnerable web apps.'},
+            {'gap': 'OSINT and Reconnaissance Methods',  'priority': 'medium', 'description': 'Practice passive and active reconnaissance methodologies.'},
+            {'gap': 'Privilege Escalation Paths',         'priority': 'medium', 'description': 'Study Windows and Linux privilege escalation common vectors.'},
+            {'gap': 'Professional Reporting Skills',      'priority': 'low',    'description': 'Learn to write clear, professional penetration test reports.'},
+        ],
+        'next_steps': [
+            'Complete all Offensive Track Tier 0 missions focused on reconnaissance basics.',
+            'Practice on CTF (Capture The Flag) challenges on HackTheBox or TryHackMe.',
+            'Learn Python scripting for automating port scanning and payload generation.',
+            'Study the OWASP Top 10 web vulnerabilities and test each one in a lab environment.',
+            'Document every practice exercise to build a personal offensive security playbook.',
+        ],
+    },
+    'grc': {
+        'personas': [
+            ('The Compliance Seeker',   'GRC Student',            'Beginner'),
+            ('The Risk Identifier',     'Junior GRC Analyst',     'Junior'),
+            ('The Governance Analyst',  'GRC Specialist',         'Mid-level'),
+            ('The Risk Strategist',     'Senior GRC Manager',     'Senior'),
+        ],
+        'projected_skills': ['Risk Assessment', 'ISO 27001 / NIST Frameworks', 'Policy Writing', 'Audit Methodology', 'Business Impact Analysis', 'Security Governance'],
+        'predicted_roles':  ['GRC Analyst', 'Risk Manager', 'Compliance Officer'],
+        'gaps': [
+            {'gap': 'Regulatory Framework Knowledge',    'priority': 'high',   'description': 'Study ISO 27001, NIST CSF, and GDPR in depth to understand compliance requirements.'},
+            {'gap': 'Risk Quantification Methods',       'priority': 'high',   'description': 'Learn FAIR (Factor Analysis of Information Risk) and other risk scoring models.'},
+            {'gap': 'Policy and Procedure Writing',      'priority': 'medium', 'description': 'Practice drafting information security policies aligned to business objectives.'},
+            {'gap': 'Audit and Assessment Techniques',   'priority': 'medium', 'description': 'Study how to conduct internal security audits and gap assessments.'},
+            {'gap': 'Business Impact Analysis (BIA)',    'priority': 'low',    'description': 'Learn how to map security risks to business operations and financial impact.'},
+        ],
+        'next_steps': [
+            'Complete all GRC Track Tier 0 missions covering frameworks and fundamentals.',
+            'Download and study the ISO 27001 standard and NIST Cybersecurity Framework.',
+            'Practice writing a simple security policy for a fictional company scenario.',
+            'Study how risk registers are built and maintained in real organisations.',
+            'Connect with GRC professionals in the OCH mentorship programme.',
+        ],
+    },
+    'innovation': {
+        'personas': [
+            ('The Security Explorer',   'Security Student',       'Beginner'),
+            ('The Cloud Defender',      'Cloud Security Analyst', 'Junior'),
+            ('The Security Architect',  'Security Engineer',      'Mid-level'),
+            ('The Zero Trust Pioneer',  'Principal Security Architect', 'Senior'),
+        ],
+        'projected_skills': ['Security Architecture', 'Cloud Security (AWS/Azure)', 'Zero Trust Design', 'API Security', 'Security Automation', 'DevSecOps'],
+        'predicted_roles':  ['Cloud Security Engineer', 'Security Architect', 'DevSecOps Engineer'],
+        'gaps': [
+            {'gap': 'Cloud Platform Security Knowledge',  'priority': 'high',   'description': 'Study AWS, Azure, or GCP security services and shared responsibility models.'},
+            {'gap': 'API Security Testing',               'priority': 'high',   'description': 'Learn how to test and secure REST APIs against OWASP API Top 10 vulnerabilities.'},
+            {'gap': 'Security Architecture Design',       'priority': 'medium', 'description': 'Study design patterns for secure systems including Zero Trust principles.'},
+            {'gap': 'DevSecOps Integration',              'priority': 'medium', 'description': 'Learn how to embed security into CI/CD pipelines and development workflows.'},
+            {'gap': 'Threat Modelling Techniques',        'priority': 'low',    'description': 'Practice STRIDE or PASTA threat modelling on system designs.'},
+        ],
+        'next_steps': [
+            'Complete all Innovation Track Tier 0 missions focused on cloud and architecture basics.',
+            'Get hands-on with AWS Free Tier to experiment with cloud security configurations.',
+            'Study the OWASP API Security Top 10 and test against a sample API.',
+            'Build a simple DevSecOps pipeline using GitHub Actions with a security scan stage.',
+            'Study Zero Trust Architecture principles from NIST SP 800-207.',
+        ],
+    },
+    'leadership': {
+        'personas': [
+            ('The Security Apprentice',  'Security Student',       'Beginner'),
+            ('The Team Coordinator',     'Security Team Lead',     'Junior'),
+            ('The Security Manager',     'Security Programme Manager', 'Mid-level'),
+            ('The CISO-in-Training',     'Head of Security',       'Senior'),
+        ],
+        'projected_skills': ['Security Strategy', 'Executive Communication', 'Risk Governance', 'Team Leadership', 'Budget Planning', 'Stakeholder Management'],
+        'predicted_roles':  ['Security Manager', 'CISO', 'Head of Information Security'],
+        'gaps': [
+            {'gap': 'Executive-Level Communication',     'priority': 'high',   'description': 'Practice presenting security risks in business terms to non-technical stakeholders.'},
+            {'gap': 'Business-Aligned Security Planning','priority': 'high',   'description': 'Learn to build security roadmaps that directly support business goals.'},
+            {'gap': 'Crisis & Incident Leadership',      'priority': 'medium', 'description': 'Study how CISOs lead organisations through major security incidents.'},
+            {'gap': 'Security Budget & ROI Justification','priority': 'medium','description': 'Learn how to build security business cases and justify investments.'},
+            {'gap': 'Vendor & Third-Party Risk Management','priority': 'low',  'description': 'Study how to evaluate and manage security risks in the supply chain.'},
+        ],
+        'next_steps': [
+            'Complete all Leadership Track Tier 0 missions covering security governance basics.',
+            'Read case studies of real security incidents and analyse leadership decisions made.',
+            'Practice writing a one-page security briefing for a fictional board of directors.',
+            'Study frameworks like COBIT and how they connect security to business governance.',
+            'Identify a mentor through the OCH mentorship programme with CISO or senior management experience.',
+        ],
+    },
+}
+
+
+def _career_level_from_data(missions, avg_score, level, progress):
+    """Determine career level badge from activity data."""
+    score = missions * 3 + avg_score * 0.2 + progress * 0.3
+    if score < 15 or level < 2:
+        return 'Beginner'
+    if score < 45 or level < 3:
+        return 'Junior'
+    if score < 100 or level < 5:
+        return 'Mid-level'
+    return 'Senior'
+
+
+def _readiness_from_data(missions, avg_score, progress, hours):
+    """Calculate readiness % from activity data (mirrors the formula given to GPT)."""
+    raw = missions * 3 + avg_score * 0.2 + progress * 0.3 + min(hours * 2, 20)
+    return min(int(raw), 95)
+
+
+def _generate_fallback_insights(student_data):
+    """
+    Returns structured career insights when GPT is unavailable.
+    Uses track-specific templates enriched with the student's real numbers.
+    """
+    track_code  = (student_data.get('track_code') or 'defender').lower()
+    missions    = student_data.get('total_missions_completed', 0)
+    avg_score   = student_data.get('average_score', 0)
+    hours       = student_data.get('total_time_spent_hours', 0)
+    level       = student_data.get('circle_level', 1)
+    lessons     = student_data.get('lessons_completed', 0)
+    progress    = student_data.get('progress_percentage', 0)
+
+    fallback    = _TRACK_FALLBACK.get(track_code, _TRACK_FALLBACK['defender'])
+    career_lvl  = _career_level_from_data(missions, avg_score, level, progress)
+    readiness   = _readiness_from_data(missions, avg_score, progress, hours)
+
+    # Pick the persona row matching career level
+    level_map   = {'Beginner': 0, 'Junior': 1, 'Mid-level': 2, 'Senior': 3}
+    p_name, p_archetype, _ = fallback['personas'][level_map.get(career_lvl, 0)]
+
+    # Build a simple narrative from numbers
+    if missions == 0 and lessons == 0:
+        narrative = (
+            f"You have just enrolled in the {track_code.title()} track at Ongoza CyberHub — welcome. "
+            f"Your Future You journey is about to begin. As you complete your first missions and lessons, "
+            f"this prediction will sharpen to reflect exactly where you are heading. "
+            f"The foundation starts here."
+        )
+        readiness_explanation = (
+            "You are at the very beginning of your journey. "
+            "Every mission and lesson you complete will move this score forward."
+        )
+    else:
+        narrative = (
+            f"With {missions} mission{'s' if missions != 1 else ''} completed and {round(hours, 1)} hours invested, "
+            f"you are steadily building your {track_code.title()} track foundation at Ongoza CyberHub. "
+            f"Your average score of {round(avg_score)}% shows {'strong' if avg_score >= 75 else 'developing'} competency. "
+            f"Keep this momentum — consistent progress is what transforms a student into a professional."
+        )
+        readiness_explanation = (
+            f"Based on {missions} missions, {round(avg_score)}% average score, "
+            f"{round(progress)}% track progress, and {round(hours, 1)} hours invested, "
+            f"you are {readiness}% ready for your target career. "
+            f"{'Strong start — keep pushing forward.' if readiness >= 40 else 'Every mission you complete moves this score upward.'}"
+        )
+
+    return {
+        'ai_source': 'fallback',
+        'predicted_persona': {
+            'name': p_name,
+            'archetype': p_archetype,
+            'career_vision': narrative,
+            'projected_skills': fallback['projected_skills'],
+            'estimated_career_level': career_lvl,
+            'predicted_roles': fallback['predicted_roles'],
+        },
+        'career_narrative': narrative,
+        'gap_analysis': fallback['gaps'],
+        'recommended_next_steps': fallback['next_steps'],
+        'readiness_assessment': {
+            'percentage': readiness,
+            'explanation': readiness_explanation,
+        },
+        'strengths_analysis': [],  # Cannot derive without real data or profiler
+    }
+
+def _generate_career_insights(student_data):
+    """
+    Call GPT to predict the student's Future-You persona and generate career insights
+    based entirely on their actual activity data (track, missions, scores, progress).
+    """
+    import json
+    try:
+        from openai import OpenAI
+    except ImportError:
+        logger.warning("openai package not installed, returning fallback insights")
+        return None
+
+    api_key = os.getenv('CHAT_GPT_API_KEY')
+    if not api_key or api_key.startswith('your-'):
+        logger.warning("No valid CHAT_GPT_API_KEY configured, returning fallback insights")
+        return None
+
+    try:
+        client = OpenAI(api_key=api_key)
+
+        track_code = student_data.get('track_code') or 'cybersecurity'
+        missions   = student_data.get('total_missions_completed', 0)
+        avg_score  = student_data.get('average_score', 0)
+        hours      = student_data.get('total_time_spent_hours', 0)
+        level      = student_data.get('circle_level', 1)
+        lessons    = student_data.get('lessons_completed', 0)
+        modules    = student_data.get('modules_completed', 0)
+        progress   = student_data.get('progress_percentage', 0)
+        readiness  = student_data.get('readiness_score', 0)
+        skills     = student_data.get('skills_mastered', {})
+        weak_areas = student_data.get('weak_areas', [])
+        strengths  = student_data.get('strengths', [])
+        growth     = student_data.get('areas_for_growth', [])
+
+        prompt = f"""You are a cybersecurity career coach at Ongoza CyberHub (OCH), an elite cybersecurity academy.
+
+Based ONLY on the student's actual activity data below, PREDICT their Future-You persona and provide career insights.
+The persona is automatically predicted from their real performance — it is NOT manually created.
+
+STUDENT ACTIVITY DATA:
+- Track: {track_code}
+- Circle Level: {level}
+- Missions Completed: {missions}
+- Lessons Completed: {lessons}
+- Modules Completed: {modules}
+- Average Mission Score: {avg_score}%
+- Total Time Invested: {hours} hours
+- Track Progress: {progress}%
+- Readiness Score: {readiness}%
+- Skills Mastered: {json.dumps(skills)}
+- Weak Areas: {json.dumps(weak_areas)}
+- Known Strengths: {json.dumps(strengths)}
+- Growth Areas: {json.dumps(growth)}
+
+Return a single JSON object with EXACTLY these fields:
+
+{{
+  "predicted_persona": {{
+    "name": "Creative 2-3 word persona title matching their track and stage (e.g. 'The Digital Guardian', 'The Threat Hunter', 'The Security Architect')",
+    "archetype": "Short professional role title (e.g. 'Cyber Defender', 'SOC Analyst', 'Penetration Tester', 'GRC Specialist')",
+    "career_vision": "2-3 sentences describing who this student will become based on their track and current progress stage",
+    "projected_skills": ["5 specific technical skills they will master in this track"],
+    "estimated_career_level": "Beginner | Junior | Mid-level | Senior (based on current progress)",
+    "predicted_roles": ["3 specific job roles they are heading towards"]
+  }},
+  "career_narrative": "3-4 sentences personalized narrative about their journey using their actual numbers",
+  "gap_analysis": [
+    {{"gap": "specific named gap (e.g. 'Hands-on Lab Practice', 'Network Forensics Knowledge')", "priority": "high|medium|low", "description": "specific action to close this gap"}}
+  ],
+  "recommended_next_steps": ["5 specific actionable steps for this student right now"],
+  "readiness_assessment": {{
+    "percentage": <integer 0-100 calculated from missions={missions}, avg_score={avg_score}, progress={progress}, hours={hours}>,
+    "explanation": "specific explanation referencing their actual numbers"
+  }},
+  "strengths_analysis": [
+    {{"strength": "specific strength name", "career_outcome": "how this leads to a specific career outcome"}}
+  ]
+}}
+
+Critical rules:
+- If missions=0 and lessons=0: persona is 'Beginner/Explorer' stage, career_vision acknowledges they are just starting
+- gap_analysis must list SPECIFIC gaps (e.g. 'Incident Response Skills', 'Malware Analysis'), NEVER generic 'Skill Development'
+- readiness_assessment.percentage: use formula roughly (missions*3 + avg_score*0.2 + progress*0.3 + min(hours*2,20)), cap at 95
+- Return ONLY valid JSON, no markdown, no extra text"""
+
+        response = client.chat.completions.create(
+            model=os.getenv("AI_COACH_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": "You are an expert cybersecurity career coach at OCH. Always respond with valid JSON only. Never use generic placeholders like 'Skill Development'."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1600
+        )
+
+        content = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if content.startswith('```'):
+            content = content.split('\n', 1)[1] if '\n' in content else content[3:]
+            if content.endswith('```'):
+                content = content[:-3].strip()
+            if content.startswith('json\n'):
+                content = content[5:]
+
+        return json.loads(content)
+    except Exception as e:
+        logger.error(f"GPT career insights generation failed: {e}")
+        return None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_future_you_insights(request):
+    """
+    GET /api/v1/profiler/future-you/insights
+    Aggregated Future-You page data: persona + analytics + GPT career insights.
+    """
+    import json
+    from django.core.cache import cache
+
+    user = request.user
+
+    # 1. Get profiler session
+    session = ProfilerSession.objects.filter(
+        user=user,
+        status__in=['finished', 'locked']
+    ).order_by('-completed_at').first()
+
+    persona = {}
+    profiler_data = {
+        'overall_score': None,
+        'aptitude_score': None,
+        'behavioral_score': None,
+        'strengths': [],
+        'areas_for_growth': [],
+        'track_alignment_percentages': {},
+        'track_confidence': None,
+        'recommended_track': user.track_key,
+    }
+
+    if session:
+        persona = session.futureyou_persona or {}
+        profiler_data['aptitude_score'] = float(session.aptitude_score) if session.aptitude_score else None
+        profiler_data['track_confidence'] = float(session.track_confidence) if session.track_confidence else None
+        profiler_data['track_alignment_percentages'] = session.track_alignment_percentages or {}
+
+        if session.behavioral_profile:
+            profiler_data['strengths'] = session.behavioral_profile.get('strengths', [])
+            profiler_data['areas_for_growth'] = session.behavioral_profile.get('areas_for_growth', [])
+
+        try:
+            result = session.result
+            if result:
+                profiler_data['overall_score'] = float(result.overall_score) if result.overall_score else None
+                profiler_data['behavioral_score'] = float(result.behavioral_score) if result.behavioral_score else None
+                if result.strengths:
+                    profiler_data['strengths'] = result.strengths
+                if result.areas_for_growth:
+                    profiler_data['areas_for_growth'] = result.areas_for_growth
+        except ProfilerResult.DoesNotExist:
+            pass
+
+    # 2. Get coaching analytics
+    analytics_data = {
+        'total_missions_completed': 0,
+        'average_score': 0,
+        'total_time_spent_hours': 0,
+        'circle_level': 1,
+        'lessons_completed': 0,
+        'modules_completed': 0,
+        'recipes_completed': 0,
+        'posts_count': 0,
+        'helpful_votes_received': 0,
+    }
+
+    try:
+        from coaching.models import StudentAnalytics
+        analytics = StudentAnalytics.objects.filter(user=user).first()
+        if analytics:
+            analytics_data = {
+                'total_missions_completed': analytics.total_missions_completed,
+                'average_score': float(analytics.average_score),
+                'total_time_spent_hours': float(analytics.total_time_spent_hours),
+                'circle_level': analytics.circle_level,
+                'lessons_completed': analytics.lessons_completed,
+                'modules_completed': analytics.modules_completed,
+                'recipes_completed': analytics.recipes_completed,
+                'posts_count': analytics.posts_count,
+                'helpful_votes_received': analytics.helpful_votes_received,
+            }
+    except Exception as e:
+        logger.warning(f"Failed to fetch StudentAnalytics: {e}")
+
+    # 3. Get track progress
+    track_data = {
+        'readiness_score': 0,
+        'progress_percentage': 0,
+        'skills_mastered': {},
+        'weak_areas': [],
+        'average_score': 0,
+        'highest_score': 0,
+    }
+
+    try:
+        from coaching.models import UserTrackProgress
+        progress = UserTrackProgress.objects.filter(user=user).first()
+        if progress:
+            track_data = {
+                'readiness_score': progress.readiness_score,
+                'progress_percentage': float(progress.progress_percentage),
+                'skills_mastered': progress.skills_mastered or {},
+                'weak_areas': progress.weak_areas or [],
+                'average_score': float(progress.average_score),
+                'highest_score': float(progress.highest_score),
+            }
+    except Exception as e:
+        logger.warning(f"Failed to fetch UserTrackProgress: {e}")
+
+    # 4. Career insights — 3-tier resolution:
+    #    Tier 1: Fresh GPT call (memory cache 1 hour)
+    #    Tier 2: Last GPT response persisted in DB (served as 'db_cache')
+    #    Tier 3: Hardcoded track-based fallback (first time ever, no DB row)
+    from .models import FutureYouInsightsCache
+
+    cache_key = f"future_you_insights_{user.id}"
+    ai_insights = cache.get(cache_key)
+
+    if not ai_insights:
+        student_summary = {
+            **analytics_data,
+            **track_data,
+            'track_code': user.track_key,
+            'strengths': profiler_data['strengths'],
+            'areas_for_growth': profiler_data['areas_for_growth'],
+        }
+
+        # Tier 1: Try GPT
+        ai_insights = _generate_career_insights(student_summary)
+        if ai_insights:
+            ai_insights['ai_source'] = 'gpt'
+            cache.set(cache_key, ai_insights, timeout=3600)
+            # Persist to DB for Tier 2 future use
+            try:
+                FutureYouInsightsCache.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'insights': ai_insights,
+                        'ai_source': 'gpt',
+                        'track_key': user.track_key or '',
+                    }
+                )
+            except Exception as db_err:
+                logger.warning(f"Could not persist GPT insights to DB: {db_err}")
+        else:
+            # Tier 2: Check DB for last saved GPT response
+            try:
+                db_cache = FutureYouInsightsCache.objects.filter(
+                    user=user, ai_source='gpt'
+                ).first()
+                if db_cache:
+                    ai_insights = dict(db_cache.insights)
+                    ai_insights['ai_source'] = 'db_cache'
+                    cache.set(cache_key, ai_insights, timeout=1800)
+                    logger.info(
+                        f"Future You: using DB-cached GPT insights for user {user.id} "
+                        f"(saved {db_cache.updated_at:%Y-%m-%d %H:%M})"
+                    )
+            except Exception as db_err:
+                logger.warning(f"Could not read Future You DB cache: {db_err}")
+
+            # Tier 3: First-time fallback — no DB row exists yet
+            if not ai_insights:
+                ai_insights = _generate_fallback_insights(student_summary)
+                if ai_insights:
+                    cache.set(cache_key, ai_insights, timeout=1800)
+
+    # 5. Resolve final persona:
+    #    Use profiler session persona if available, otherwise use GPT-predicted persona
+    final_persona = persona if persona else {}
+    if not final_persona and ai_insights and ai_insights.get('predicted_persona'):
+        final_persona = ai_insights['predicted_persona']
+    elif ai_insights and ai_insights.get('predicted_persona'):
+        # Merge: keep profiler base but enrich with AI predictions
+        final_persona = {
+            **ai_insights['predicted_persona'],
+            **final_persona,  # profiler fields take precedence
+        }
+
+    return Response({
+        'persona': final_persona,
+        'profiler': profiler_data,
+        'analytics': analytics_data,
+        'track_progress': track_data,
+        'ai_insights': ai_insights,
+        'student_name': user.get_full_name() or user.first_name or user.email.split('@')[0],
+    })

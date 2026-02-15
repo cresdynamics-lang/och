@@ -3,7 +3,10 @@ URL configuration for Subscription Engine.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import subscription_status, upgrade_subscription, stripe_webhook, billing_history
+from .views import (
+    subscription_status, upgrade_subscription, stripe_webhook, billing_history,
+    list_plans, simulate_payment, cancel_subscription,
+)
 from .admin_views import (
     SubscriptionPlanViewSet, UserSubscriptionAdminViewSet,
     PaymentGatewayViewSet, PaymentTransactionViewSet,
@@ -22,12 +25,15 @@ admin_router.register(r'admin/rules', SubscriptionRuleViewSet, basename='admin-r
 admin_router.register(r'admin/settings', PaymentSettingsViewSet, basename='admin-setting')
 
 urlpatterns = [
-    # Public/user endpoints
+    # ── User-facing subscription endpoints ──────────────────────────────────
     path('subscription/status', subscription_status, name='status'),
+    path('subscription/plans', list_plans, name='plans'),          # pricing page
     path('subscription/upgrade', upgrade_subscription, name='upgrade'),
+    path('subscription/simulate-payment', simulate_payment, name='simulate-payment'),
+    path('subscription/cancel', cancel_subscription, name='cancel'),
     path('subscription/billing-history', billing_history, name='billing-history'),
     path('subscription/webhooks/stripe', stripe_webhook, name='stripe-webhook'),
-    # Admin endpoints
+    # ── Admin endpoints ──────────────────────────────────────────────────────
     path('', include(admin_router.urls)),
 ]
 

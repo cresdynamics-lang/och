@@ -180,6 +180,7 @@ export function EnhancedSidebar({ isCollapsed = false, onCollapsedChange }: Side
   const mainNav = [
     { label: 'Control Center', icon: LayoutDashboard, href: '/dashboard/student' },
     { label: 'My Profile', icon: Activity, href: '/dashboard/student/profiling' },
+    { label: 'Future You', icon: Sparkles, href: '/dashboard/student/future-you' },
     { label: 'Curriculum', icon: Compass, href: '/dashboard/student/curriculum' },
     { label: 'My Learning', icon: BookOpen, href: '/dashboard/student/curriculum/learn' },
     { label: 'Missions', icon: Target, href: '/dashboard/student/missions' },

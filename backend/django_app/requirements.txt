@@ -32,6 +32,9 @@ stripe>=7.0.0
 # MFA/TOTP
 pyotp>=2.9.0
 
+# Scheduled Jobs (grace period, auto-downgrade, renewals)
+django-apscheduler>=0.7.0
+
 # Development (optional)
 django-extensions>=3.2.3
 django-filter>=23.3
