@@ -26,6 +26,7 @@ from users.serializers import (
     MagicLinkRequestSerializer,
     MFAEnrollSerializer,
     MFAVerifySerializer,
+    MFACompleteSerializer,
     RefreshTokenSerializer,
     ConsentUpdateSerializer,
     PasswordResetRequestSerializer,
@@ -40,6 +41,10 @@ from users.utils.auth_utils import (
     revoke_session,
     check_device_trust,
     trust_device,
+    encrypt_totp_secret,
+    decrypt_totp_secret,
+    verify_mfa_challenge,
+    hash_refresh_token,
 )
 from users.utils.risk_utils import calculate_risk_score, requires_mfa
 from users.utils.consent_utils import (
@@ -441,20 +446,21 @@ class LoginView(APIView):
         
         # If MFA required and not verified, return MFA challenge
         if mfa_required and not device_trusted:
-            # Create temporary session for MFA verification
-            session = create_user_session(
+            # Create temporary session for MFA verification; return refresh_token so client can complete MFA then refresh
+            access_token, refresh_token, session = create_user_session(
                 user=user,
                 device_fingerprint=device_fingerprint,
                 device_name=device_name,
                 ip_address=ip_address,
                 user_agent=user_agent
             )
-            
             return Response(
                 {
                     'detail': 'MFA required',
                     'mfa_required': True,
-                    'session_id': str(session[2].id),
+                    'session_id': str(session.id),
+                    'refresh_token': refresh_token,
+                    'mfa_method': (user.mfa_method or 'totp').lower(),
                 },
                 status=status.HTTP_200_OK
             )
@@ -562,48 +568,95 @@ class MagicLinkView(APIView):
 class MFAEnrollView(APIView):
     """
     POST /api/v1/auth/mfa/enroll
-    Enroll in MFA (TOTP setup).
+    Enroll in MFA (TOTP, SMS, or Email).
     """
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def post(self, request):
         serializer = MFAEnrollSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         method = serializer.validated_data['method']
         user = request.user
-        
-        # TODO: Implement TOTP secret generation
-        # For TOTP, generate secret and QR code
+
         if method == 'totp':
             import pyotp
             secret = pyotp.random_base32()
-            
+            secret_stored = encrypt_totp_secret(secret)
+
             mfa_method = MFAMethod.objects.create(
                 user=user,
                 method_type='totp',
-                secret_encrypted=secret,  # TODO: Encrypt this
-                enabled=False,  # Not enabled until verified
+                secret_encrypted=secret_stored,
+                enabled=False,
             )
-            
-            # Generate QR code URI
+
             totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
                 name=user.email,
                 issuer_name='Ongoza CyberHub'
             )
-            
+
             _log_audit_event(user, 'mfa_enroll', 'mfa', 'success', {'method': 'totp'})
-            
+
             return Response({
                 'mfa_method_id': str(mfa_method.id),
-                'secret': secret,  # Only shown once
+                'secret': secret,
                 'qr_code_uri': totp_uri,
             }, status=status.HTTP_201_CREATED)
-        
+
+        if method == 'sms':
+            phone_number = (serializer.validated_data.get('phone_number') or '').strip()
+            if not phone_number:
+                return Response(
+                    {'detail': 'phone_number required for SMS MFA'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            phone_e164 = phone_number if phone_number.startswith('+') else f'+{phone_number}'
+            code, _ = create_mfa_code(user, method='sms', expires_minutes=10)
+            from users.utils.sms_utils import send_sms_otp
+            sent = send_sms_otp(phone_e164, code)
+            if not sent:
+                return Response(
+                    {'detail': 'Failed to send SMS. Check phone number and SMS configuration.'},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            MFAMethod.objects.update_or_create(
+                user=user,
+                method_type='sms',
+                defaults={
+                    'phone_e164': phone_e164,
+                    'enabled': False,
+                    'is_verified': False,
+                }
+            )
+            _log_audit_event(user, 'mfa_enroll', 'mfa', 'success', {'method': 'sms'})
+            return Response(
+                {'detail': 'SMS code sent. Call POST /auth/mfa/verify with method=sms and the code to enable.'},
+                status=status.HTTP_201_CREATED
+            )
+
+        if method == 'email':
+            code, _ = create_mfa_code(user, method='email', expires_minutes=10)
+            from users.utils.email_utils import send_otp_email
+            send_otp_email(user, code)
+            MFAMethod.objects.update_or_create(
+                user=user,
+                method_type='email',
+                defaults={
+                    'enabled': False,
+                    'is_verified': False,
+                }
+            )
+            _log_audit_event(user, 'mfa_enroll', 'mfa', 'success', {'method': 'email'})
+            return Response(
+                {'detail': 'Verification code sent to your email. Call POST /auth/mfa/verify with method=email and the code to enable.'},
+                status=status.HTTP_201_CREATED
+            )
+
         return Response(
-            {'detail': f'MFA method {method} enrollment not yet implemented'},
-            status=status.HTTP_501_NOT_IMPLEMENTED
+            {'detail': f'MFA method {method} not supported'},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
 
@@ -623,23 +676,43 @@ class MFAVerifyView(APIView):
         method = serializer.validated_data['method']
         user = request.user
         
+        # SMS/Email enrollment verification (pending method)
+        if method in ('sms', 'email'):
+            mfa_method = MFAMethod.objects.filter(
+                user=user,
+                method_type=method,
+                enabled=False
+            ).first()
+            if mfa_method and verify_mfa_code(user, code, method):
+                mfa_method.enabled = True
+                mfa_method.is_verified = True
+                mfa_method.verified_at = timezone.now()
+                mfa_method.is_primary = True
+                mfa_method.save()
+                user.mfa_enabled = True
+                user.mfa_method = method
+                user.save()
+                _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': method})
+                return Response({'detail': f'MFA enabled successfully ({method})'}, status=status.HTTP_200_OK)
+            if mfa_method:
+                _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': method})
+                return Response({'detail': 'Invalid or expired code'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Verify code
         if method == 'totp':
             import pyotp
             from users.utils.auth_utils import generate_totp_backup_codes, verify_totp_backup_code
-            
-            # Check if this is enrollment verification (pending TOTP)
+
             mfa_method = MFAMethod.objects.filter(
                 user=user,
                 method_type='totp',
                 enabled=False
             ).first()
-            
+
             if mfa_method:
-                # Enrollment verification
-                totp = pyotp.TOTP(mfa_method.secret_encrypted)
+                secret = decrypt_totp_secret(mfa_method.secret_encrypted)
+                totp = pyotp.TOTP(secret)
                 if totp.verify(code, valid_window=1):
-                    # Generate backup codes
                     backup_codes, hashed_backup_codes = generate_totp_backup_codes(count=10)
                     mfa_method.totp_backup_codes = hashed_backup_codes
                     mfa_method.enabled = True
@@ -647,68 +720,186 @@ class MFAVerifyView(APIView):
                     mfa_method.verified_at = timezone.now()
                     mfa_method.is_primary = True
                     mfa_method.save()
-                    
                     user.mfa_enabled = True
                     user.mfa_method = 'totp'
                     user.save()
-                    
                     _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': 'totp'})
-                    
                     return Response({
                         'detail': 'MFA enabled successfully',
-                        'backup_codes': backup_codes,  # Show only once
+                        'backup_codes': backup_codes,
                     }, status=status.HTTP_200_OK)
-                else:
-                    _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': 'totp'})
-                    return Response(
-                        {'detail': 'Invalid TOTP code'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-            else:
-                # Regular TOTP verification (already enrolled)
-                mfa_method = MFAMethod.objects.filter(
-                    user=user,
-                    method_type='totp',
-                    enabled=True
-                ).first()
-                
-                if not mfa_method:
-                    return Response(
-                        {'detail': 'TOTP not enabled for this account'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                # Try TOTP code first
-                totp = pyotp.TOTP(mfa_method.secret_encrypted)
-                if totp.verify(code, valid_window=1):
-                    mfa_method.last_used_at = timezone.now()
-                    mfa_method.save()
-                    _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': 'totp'})
-                    return Response({'detail': 'MFA verified'}, status=status.HTTP_200_OK)
-                
-                # Try backup code
-                if verify_totp_backup_code(user, code):
-                    _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': 'backup_code'})
-                    return Response({'detail': 'MFA verified with backup code'}, status=status.HTTP_200_OK)
-                
                 _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': 'totp'})
+                return Response({'detail': 'Invalid TOTP code'}, status=status.HTTP_400_BAD_REQUEST)
+
+            mfa_method = MFAMethod.objects.filter(
+                user=user,
+                method_type='totp',
+                enabled=True
+            ).first()
+            if not mfa_method:
                 return Response(
-                    {'detail': 'Invalid TOTP code or backup code'},
+                    {'detail': 'TOTP not enabled for this account'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        
-        # Verify other methods
-        if verify_mfa_code(user, code, method):
+            secret = decrypt_totp_secret(mfa_method.secret_encrypted)
+            totp = pyotp.TOTP(secret)
+            if totp.verify(code, valid_window=1):
+                mfa_method.last_used_at = timezone.now()
+                mfa_method.save()
+                _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': 'totp'})
+                return Response({'detail': 'MFA verified'}, status=status.HTTP_200_OK)
+            if verify_totp_backup_code(user, code):
+                _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': 'backup_code'})
+                return Response({'detail': 'MFA verified with backup code'}, status=status.HTTP_200_OK)
+            _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': 'totp'})
+            return Response(
+                {'detail': 'Invalid TOTP code or backup code'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Regular SMS/email verification (already enrolled)
+        if method in ('sms', 'email') and verify_mfa_code(user, code, method):
             _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': method})
-            return Response({
-                'detail': 'MFA verified successfully',
-            }, status=status.HTTP_200_OK)
+            return Response({'detail': 'MFA verified successfully'}, status=status.HTTP_200_OK)
+
+        _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': method})
+        return Response(
+            {'detail': 'Invalid or expired code'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class MFASendChallengeView(APIView):
+    """
+    POST /api/v1/auth/mfa/send-challenge
+    Send MFA code (SMS or email) when user's primary method is sms/email.
+    Call with refresh_token from login (mfa_required) response.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response(
+                {'detail': 'refresh_token required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        session, user = verify_refresh_token(refresh_token)
+        if not session or not user:
+            return Response(
+                {'detail': 'Invalid or expired session'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        if session.mfa_verified:
+            return Response(
+                {'detail': 'MFA already verified'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        method = (user.mfa_method or '').lower()
+        if method not in ('sms', 'email'):
+            return Response(
+                {'detail': 'Send challenge only for SMS or email MFA. Use TOTP or backup code.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        code, _ = create_mfa_code(user, method=method, expires_minutes=10)
+        if method == 'sms':
+            mfa_method = MFAMethod.objects.filter(user=user, method_type='sms', enabled=True).first()
+            if not mfa_method or not mfa_method.phone_e164:
+                return Response(
+                    {'detail': 'SMS MFA not configured'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            from users.utils.sms_utils import send_sms_otp
+            sent = send_sms_otp(mfa_method.phone_e164, code)
+            if not sent:
+                return Response(
+                    {'detail': 'Failed to send SMS'},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
         else:
+            from users.utils.email_utils import send_otp_email
+            send_otp_email(user, code)
+        _log_audit_event(user, 'mfa_challenge', 'user', 'success', {'method': method})
+        return Response(
+            {'detail': f'Verification code sent via {method}'},
+            status=status.HTTP_200_OK
+        )
+
+
+class MFACompleteView(APIView):
+    """
+    POST /api/v1/auth/mfa/complete
+    Complete MFA after login: verify code and return tokens.
+    Call with refresh_token from login (mfa_required) response.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = MFACompleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        refresh_token = serializer.validated_data['refresh_token']
+        code = serializer.validated_data['code']
+        method = serializer.validated_data['method']
+
+        session, user = verify_refresh_token(refresh_token)
+        if not session or not user:
+            return Response(
+                {'detail': 'Invalid or expired session. Please log in again.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if session.mfa_verified:
+            return Response(
+                {'detail': 'MFA already verified for this session'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not verify_mfa_challenge(user, code, method):
             _log_audit_event(user, 'mfa_failure', 'mfa', 'failure', {'method': method})
             return Response(
                 {'detail': 'Invalid or expired code'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        _log_audit_event(user, 'mfa_success', 'mfa', 'success', {'method': method})
+
+        session.mfa_verified = True
+        refresh = RefreshToken.for_user(user)
+        new_refresh_str = str(refresh)
+        session.refresh_token_hash = hash_refresh_token(new_refresh_str)
+        session.save()
+
+        trust_device(
+            user,
+            session.device_fingerprint,
+            session.device_name,
+            session.device_type or 'desktop',
+            session.ip_address,
+            session.ua,
+        )
+
+        consent_scopes = get_consent_scopes_for_token(user)
+        user.last_login = timezone.now()
+        user.save()
+
+        response = Response({
+            'access_token': str(refresh.access_token),
+            'refresh_token': new_refresh_str,
+            'user': UserSerializer(user).data,
+            'consent_scopes': consent_scopes,
+        }, status=status.HTTP_200_OK)
+
+        response.set_cookie(
+            'refresh_token',
+            new_refresh_str,
+            max_age=30 * 24 * 60 * 60,
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite='Lax',
+        )
+        return response
 
 
 class MFADisableView(APIView):
@@ -717,10 +908,10 @@ class MFADisableView(APIView):
     Disable MFA for user.
     """
     permission_classes = [permissions.IsAuthenticated]
-    
+
     def post(self, request):
         user = request.user
-        
+
         if not user.mfa_enabled:
             return Response(
                 {'detail': 'MFA is not enabled for this account'},
@@ -751,27 +942,33 @@ class RefreshTokenView(APIView):
     Refresh access token with refresh token.
     """
     permission_classes = [permissions.AllowAny]
-    
+
     def post(self, request):
         serializer = RefreshTokenSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         refresh_token = serializer.validated_data.get('refresh_token') or request.COOKIES.get('refresh_token')
         device_fingerprint = serializer.validated_data.get('device_fingerprint', 'unknown')
-        
+
         if not refresh_token:
             return Response(
                 {'detail': 'Refresh token required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Rotate refresh token
+
+        session, user = verify_refresh_token(refresh_token)
+        if session and not session.mfa_verified:
+            return Response(
+                {'detail': 'MFA required', 'mfa_required': True},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         new_access_token, new_refresh_token, session = rotate_refresh_token(
             refresh_token,
             device_fingerprint
         )
-        
+
         if not session:
             return Response(
                 {'detail': 'Invalid or expired refresh token'},

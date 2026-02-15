@@ -10,11 +10,12 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useCohort, useCohortDashboard, useTracks, useUpdateCohort, useTrack } from '@/hooks/usePrograms'
 import { programsClient, type CalendarEvent, type Enrollment, type MentorAssignment, type Track, type CohortMissionAssignment } from '@/services/programsClient'
+import { apiGateway } from '@/services/apiGateway'
 import { missionsClient, type MissionTemplate } from '@/services/missionsClient'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
-import { Target } from 'lucide-react'
+import { Target, GraduationCap, Users, ExternalLink } from 'lucide-react'
 
 export default function CohortDetailPage() {
   const params = useParams()
@@ -47,6 +48,8 @@ export default function CohortDetailPage() {
   const [addMissionsError, setAddMissionsError] = useState<string | null>(null)
   const [addMissionsSuccess, setAddMissionsSuccess] = useState<string | null>(null)
   const [cohortMissions, setCohortMissions] = useState<CohortMissionAssignment[]>([])
+  const [publicApplications, setPublicApplications] = useState<{ id: string; applicant_type: string; name: string; email: string; status: string; created_at: string }[]>([])
+  const [applicationsLoadError, setApplicationsLoadError] = useState<string | null>(null)
 
   // Calculate derived values - moved before early returns to satisfy Rules of Hooks
   const activeEnrollments = enrollments.filter(e => e.status === 'active')
@@ -134,16 +137,27 @@ export default function CohortDetailPage() {
       if (!cohortId) return
       setIsLoading(true)
       try {
-        const [events, enrolls, mentorAssignments, missions] = await Promise.all([
+        setApplicationsLoadError(null)
+        const [events, enrolls, mentorAssignments, missions, applicationsRes] = await Promise.all([
           programsClient.getCohortCalendar(cohortId),
           programsClient.getCohortEnrollments(cohortId),
           programsClient.getCohortMentors(cohortId),
           programsClient.getCohortMissions(cohortId),
+          apiGateway.get<{ applications: { id: string; applicant_type: string; name: string; email: string; status: string; created_at: string }[] }>(
+            '/director/public-applications/',
+            { params: { cohort_id: cohortId } }
+          ).catch((err: unknown) => {
+            const status = (err as { status?: number })?.status
+            if (status === 403) setApplicationsLoadError('Permission denied. Directors and admins only.')
+            else if (status === 404) setApplicationsLoadError('Applications endpoint not found.')
+            return { applications: [] }
+          }),
         ])
         setCalendarEvents(events)
         setEnrollments(enrolls)
         setMentors(mentorAssignments)
         setCohortMissions(missions)
+        setPublicApplications(applicationsRes?.applications ?? [])
       } catch (err) {
         console.error('Failed to load cohort data:', err)
       } finally {
@@ -478,8 +492,8 @@ export default function CohortDetailPage() {
                     <p className="text-och-steel text-sm">No missions assigned yet. Use &quot;Add Missions&quot; to assign missions to this cohort.</p>
                   ) : (
                     <ul className="space-y-2">
-                      {cohortMissions.map((m) => (
-                        <li key={m.id} className="flex items-center justify-between gap-3 py-2 border-b border-och-steel/20 last:border-0">
+                      {cohortMissions.map((m, i) => (
+                        <li key={`${m.id}-${i}`} className="flex items-center justify-between gap-3 py-2 border-b border-och-steel/20 last:border-0">
                           <div className="min-w-0 flex-1">
                             <Link
                               href={`/dashboard/director/missions/${m.id}`}
@@ -502,6 +516,69 @@ export default function CohortDetailPage() {
                         </li>
                       ))}
                     </ul>
+                  )}
+                </div>
+              </Card>
+
+              {/* Homepage applications (student/sponsor) */}
+              <Card>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-white">Homepage Applications</h2>
+                    <Link
+                      href={`/dashboard/director/applications?cohort_id=${cohortId}`}
+                      className="text-sm text-och-mint hover:underline inline-flex items-center gap-1"
+                    >
+                      View all <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                  {applicationsLoadError ? (
+                    <p className="text-och-orange text-sm">{applicationsLoadError}</p>
+                  ) : publicApplications.length === 0 ? (
+                    <p className="text-och-steel text-sm">No applications from homepage yet. When this cohort is published, applications appear here.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-och-steel/20">
+                            <th className="text-left py-2 text-xs font-medium text-och-steel">Date</th>
+                            <th className="text-left py-2 text-xs font-medium text-och-steel">Type</th>
+                            <th className="text-left py-2 text-xs font-medium text-och-steel">Name</th>
+                            <th className="text-left py-2 text-xs font-medium text-och-steel">Email</th>
+                            <th className="text-left py-2 text-xs font-medium text-och-steel">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {publicApplications.slice(0, 10).map((app) => (
+                            <tr key={app.id} className="border-b border-och-steel/10">
+                              <td className="py-2 text-och-steel">{new Date(app.created_at).toLocaleDateString()}</td>
+                              <td className="py-2">
+                                {app.applicant_type === 'student' ? (
+                                  <Badge variant="defender" className="gap-0.5 text-xs">
+                                    <GraduationCap className="w-3 h-3" /> Student
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="gold" className="gap-0.5 text-xs">
+                                    <Users className="w-3 h-3" /> Sponsor
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="py-2 text-white">{app.name || '-'}</td>
+                              <td className="py-2 text-och-steel">{app.email || '-'}</td>
+                              <td className="py-2"><Badge variant={app.status === 'pending' ? 'steel' : app.status === 'approved' || app.status === 'converted' ? 'defender' : 'orange'}>{app.status}</Badge></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {publicApplications.length > 10 && (
+                        <Link
+                          href={`/dashboard/director/applications?cohort_id=${cohortId}`}
+                          className="block text-center text-och-mint text-sm mt-2 hover:underline"
+                        >
+                          View all {publicApplications.length} applications
+                        </Link>
+                      )}
+                    </div>
                   )}
                 </div>
               </Card>

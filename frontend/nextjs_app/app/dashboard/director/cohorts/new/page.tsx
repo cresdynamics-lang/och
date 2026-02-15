@@ -6,6 +6,7 @@ import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { RouteGuard } from '@/components/auth/RouteGuard'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { RegistrationFormFieldsEditor } from '@/components/director/RegistrationFormFieldsEditor'
 import { CreateCohortPayload } from '@/types/api'
 import { apiGateway } from '@/services/apiGateway'
 
@@ -57,6 +58,22 @@ export default function CreateCohortPage() {
     assigned_staff: {
       mentors: [] as string[],
       coordinators: [] as string[]
+    },
+    published_to_homepage: false,
+    profile_image: null as File | null,
+    registration_form_fields: {
+      student: [
+        { key: 'first_name', label: 'First Name', type: 'text', required: true },
+        { key: 'last_name', label: 'Last Name', type: 'text', required: true },
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'phone', label: 'Phone', type: 'tel', required: false }
+      ] as { key: string; label: string; type: string; required: boolean }[],
+      sponsor: [
+        { key: 'org_name', label: 'Organization Name', type: 'text', required: true },
+        { key: 'contact_name', label: 'Contact Name', type: 'text', required: true },
+        { key: 'contact_email', label: 'Contact Email', type: 'email', required: true },
+        { key: 'phone', label: 'Phone', type: 'tel', required: false }
+      ] as { key: string; label: string; type: string; required: boolean }[]
     }
   })
 
@@ -123,8 +140,7 @@ export default function CreateCohortPage() {
     setIsLoading(true)
 
     try {
-      // Transform data to match backend expectations
-      const cohortData = {
+      const cohortData: Record<string, unknown> = {
         track: formData.track_id,
         name: formData.name,
         start_date: formData.start_date,
@@ -132,7 +148,7 @@ export default function CreateCohortPage() {
         mode: formData.mode,
         seat_cap: formData.seat_cap,
         mentor_ratio: formData.mentor_ratio,
-        calendar_template_id: null, // Always null for now until templates work properly
+        calendar_template_id: null,
         coordinator: formData.assigned_staff.coordinators[0] || null,
         seat_pool: {
           paid: Math.floor(formData.seat_cap * 0.8),
@@ -142,11 +158,29 @@ export default function CreateCohortPage() {
         assigned_staff: {
           mentors: formData.assigned_staff.mentors,
           coordinators: formData.assigned_staff.coordinators
-        }
+        },
+        published_to_homepage: formData.published_to_homepage,
+        registration_form_fields: formData.registration_form_fields
       }
-      
-      console.log('Sending cohort data:', cohortData)
-      await apiGateway.post('/cohorts/', cohortData)
+
+      if (formData.profile_image) {
+        const fd = new FormData()
+        ;['track', 'name', 'start_date', 'end_date', 'mode', 'seat_cap', 'mentor_ratio'].forEach((k) => {
+          const v = cohortData[k]
+          if (v != null) fd.append(k, String(v))
+        })
+        if (cohortData.coordinator) fd.append('coordinator', String(cohortData.coordinator))
+        fd.append('calendar_template_id', '')
+        fd.append('seat_pool', JSON.stringify(cohortData.seat_pool))
+        fd.append('assigned_staff', JSON.stringify(cohortData.assigned_staff))
+        fd.append('status', 'draft')
+        fd.append('published_to_homepage', String(cohortData.published_to_homepage))
+        fd.append('registration_form_fields', JSON.stringify(cohortData.registration_form_fields))
+        fd.append('profile_image', formData.profile_image)
+        await apiGateway.post('/cohorts/', fd)
+      } else {
+        await apiGateway.post('/cohorts/', cohortData)
+      }
       router.push('/dashboard/director/cohorts')
     } catch (error) {
       console.error('Failed to create cohort:', error)
@@ -337,6 +371,50 @@ export default function CreateCohortPage() {
                     ))
                   )}
                 </select>
+              </div>
+
+              {/* Publish to Homepage */}
+              <div className="p-4 rounded-lg border border-och-defender/30 bg-och-midnight/30 space-y-4">
+                <h3 className="text-lg font-semibold text-och-defender">Publish to Homepage</h3>
+                <p className="text-sm text-och-steel">Allow students and sponsors to find and apply to this cohort from the public homepage.</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.published_to_homepage}
+                    onChange={(e) => updateFormData('published_to_homepage', e.target.checked)}
+                    className="rounded text-och-defender focus:ring-och-defender"
+                  />
+                  <span className="text-white">Publish this cohort to the homepage</span>
+                </label>
+                {formData.published_to_homepage && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">Cohort profile image (optional)</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => updateFormData('profile_image', e.target.files?.[0] || null)}
+                        className="w-full px-4 py-2 bg-och-midnight border border-och-steel/30 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-och-defender file:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">Registration form fields</label>
+                      <p className="text-xs text-och-steel mb-3">
+                        Add, remove, or edit fields shown when students or sponsors apply. Click a field to edit. Add custom questions (e.g. &quot;Why do you want to join?&quot;, &quot;Years of experience&quot;).
+                      </p>
+                      <RegistrationFormFieldsEditor
+                        studentFields={formData.registration_form_fields.student}
+                        sponsorFields={formData.registration_form_fields.sponsor}
+                        onChange={(student, sponsor) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            registration_form_fields: { student, sponsor }
+                          }))
+                        }
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Staff Assignment */}

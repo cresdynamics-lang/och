@@ -83,8 +83,35 @@ director_router.register(r'advanced-analytics', DirectorAdvancedAnalyticsViewSet
 director_router.register(r'certificates', DirectorCertificateViewSet, basename='director-certificates')
 
 from programs.track_api import get_tracks_for_profiler
+from .views.public_registration_views import (
+    list_published_cohorts,
+    apply_as_student,
+    join_as_sponsor,
+    list_public_applications,
+    assign_applications_to_mentor,
+    set_review_cutoff,
+    set_interview_cutoff,
+    enroll_applications,
+    list_mentor_applications,
+    grade_application,
+    grade_interview,
+)
 
 urlpatterns = [
+    # Director: list public applications (auth required)
+    path('director/public-applications/', list_public_applications, name='director-public-applications'),
+    path('director/public-applications/assign-to-mentor/', assign_applications_to_mentor, name='assign-applications-to-mentor'),
+    path('director/public-applications/set-review-cutoff/', set_review_cutoff, name='set-review-cutoff'),
+    path('director/public-applications/set-interview-cutoff/', set_interview_cutoff, name='set-interview-cutoff'),
+    path('director/public-applications/enroll/', enroll_applications, name='enroll-applications'),
+    # Mentor: applications to review
+    path('mentor/applications-to-review/', list_mentor_applications, name='mentor-applications-to-review'),
+    path('mentor/applications-to-review/<uuid:application_id>/grade/', grade_application, name='grade-application'),
+    path('mentor/applications-to-review/<uuid:application_id>/grade-interview/', grade_interview, name='grade-interview'),
+    # Public registration (no auth)
+    path('public/cohorts/', list_published_cohorts, name='public-cohorts-list'),
+    path('public/cohorts/<uuid:cohort_id>/apply/student/', apply_as_student, name='public-apply-student'),
+    path('public/cohorts/<uuid:cohort_id>/apply/sponsor/', join_as_sponsor, name='public-join-sponsor'),
     # Profiler API - tracks for GPT analysis
     path('api/v1/programs/tracks/', get_tracks_for_profiler, name='profiler-tracks'),
     

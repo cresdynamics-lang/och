@@ -13,11 +13,14 @@ from users.views.audit_views import AuditLogViewSet
 
 from .views import health_check, dashboard_metrics
 from programs.views.director_management_views import director_mentor_analytics_view
+from programs.views.public_registration_views import list_public_applications
 
 urlpatterns = [
     path('health/', health_check, name='health-check'),
     path('metrics/dashboard', dashboard_metrics, name='dashboard-metrics'),
     
+    # Director public applications - explicit route to avoid 404
+    path('director/public-applications/', list_public_applications, name='director-public-applications'),
     # Director mentor analytics - must come before generic '' includes to avoid 404
     path('director/mentors/<int:mentor_id>/analytics/', director_mentor_analytics_view, name='director-mentor-analytics'),
     

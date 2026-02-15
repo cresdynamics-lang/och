@@ -132,22 +132,48 @@ export const djangoClient = {
     /**
      * Enroll in MFA
      */
-    async enrollMFA(data: { method: 'totp' | 'sms'; phone_number?: string }): Promise<{
-      mfa_method_id: string;
-      secret: string;
-      qr_code_uri: string;
+    async enrollMFA(data: { method: 'totp' | 'sms' | 'email'; phone_number?: string }): Promise<{
+      mfa_method_id?: string;
+      secret?: string;
+      qr_code_uri?: string;
+      detail?: string;
     }> {
       return apiGateway.post('/auth/mfa/enroll', data);
     },
 
     /**
-     * Verify MFA code
+     * Verify MFA code (authenticated user, e.g. after enrollment)
      */
-    async verifyMFA(data: { code: string; method: 'totp' | 'sms' }): Promise<{
+    async verifyMFA(data: { code: string; method: 'totp' | 'sms' | 'email' | 'backup_codes' }): Promise<{
       detail: string;
       backup_codes?: string[];
     }> {
       return apiGateway.post('/auth/mfa/verify', data);
+    },
+
+    /**
+     * Send MFA challenge (SMS or email code) when primary method is sms/email.
+     * Call with refresh_token from mfa_required login response.
+     */
+    async sendMFAChallenge(refresh_token: string): Promise<{ detail: string }> {
+      return apiGateway.post('/auth/mfa/send-challenge', { refresh_token });
+    },
+
+    /**
+     * Complete MFA after login: verify code and get tokens.
+     * Call with refresh_token from mfa_required login response.
+     */
+    async completeMFA(data: {
+      refresh_token: string;
+      code: string;
+      method: 'totp' | 'sms' | 'email' | 'backup_codes';
+    }): Promise<{
+      access_token: string;
+      refresh_token: string;
+      user: any;
+      consent_scopes?: any[];
+    }> {
+      return apiGateway.post('/auth/mfa/complete', data);
     },
 
     /**

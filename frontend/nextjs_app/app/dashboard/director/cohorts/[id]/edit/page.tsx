@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useCohort, useUpdateCohort, useTrack } from '@/hooks/usePrograms'
 import { programsClient, type Cohort } from '@/services/programsClient'
+import { apiGateway } from '@/services/apiGateway'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { RegistrationFormFieldsEditor, type FormFieldConfig } from '@/components/director/RegistrationFormFieldsEditor'
 
 interface SeatPool {
   paid: number
@@ -40,6 +42,25 @@ export default function EditCohortPage() {
     status: 'draft',
   })
   const [seatPool, setSeatPool] = useState<SeatPool>({ paid: 0, scholarship: 0, sponsored: 0 })
+  const [publishedToHomepage, setPublishedToHomepage] = useState(false)
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
+  const [registrationFormFields, setRegistrationFormFields] = useState<{
+    student: FormFieldConfig[]
+    sponsor: FormFieldConfig[]
+  }>({
+    student: [
+      { key: 'first_name', label: 'First Name', type: 'text', required: true },
+      { key: 'last_name', label: 'Last Name', type: 'text', required: true },
+      { key: 'email', label: 'Email', type: 'email', required: true },
+      { key: 'phone', label: 'Phone', type: 'tel', required: false }
+    ],
+    sponsor: [
+      { key: 'org_name', label: 'Organization Name', type: 'text', required: true },
+      { key: 'contact_name', label: 'Contact Name', type: 'text', required: true },
+      { key: 'contact_email', label: 'Contact Email', type: 'email', required: true },
+      { key: 'phone', label: 'Phone', type: 'tel', required: false }
+    ]
+  })
   const [error, setError] = useState<string | null>(null)
 
   // Initialize form data when cohort loads
@@ -66,6 +87,28 @@ export default function EditCohortPage() {
           paid: pool.paid || 0,
           scholarship: pool.scholarship || 0,
           sponsored: pool.sponsored || 0,
+        })
+      }
+
+      // Publish options
+      setPublishedToHomepage((cohort as any).published_to_homepage ?? false)
+      const rff = (cohort as any).registration_form_fields
+      if (rff && typeof rff === 'object') {
+        const defaultStudent = [
+          { key: 'first_name', label: 'First Name', type: 'text', required: true },
+          { key: 'last_name', label: 'Last Name', type: 'text', required: true },
+          { key: 'email', label: 'Email', type: 'email', required: true },
+          { key: 'phone', label: 'Phone', type: 'tel', required: false }
+        ]
+        const defaultSponsor = [
+          { key: 'org_name', label: 'Organization Name', type: 'text', required: true },
+          { key: 'contact_name', label: 'Contact Name', type: 'text', required: true },
+          { key: 'contact_email', label: 'Contact Email', type: 'email', required: true },
+          { key: 'phone', label: 'Phone', type: 'tel', required: false }
+        ]
+        setRegistrationFormFields({
+          student: Array.isArray(rff.student) && rff.student.length > 0 ? rff.student : defaultStudent,
+          sponsor: Array.isArray(rff.sponsor) && rff.sponsor.length > 0 ? rff.sponsor : defaultSponsor,
         })
       }
     }
@@ -100,6 +143,8 @@ export default function EditCohortPage() {
         seat_cap: formData.seat_cap,
         mentor_ratio: formData.mentor_ratio,
         status: formData.status,
+        published_to_homepage: publishedToHomepage,
+        registration_form_fields: registrationFormFields,
       }
       if (trackValue) updateData.track = trackValue
 
@@ -108,7 +153,18 @@ export default function EditCohortPage() {
         updateData.seat_pool = seatPool
       }
 
-      await updateCohort(cohortId, updateData)
+      if (profileImageFile) {
+        const fd = new FormData()
+        Object.entries(updateData).forEach(([k, v]) => {
+          if (v !== null && v !== undefined) {
+            fd.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+          }
+        })
+        fd.append('profile_image', profileImageFile)
+        await apiGateway.patch(`/cohorts/${cohortId}/`, fd)
+      } else {
+        await updateCohort(cohortId, updateData)
+      }
       
       // Reload cohort data
       await reloadCohort()
@@ -435,6 +491,53 @@ export default function EditCohortPage() {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Publish to Homepage */}
+                <div className="border-t border-och-steel/20 pt-6">
+                  <h3 className="text-lg font-semibold text-white mb-4">Publish to Homepage</h3>
+                  <p className="text-sm text-och-steel mb-4">
+                    When published, this cohort appears on the homepage so students and sponsors can apply externally.
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer mb-4">
+                    <input
+                      type="checkbox"
+                      checked={publishedToHomepage}
+                      onChange={(e) => setPublishedToHomepage(e.target.checked)}
+                      className="rounded text-och-defender focus:ring-och-defender"
+                    />
+                    <span className="text-white">Publish this cohort to the homepage</span>
+                  </label>
+                  {publishedToHomepage && (
+                    <>
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-white mb-2">Cohort profile image (optional)</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
+                          className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-och-defender file:text-white"
+                        />
+                        {profileImageFile && (
+                          <p className="text-xs text-och-mint mt-1">New image selected: {profileImageFile.name}</p>
+                        )}
+                        {(cohort as any).profile_image_url && !profileImageFile && (
+                          <p className="text-xs text-och-steel mt-1">Current image is set. Upload a new file to replace it.</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-white mb-2">Registration form fields</label>
+                        <p className="text-xs text-och-steel mb-3">
+                          Add, remove, or edit fields. Click a field to edit. Custom questions (e.g. &quot;Why do you want to join?&quot;) are supported.
+                        </p>
+                        <RegistrationFormFieldsEditor
+                          studentFields={registrationFormFields.student}
+                          sponsorFields={registrationFormFields.sponsor}
+                          onChange={(student, sponsor) => setRegistrationFormFields({ student, sponsor })}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Action Buttons */}

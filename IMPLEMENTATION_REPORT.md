@@ -50,6 +50,14 @@ Document covering what has been implemented and what is planned next.
 
 - **Sponsor team management (External Finance)** — Management of sponsor teams and external finance (e.g. sponsorship, funding, external stakeholders) in the platform.
 
+### Sponsors & Students External Registration
+
+- **Public cohort registration** — Directors publish cohorts to the homepage when creating at `/dashboard/director/cohorts/new`.
+- **Publish options** — Checkbox to publish, optional profile image, customizable registration form fields for students and sponsors.
+- **Homepage section** — "Apply as Student" and "Join as Sponsor" with cohort cards and director-customizable forms.
+- **Public API** — `GET /api/v1/public/cohorts/`, `POST .../apply/student/`, `POST .../apply/sponsor/` (no auth).
+- **Testing** — See `PUBLIC_REGISTRATION_TESTING.md`.
+
 ---
 
 ## What Will Be Done
@@ -60,7 +68,6 @@ Planned work (today / next):
 - **MFA** — Multi-factor authentication for secure login.
 - **Future Me (Student Control Center)** — Dedicated student area for “Future Me” (goals, reflection, self-directed planning).
 - **Subscription** — Subscription and usage/entitlement handling (e.g. plans, limits, upgrades).
-- **Sponsors and students external registration** — Public registration links from the OCH homepage so sponsors and students can sign up without going through an internal dashboard.
 
 ---
 

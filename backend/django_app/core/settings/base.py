@@ -304,6 +304,16 @@ EMAIL_USE_TLS = _use_tls and not _use_ssl
 ACTIVATION_TOKEN_EXPIRY = int(os.environ.get('ACTIVATION_TOKEN_EXPIRY', 24))
 PASSWORD_RESET_TOKEN_EXPIRY = int(os.environ.get('PASSWORD_RESET_TOKEN_EXPIRY', 1))
 
+# MFA: TOTP secret encryption at rest (use MFA_TOTP_ENCRYPTION_KEY or fallback to SECRET_KEY)
+MFA_TOTP_ENCRYPTION_KEY = os.environ.get('MFA_TOTP_ENCRYPTION_KEY') or SECRET_KEY
+
+# SMS: provider (textbelt for testing, twilio for production) and credentials
+SMS_PROVIDER = (os.environ.get('SMS_PROVIDER') or 'textbelt').lower()
+TEXTSMS_API_KEY = os.environ.get('TEXTSMS_API_KEY', '')  # Textbelt API key
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_FROM_NUMBER = os.environ.get('TWILIO_FROM_NUMBER', '')
+
 # AI/LLM Configuration
 CHAT_GPT_API_KEY = os.environ.get('CHAT_GPT_API_KEY', os.environ.get('OPENAI_API_KEY', ''))
 AI_COACH_MODEL = os.environ.get('AI_COACH_MODEL', 'gpt-4o-mini')

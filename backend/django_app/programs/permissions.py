@@ -86,7 +86,7 @@ class CanManageCohort(permissions.BasePermission):
 
 
 def _is_director_or_admin(user):
-    """Return True if user is staff, superuser, or has program_director role."""
+    """Return True if user is staff, superuser, or has program_director or admin role."""
     if not user or not user.is_authenticated:
         return False
     if user.is_staff or user.is_superuser:
@@ -96,7 +96,9 @@ def _is_director_or_admin(user):
         cursor.execute("""
             SELECT 1 FROM user_roles ur
             JOIN roles r ON ur.role_id = r.id
-            WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+            WHERE ur.user_id = %s
+              AND r.name IN ('program_director', 'admin')
+              AND ur.is_active = true
             LIMIT 1
         """, [user.id])
         return cursor.fetchone() is not None

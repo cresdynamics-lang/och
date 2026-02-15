@@ -97,7 +97,7 @@ function getDashboardForRole(role: string | null): string {
 export async function POST(request: NextRequest) {
   try {
     const body: LoginRequest = await request.json();
-    const { email, password } = body;
+    const { email, password, device_fingerprint, device_name } = body;
 
     console.log('[Login API] Received login attempt:', { email, passwordLength: password?.length });
 
@@ -115,7 +115,12 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({
+        email,
+        password,
+        ...(device_fingerprint && { device_fingerprint }),
+        ...(device_name && { device_name }),
+      }),
     });
 
     console.log('[Login API] API response status:', apiResponse.status);
@@ -167,6 +172,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         mfa_required: true,
         session_id: apiData.session_id,
+        refresh_token: apiData.refresh_token,
+        mfa_method: apiData.mfa_method || 'totp',
         detail: apiData.detail || 'MFA required',
       }, { status: 200 });
     }

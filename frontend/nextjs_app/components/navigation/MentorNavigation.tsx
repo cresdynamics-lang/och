@@ -17,6 +17,7 @@ const missionsSection: NavItem[] = [
 
 const reviewsSection: NavItem[] = [
   { label: 'Reviews', href: '/dashboard/mentor/reviews' },
+  { label: 'Application Review', href: '/dashboard/mentor/application-review' },
 ]
 
 const mainNavItems: NavItem[] = [

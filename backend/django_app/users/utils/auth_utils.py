@@ -1,17 +1,59 @@
 """
 Authentication utilities for passwordless, MFA, and token management.
 """
-import secrets
+import base64
 import hashlib
-import hmac
+import logging
+import secrets
 from datetime import timedelta
-from django.utils import timezone
-from django.contrib.auth import get_user_model
+
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
-from users.auth_models import MFACode, UserSession, DeviceTrust, MFAMethod
+
+from users.auth_models import MFACode, MFAMethod, DeviceTrust, UserSession
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _get_fernet():
+    """Return Fernet instance for TOTP secret encryption (key from settings)."""
+    from cryptography.fernet import Fernet
+    key = getattr(settings, 'MFA_TOTP_ENCRYPTION_KEY', None) or ''
+    if key:
+        try:
+            k = key.encode() if isinstance(key, str) else key
+            return Fernet(k)
+        except Exception:
+            pass
+    secret = getattr(settings, 'SECRET_KEY', '')
+    digest = hashlib.sha256(secret.encode() if isinstance(secret, str) else secret).digest()
+    fernet_key = base64.urlsafe_b64encode(digest)
+    return Fernet(fernet_key)
+
+
+def encrypt_totp_secret(plain_secret):
+    """Encrypt TOTP secret for storage. Returns base64-encoded ciphertext."""
+    try:
+        f = _get_fernet()
+        return f.encrypt(plain_secret.encode() if isinstance(plain_secret, str) else plain_secret).decode()
+    except Exception as e:
+        logger.warning('TOTP encryption failed, storing plaintext: %s', e)
+        return plain_secret if isinstance(plain_secret, str) else plain_secret.decode()
+
+
+def decrypt_totp_secret(ciphertext):
+    """Decrypt TOTP secret from storage. Returns plain string."""
+    if not ciphertext:
+        return ''
+    try:
+        f = _get_fernet()
+        return f.decrypt(ciphertext.encode() if isinstance(ciphertext, str) else ciphertext).decode()
+    except Exception:
+        # Legacy: stored as plaintext
+        return ciphertext if isinstance(ciphertext, str) else ciphertext.decode()
 
 
 def generate_magic_link_code():
@@ -72,34 +114,22 @@ def verify_mfa_code(user, code, method='email'):
         return False
 
 
-def create_user_session(user, device_fingerprint, device_name=None, ip_address=None, user_agent=None):
+def create_user_session(user, device_fingerprint, device_name=None, ip_address=None, user_agent=None, mfa_verified=False):
     """
     Create a user session with refresh token.
     Returns (access_token, refresh_token, session)
     """
-    # Validate user is active before creating tokens
     if not user.is_active:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f'Attempted to create token for inactive user: {user.id}. If this is not intentional, consider checking the user\'s status before calling the `for_user` method.')
+        logger.warning('Attempted to create token for inactive user: %s', user.id)
         raise ValueError(f'Cannot create session for inactive user: {user.id}')
-    
-    # Validate user is active before creating tokens
-    if not user.is_active:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f'Attempted to create token for inactive user: {user.id}. If this is not intentional, consider checking the user\'s status before calling the `for_user` method.')
-        raise ValueError(f'Cannot create session for inactive user: {user.id}')
-    
-    # Generate refresh token
+
     refresh = RefreshToken.for_user(user)
     refresh_token_str = str(refresh)
     refresh_token_hash = hash_refresh_token(refresh_token_str)
-    
-    # Create session (ORM uses user.id / bigint for user_id; matches PostgreSQL schema)
-    expires_at = timezone.now() + timedelta(days=30)  # 30 days per spec
+
+    expires_at = timezone.now() + timedelta(days=30)
     device_type = _detect_device_type(user_agent)
-    
+
     session = UserSession.objects.create(
         user=user,
         device_fingerprint=device_fingerprint or 'unknown',
@@ -109,13 +139,10 @@ def create_user_session(user, device_fingerprint, device_name=None, ip_address=N
         ua=user_agent,
         refresh_token_hash=refresh_token_hash,
         expires_at=expires_at,
-        mfa_verified=False,
+        mfa_verified=mfa_verified,
     )
-    
-    # Get access token (15 min lifetime)
-    access_token = refresh.access_token
-    
-    return str(access_token), refresh_token_str, session
+
+    return str(refresh.access_token), refresh_token_str, session
 
 
 def verify_refresh_token(refresh_token):
@@ -139,24 +166,27 @@ def verify_refresh_token(refresh_token):
 def rotate_refresh_token(old_refresh_token, device_fingerprint):
     """
     Rotate refresh token (invalidate old, create new).
-    Returns (new_access_token, new_refresh_token, session)
+    Returns (new_access_token, new_refresh_token, session).
+    If session has mfa_verified=False, returns (None, None, None) so refresh is blocked until MFA completes.
     """
     session, user = verify_refresh_token(old_refresh_token)
-    
+
     if not session:
         return None, None, None
-    
-    # Revoke old session
+
+    if not session.mfa_verified:
+        return None, None, None
+
     session.revoked_at = timezone.now()
     session.save()
-    
-    # Create new session with new refresh token
+
     return create_user_session(
         user=user,
         device_fingerprint=device_fingerprint,
         device_name=session.device_name,
         ip_address=session.ip_address,
-        user_agent=session.ua
+        user_agent=session.ua,
+        mfa_verified=True,
     )
 
 
@@ -236,26 +266,50 @@ def verify_totp_backup_code(user, code):
     Verify a TOTP backup code.
     Returns True if valid, False otherwise.
     """
-    import hashlib
     code_hash = hashlib.sha256(code.encode()).hexdigest()
-    
+
     mfa_method = MFAMethod.objects.filter(
         user=user,
         method_type='totp',
         enabled=True
     ).first()
-    
+
     if not mfa_method or not mfa_method.totp_backup_codes:
         return False
-    
-    # Check if code matches any backup code
+
     if code_hash in mfa_method.totp_backup_codes:
-        # Remove used backup code
         mfa_method.totp_backup_codes.remove(code_hash)
         mfa_method.save()
         return True
-    
+
     return False
+
+
+def verify_mfa_challenge(user, code, method):
+    """
+    Verify MFA code for login/second factor (TOTP, backup, SMS, email).
+    Does not handle TOTP enrollment verification.
+    Returns True if valid, False otherwise.
+    """
+    if method == 'totp' or method == 'backup_codes':
+        mfa_method = MFAMethod.objects.filter(
+            user=user,
+            method_type='totp',
+            enabled=True
+        ).first()
+        if not mfa_method:
+            return False
+        if method == 'backup_codes':
+            return verify_totp_backup_code(user, code)
+        import pyotp
+        secret = decrypt_totp_secret(mfa_method.secret_encrypted)
+        totp = pyotp.TOTP(secret)
+        if totp.verify(code, valid_window=1):
+            mfa_method.last_used_at = timezone.now()
+            mfa_method.save()
+            return True
+        return verify_totp_backup_code(user, code)
+    return verify_mfa_code(user, code, method)
 
 
 def _detect_device_type(user_agent):

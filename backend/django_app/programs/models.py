@@ -213,6 +213,31 @@ class Cohort(models.Model):
         help_text='Seat pool breakdown: {paid: count, scholarship: count, sponsored: count}'
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    # Public registration - visible on homepage when True
+    published_to_homepage = models.BooleanField(
+        default=False,
+        help_text='When True, cohort appears on homepage for students and sponsors to apply'
+    )
+    profile_image = models.ImageField(
+        upload_to='cohorts/profile_images/',
+        null=True,
+        blank=True,
+        help_text='Profile image for the cohort displayed on homepage'
+    )
+    # Customizable form fields: {student: [{key, label, type, required}], sponsor: [...]}
+    registration_form_fields = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Director-customizable fields: {student: [...], sponsor: [...]}'
+    )
+    review_cutoff_grade = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text='Minimum review score to pass to interview'
+    )
+    interview_cutoff_grade = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text='Minimum interview score to be eligible for enrollment'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -453,6 +478,86 @@ class Waitlist(models.Model):
     
     def __str__(self):
         return f"Waitlist #{self.position} - {self.user.email} - {self.cohort.name}"
+
+
+class CohortPublicApplication(models.Model):
+    """External registration: students and sponsors applying from the homepage (no account required)."""
+    APPLICANT_TYPE_CHOICES = [
+        ('student', 'Student'),
+        ('sponsor', 'Sponsor'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('converted', 'Converted'),  # Converted to user/enrollment
+    ]
+    REVIEW_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('reviewed', 'Reviewed'),
+        ('failed', 'Failed'),
+        ('passed', 'Passed'),
+    ]
+    INTERVIEW_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('passed', 'Passed'),
+    ]
+    ENROLLMENT_STATUS_CHOICES = [
+        ('none', 'None'),
+        ('eligible', 'Eligible'),
+        ('enrolled', 'Enrolled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name='public_applications')
+    applicant_type = models.CharField(max_length=20, choices=APPLICANT_TYPE_CHOICES)
+    form_data = models.JSONField(default=dict, help_text='Data from the customized registration form')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    notes = models.TextField(blank=True, help_text='Director notes when reviewing')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Review workflow: mentor assigns and grades
+    reviewer_mentor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_applications', to_field='id', db_column='reviewer_mentor_id'
+    )
+    review_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    review_graded_at = models.DateTimeField(null=True, blank=True)
+    review_status = models.CharField(max_length=30, choices=REVIEW_STATUS_CHOICES, default='pending', blank=True)
+
+    # Interview workflow
+    interview_mentor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='interviewed_applications', to_field='id', db_column='interview_mentor_id'
+    )
+    interview_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    interview_graded_at = models.DateTimeField(null=True, blank=True)
+    interview_status = models.CharField(max_length=30, choices=INTERVIEW_STATUS_CHOICES, blank=True, null=True)
+
+    # Enrollment
+    enrollment_status = models.CharField(max_length=30, choices=ENROLLMENT_STATUS_CHOICES, default='none', blank=True)
+    enrollment = models.ForeignKey(
+        Enrollment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='source_application', db_column='enrollment_id'
+    )
+
+    class Meta:
+        db_table = 'cohort_public_applications'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['cohort', 'applicant_type']),
+            models.Index(fields=['status']),
+            models.Index(fields=['reviewer_mentor']),
+            models.Index(fields=['cohort', 'review_status']),
+            models.Index(fields=['cohort', 'interview_status']),
+        ]
+
+    def __str__(self):
+        email = self.form_data.get('email') or self.form_data.get('contact_email', 'unknown')
+        return f"{self.applicant_type} - {email} - {self.cohort.name}"
 
 
 class Certificate(models.Model):

@@ -36,6 +36,7 @@ class CohortSerializer(serializers.ModelSerializer):
     enrollment_count = serializers.SerializerMethodField()
     seat_utilization = serializers.ReadOnlyField()
     completion_rate = serializers.ReadOnlyField()
+    profile_image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Cohort
@@ -43,8 +44,17 @@ class CohortSerializer(serializers.ModelSerializer):
             'id', 'track', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id', 'coordinator',
             'seat_pool', 'status', 'enrollment_count', 'seat_utilization',
-            'completion_rate', 'created_at', 'updated_at'
+            'completion_rate', 'published_to_homepage', 'profile_image', 'profile_image_url',
+            'registration_form_fields', 'created_at', 'updated_at'
         ]
+    
+    def get_profile_image_url(self, obj):
+        if obj.profile_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.profile_image.url)
+            return obj.profile_image.url if obj.profile_image else None
+        return None
     
     def get_enrollment_count(self, obj):
         return obj.enrollments.filter(status='active').count()
@@ -61,7 +71,8 @@ class CreateCohortSerializer(serializers.ModelSerializer):
         fields = [
             'track', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id',
-            'coordinator', 'seat_pool', 'assigned_staff', 'status'
+            'coordinator', 'seat_pool', 'assigned_staff', 'status',
+            'published_to_homepage', 'profile_image', 'registration_form_fields'
         ]
     
     def validate_track(self, value):

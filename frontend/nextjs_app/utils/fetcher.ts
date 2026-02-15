@@ -367,6 +367,9 @@ export async function fetcher<T>(
         // Check if this is a capstones endpoint (404s are expected when mentor has no capstones)
         const isCapstonesEndpoint = urlObj.pathname.includes('/capstones') || urlObj.pathname.includes('/capstone');
         
+        // Check if this is public-applications (optional director endpoint; 403/404 are handled by caller)
+        const isPublicApplicationsEndpoint = urlObj.pathname.includes('/public-applications');
+        
         // Check if errorData has meaningful content
         let hasErrorData = false;
         if (errorData) {
@@ -391,11 +394,10 @@ export async function fetcher<T>(
         const isServerError = response.status >= 500;
         const isNotFound = response.status === 404;
         
-        // CRITICAL: NEVER log mentor-assignments or capstones errors - return early to prevent any logging
-        // This must happen BEFORE any other checks to ensure complete suppression
-        if (isMentorAssignmentsEndpoint || isCapstonesEndpoint) {
-          // Completely suppress mentor-assignments and capstones errors - don't log anything
-          // 404s are expected when mentors have no assignments or capstones
+        // CRITICAL: NEVER log mentor-assignments, capstones, or public-applications errors - return early
+        // mentor-assignments/capstones: 404s expected; public-applications: caller handles failure
+        if (isMentorAssignmentsEndpoint || isCapstonesEndpoint || isPublicApplicationsEndpoint) {
+          // Completely suppress - don't log anything
           return;
         }
         

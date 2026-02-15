@@ -78,7 +78,7 @@ function LoginForm() {
     }
   }, [urlRole, currentRole]);
 
-  const { login, isLoading, isAuthenticated, user } = useAuth();
+  const { login, isLoading, isAuthenticated, user, completeMFA, sendMFAChallenge } = useAuth();
 
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
@@ -93,6 +93,11 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const hasRedirectedRef = useRef(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [mfaPending, setMfaPending] = useState<{ refresh_token: string; mfa_method: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaMethod, setMfaMethod] = useState<'totp' | 'sms' | 'email' | 'backup_codes'>('totp');
+  const [mfaSending, setMfaSending] = useState(false);
+  const [mfaSubmitting, setMfaSubmitting] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -559,8 +564,16 @@ function LoginForm() {
 
       let message = 'Login failed. Please check your credentials.';
 
-      if (err?.mfa_required) {
-        message = 'Multi-factor authentication is required. Please contact support to set up MFA.';
+      if (err?.mfa_required && err?.refresh_token) {
+        setMfaPending({
+          refresh_token: err.refresh_token,
+          mfa_method: err.mfa_method || 'totp',
+        });
+        setMfaMethod((err.mfa_method === 'sms' || err.mfa_method === 'email' ? err.mfa_method : 'totp') as 'totp' | 'sms' | 'email' | 'backup_codes');
+        setMfaCode('');
+        setError(null);
+        setIsLoggingIn(false);
+        return;
       } else if (err?.data?.detail) {
         message = err.data.detail;
         // Check for connection errors in detail
@@ -702,6 +715,129 @@ function LoginForm() {
             </div>
           )}
 
+          {mfaPending ? (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold text-white mb-1">Verify your identity</h2>
+                <p className="text-slate-400 text-sm">
+                  {mfaPending.mfa_method === 'totp'
+                    ? 'Enter the code from your authenticator app.'
+                    : mfaPending.mfa_method === 'backup_codes'
+                    ? 'Enter one of your backup codes.'
+                    : mfaPending.mfa_method === 'sms'
+                    ? 'Enter the code we sent to your phone.'
+                    : 'Enter the code we sent to your email.'}
+                </p>
+              </div>
+              {(mfaPending.mfa_method === 'sms' || mfaPending.mfa_method === 'email') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full py-2 rounded-lg border-slate-600 text-slate-300"
+                  disabled={mfaSending}
+                  onClick={async () => {
+                    setError(null);
+                    setMfaSending(true);
+                    try {
+                      await sendMFAChallenge(mfaPending.refresh_token);
+                      setError(null);
+                    } catch (e: any) {
+                      setError(e?.data?.detail || e?.message || 'Failed to send code');
+                    } finally {
+                      setMfaSending(false);
+                    }
+                  }}
+                >
+                  {mfaSending ? 'Sending...' : `Send code via ${mfaPending.mfa_method}`}
+                </Button>
+              )}
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!mfaCode.trim() || !mfaPending) return;
+                  setError(null);
+                  setMfaSubmitting(true);
+                  try {
+                    const result = await completeMFA({
+                      refresh_token: mfaPending.refresh_token,
+                      code: mfaCode.trim(),
+                      method: mfaMethod,
+                    });
+                    setMfaPending(null);
+                    setMfaCode('');
+                    setIsRedirecting(true);
+                    const { getRedirectRoute } = await import('@/utils/redirect');
+                    const u = result?.user;
+                    const roles = (u as any)?.roles || [];
+                    const roleNames = roles.map((r: any) => typeof r === 'string' ? r : (r?.role || r?.name || ''));
+                    const needsProfiling = (u as any)?.profiling_complete === false && roleNames.some((name: string) => ['student', 'mentee'].includes(name));
+                    if (u && needsProfiling) {
+                      router.push('/profiling');
+                    } else {
+                      router.push(u ? getRedirectRoute(u) : '/dashboard/student');
+                    }
+                  } catch (e: any) {
+                    setError(e?.data?.detail || e?.message || 'Invalid code');
+                  } finally {
+                    setMfaSubmitting(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <label htmlFor="mfa-code" className="text-sm font-medium text-slate-300">
+                    Verification code
+                  </label>
+                  <input
+                    id="mfa-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-white placeholder-slate-400"
+                    placeholder={mfaMethod === 'backup_codes' ? 'Backup code' : '000000'}
+                  />
+                </div>
+                {mfaPending.mfa_method === 'totp' && (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMfaMethod('totp')}
+                      className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'totp' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400'}`}
+                    >
+                      Authenticator app
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMfaMethod('backup_codes')}
+                      className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'backup_codes' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400'}`}
+                    >
+                      Backup code
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    type="submit"
+                    disabled={!mfaCode.trim() || mfaSubmitting}
+                    variant="defender"
+                    className="flex-1 py-3"
+                  >
+                    {mfaSubmitting ? 'Verifying...' : 'Verify'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="py-3 border-slate-600 text-slate-300"
+                    onClick={() => { setMfaPending(null); setMfaCode(''); setError(null); }}
+                  >
+                    Back
+                  </Button>
+                </div>
+              </form>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium text-slate-300 flex items-center gap-2">
@@ -791,7 +927,10 @@ function LoginForm() {
               )}
             </Button>
           </form>
+          )}
 
+          {!mfaPending && (
+          <>
           {/* Google OAuth Button */}
           <div className="mt-4">
             <div className="relative">
@@ -853,6 +992,8 @@ function LoginForm() {
               ))}
             </div>
           </div>
+          </>
+          )}
           </Card>
         </div>
       </div>

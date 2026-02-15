@@ -62,6 +62,7 @@ const navItems: NavItem[] = [
     icon: Users,
     children: [
       { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users },
+      { label: 'Applications', href: '/dashboard/director/applications', icon: CheckCircle },
       { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
       { label: 'Sponsors', href: '/dashboard/director/cohorts/sponsors', icon: Star },
       { label: 'Students', href: '/dashboard/director/students', icon: GraduationCap },

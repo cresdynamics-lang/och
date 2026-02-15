@@ -228,6 +228,13 @@ class MFAVerifySerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=['totp', 'sms', 'email', 'backup_codes'])
 
 
+class MFACompleteSerializer(serializers.Serializer):
+    """MFA complete after login (exchange code for tokens)."""
+    refresh_token = serializers.CharField()
+    code = serializers.CharField()
+    method = serializers.ChoiceField(choices=['totp', 'sms', 'email', 'backup_codes'])
+
+
 class RefreshTokenSerializer(serializers.Serializer):
     """Refresh token serializer."""
     refresh_token = serializers.CharField()

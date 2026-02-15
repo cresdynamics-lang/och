@@ -17,6 +17,7 @@ import {
   MessageSquare,
   BarChart3
 } from 'lucide-react'
+import { PublicCohortRegistration } from '@/components/home/PublicCohortRegistration'
 
 // Memoize NavigationHeader to prevent unnecessary re-renders
 const NavigationHeader = memo(function NavigationHeader({ currentPath }: { currentPath: string }) {
@@ -229,7 +230,7 @@ export default function HomePage() {
               Connect, learn, and grow through personalized mentorship and role-based experiences. 
               Africa's premier cyber talent platform for university students.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center items-center">
               <button
                 type="button"
                 onClick={handleStartTrial}
@@ -239,6 +240,20 @@ export default function HomePage() {
                 <span>Start Free Trial</span>
                 <ArrowRight className="h-5 w-5" />
               </button>
+              <a
+                href="#apply"
+                className="px-8 py-4 bg-och-defender hover:bg-och-defender/90 text-white rounded-xl font-bold text-lg transition-all duration-200 flex items-center space-x-2"
+              >
+                <GraduationCap className="h-5 w-5" />
+                <span>Apply as Student</span>
+              </a>
+              <a
+                href="#apply"
+                className="px-8 py-4 border-2 border-och-gold text-och-gold hover:bg-och-gold/10 rounded-xl font-bold text-lg transition-all duration-200 flex items-center space-x-2"
+              >
+                <Users className="h-5 w-5" />
+                <span>Join as Sponsor</span>
+              </a>
               <Link
                 href="/about"
                 className="px-8 py-4 border-2 border-och-mint text-och-mint hover:bg-och-mint/10 rounded-xl font-bold text-lg transition-all duration-200"
@@ -249,6 +264,11 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Apply as Student / Join as Sponsor - Published Cohorts */}
+      <div id="apply">
+        <PublicCohortRegistration />
+      </div>
 
       {/* Personas Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-och-midnight/50">

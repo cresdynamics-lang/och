@@ -12,6 +12,8 @@ from .views.auth_views import (
     MagicLinkView,
     MFAEnrollView,
     MFAVerifyView,
+    MFASendChallengeView,
+    MFACompleteView,
     MFADisableView,
     RefreshTokenView,
     LogoutView,
@@ -56,6 +58,10 @@ urlpatterns = [
     path('auth/mfa/enroll/', MFAEnrollView.as_view(), name='mfa-enroll-slash'),
     path('auth/mfa/verify', MFAVerifyView.as_view(), name='mfa-verify'),
     path('auth/mfa/verify/', MFAVerifyView.as_view(), name='mfa-verify-slash'),
+    path('auth/mfa/send-challenge', MFASendChallengeView.as_view(), name='mfa-send-challenge'),
+    path('auth/mfa/send-challenge/', MFASendChallengeView.as_view(), name='mfa-send-challenge-slash'),
+    path('auth/mfa/complete', MFACompleteView.as_view(), name='mfa-complete'),
+    path('auth/mfa/complete/', MFACompleteView.as_view(), name='mfa-complete-slash'),
     path('auth/mfa/disable', MFADisableView.as_view(), name='mfa-disable'),
     path('auth/mfa/disable/', MFADisableView.as_view(), name='mfa-disable-slash'),
     path('auth/token/refresh', RefreshTokenView.as_view(), name='token-refresh'),
@@ -113,5 +119,3 @@ urlpatterns = [
     path('users/create-och-users', create_och_users, name='create-och-users'),
     path('users/create-och-users/', create_och_users, name='create-och-users-slash'),
 ]
-
-    # User management endpoints

@@ -86,6 +86,7 @@ export interface LoginResponse {
   user?: User;
   mfa_required?: boolean;
   session_id?: string;
+  mfa_method?: string;
   detail?: string;
 }
 

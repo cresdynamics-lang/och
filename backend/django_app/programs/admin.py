@@ -4,7 +4,8 @@ Admin configuration for Programs app.
 from django.contrib import admin
 from .models import (
     Program, Track, Specialization, Cohort, Enrollment,
-    CalendarEvent, MentorAssignment, ProgramRule, Certificate, Waitlist
+    CalendarEvent, MentorAssignment, ProgramRule, Certificate, Waitlist,
+    CohortPublicApplication
 )
 from programs.director_dashboard_models import DirectorDashboardCache, DirectorCohortDashboard
 
@@ -63,6 +64,14 @@ class ProgramRuleAdmin(admin.ModelAdmin):
     list_display = ['program', 'version', 'active', 'created_at']
     list_filter = ['active', 'version', 'created_at']
     search_fields = ['program__name']
+
+
+@admin.register(CohortPublicApplication)
+class CohortPublicApplicationAdmin(admin.ModelAdmin):
+    list_display = ['cohort', 'applicant_type', 'status', 'created_at']
+    list_filter = ['applicant_type', 'status', 'created_at']
+    search_fields = ['cohort__name', 'form_data']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(Waitlist)

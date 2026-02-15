@@ -119,6 +119,8 @@ export function useAuth() {
         const error = new Error('MFA required');
         (error as any).mfa_required = true;
         (error as any).session_id = responseData.session_id;
+        (error as any).refresh_token = responseData.refresh_token;
+        (error as any).mfa_method = responseData.mfa_method || 'totp';
         (error as any).data = responseData;
         throw error;
       }
@@ -188,6 +190,38 @@ export function useAuth() {
   }, []);
 
   /**
+   * Complete MFA after login (when mfa_required was returned).
+   * Call with refresh_token, code, and method from the MFA step.
+   */
+  const completeMFA = useCallback(async (params: {
+    refresh_token: string;
+    code: string;
+    method: 'totp' | 'sms' | 'email' | 'backup_codes';
+  }) => {
+    const { access_token, refresh_token: newRefreshToken, user: userData } = await djangoClient.auth.completeMFA(params);
+    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('auth_token', access_token);
+    if (newRefreshToken) {
+      localStorage.setItem('refresh_token', newRefreshToken);
+    }
+    let fullUser = userData;
+    try {
+      fullUser = await djangoClient.auth.getCurrentUser();
+    } catch {
+      fullUser = userData;
+    }
+    setState({ user: fullUser, isLoading: false, isAuthenticated: true });
+    return { user: fullUser, access_token };
+  }, []);
+
+  /**
+   * Send MFA challenge (SMS or email code). Call when user's method is sms/email.
+   */
+  const sendMFAChallenge = useCallback(async (refresh_token: string) => {
+    return djangoClient.auth.sendMFAChallenge(refresh_token);
+  }, []);
+
+  /**
    * Logout user
    */
   const logout = useCallback(async () => {
@@ -237,6 +271,8 @@ export function useAuth() {
     logout,
     refresh,
     reloadUser: loadUser,
+    completeMFA,
+    sendMFAChallenge,
   };
 }
 
