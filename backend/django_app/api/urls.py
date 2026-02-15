@@ -1,7 +1,7 @@
 """
 URL configuration for API v1 endpoints.
 """
-from django.urls import path, include
+from django.urls import path, re_path, include
 from .views import health_check
 from users.views.admin_views import (
     RoleViewSet,
@@ -29,9 +29,10 @@ urlpatterns = [
     path('', include('users.urls')),
     
     # Admin/Management endpoints (RBAC: roles and permissions)
-    path('permissions/', PermissionViewSet.as_view({'get': 'list'}), name='permissions-list'),
-    path('roles/', RoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='roles-list'),
-    path('roles/<int:pk>/', RoleViewSet.as_view({
+    # Use re_path to accept both with and without trailing slash (APPEND_SLASH=False)
+    re_path(r'^permissions/?$', PermissionViewSet.as_view({'get': 'list'}), name='permissions-list'),
+    re_path(r'^roles/?$', RoleViewSet.as_view({'get': 'list', 'post': 'create'}), name='roles-list'),
+    path('roles/<int:pk>', RoleViewSet.as_view({
         'get': 'retrieve',
         'put': 'update',
         'patch': 'partial_update',

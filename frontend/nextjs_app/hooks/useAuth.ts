@@ -114,15 +114,15 @@ export function useAuth() {
         keys: Object.keys(responseData)
       });
       
-      // Check if MFA is required
+      // Check if MFA is required — return structured result (do not throw)
       if (responseData.mfa_required) {
-        const error = new Error('MFA required');
-        (error as any).mfa_required = true;
-        (error as any).session_id = responseData.session_id;
-        (error as any).refresh_token = responseData.refresh_token;
-        (error as any).mfa_method = responseData.mfa_method || 'totp';
-        (error as any).data = responseData;
-        throw error;
+        setState(prev => ({ ...prev, isLoading: false }));
+        return {
+          mfaRequired: true as const,
+          refresh_token: responseData.refresh_token,
+          session_id: responseData.session_id,
+          mfa_method: responseData.mfa_method || 'totp',
+        };
       }
       
       const { user, access_token, refresh_token } = responseData;
@@ -217,8 +217,8 @@ export function useAuth() {
   /**
    * Send MFA challenge (SMS or email code). Call when user's method is sms/email.
    */
-  const sendMFAChallenge = useCallback(async (refresh_token: string) => {
-    return djangoClient.auth.sendMFAChallenge(refresh_token);
+  const sendMFAChallenge = useCallback(async (refresh_token: string, method?: 'email' | 'sms') => {
+    return djangoClient.auth.sendMFAChallenge(refresh_token, method);
   }, []);
 
   /**

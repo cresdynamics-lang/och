@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
 import {
-  Shield, Lock, Key, AlertCircle, CheckCircle2, XCircle, LogOut, Eye, EyeOff, Mail, Monitor, MapPin, Clock, Smartphone, Laptop, Tablet, Globe
+  Shield, Lock, Key, AlertCircle, CheckCircle2, XCircle, LogOut, Eye, EyeOff, Mail, Monitor, MapPin, Clock, Smartphone, Laptop, Tablet, Globe, Link2, Download
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,21 @@ import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { apiGateway } from '@/services/apiGateway';
 import { djangoClient } from '@/services/djangoClient';
+
+const MFA_METHODS: { id: 'totp' | 'sms' | 'email'; label: string; description: string; icon: typeof Shield }[] = [
+  { id: 'totp', label: 'Authenticator app', description: 'Code from an app (Google Authenticator, Authy)', icon: Shield },
+  { id: 'sms', label: 'SMS', description: 'Code sent to your phone', icon: Smartphone },
+  { id: 'email', label: 'Email', description: 'Code sent to your email', icon: Mail },
+];
+
+const ROLES_REQUIRING_TWO_MFA = ['program_director', 'director', 'admin', 'finance', 'finance_admin', 'analyst', 'mentor'];
+
+function getMFARequiredMin(roles: unknown): number {
+  if (!Array.isArray(roles)) return 1;
+  const names = roles.map((r: any) => (typeof r === 'string' ? r : r?.role?.name ?? r?.name ?? '').toLowerCase()).filter(Boolean);
+  const hasHighPrivilege = names.some((n: string) => ROLES_REQUIRING_TWO_MFA.includes(n));
+  return hasHighPrivilege ? 2 : 1;
+}
 
 interface ProfileData {
   id: string;
@@ -42,6 +58,8 @@ interface ActiveSession {
 
 export function OCHSettingsSecurity() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { user, reloadUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,10 +70,54 @@ export function OCHSettingsSecurity() {
   const [showMFAEnable, setShowMFAEnable] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
+  const [mfaMethodsList, setMfaMethodsList] = useState<{ method_type: string; is_primary: boolean; masked?: string }[]>([]);
+  const [hasBackupCodes, setHasBackupCodes] = useState(false);
+  const [mfaMethodsLoading, setMfaMethodsLoading] = useState(false);
+  const [mfaManageAdding, setMfaManageAdding] = useState<'totp' | 'sms' | 'email' | null>(null);
+  const [backupCodesDownloading, setBackupCodesDownloading] = useState(false);
+
+  const mfaParam = searchParams.get('mfa');
+  const mfaWizardOpen = mfaParam === 'true' && !loading && !!profile && !profile.mfa_enabled;
+  const mfaManageView = mfaParam === 'manage' && !!profile?.mfa_enabled;
+  const mfaManageWizardOpen = mfaManageView && mfaManageAdding !== null;
+
+  const minMFARequired = useMemo(() => getMFARequiredMin(user?.roles), [user?.roles]);
+
+  const [selectedMethods, setSelectedMethods] = useState<('totp' | 'sms' | 'email')[]>([]);
+  const [wizardStep, setWizardStep] = useState<'choose' | 'enroll'>('choose');
+  const [enrollingIndex, setEnrollingIndex] = useState(0);
+  const [enrollData, setEnrollData] = useState<{ secret?: string; qr_code_uri?: string } | { codeSent?: boolean } | null>(null);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [smsPhone, setSmsPhone] = useState('');
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
 
   useEffect(() => {
     loadAllData();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (mfaParam === 'true' && !profile?.mfa_enabled) setShowMFAEnable(false);
+  }, [mfaParam, profile?.mfa_enabled]);
+
+  useEffect(() => {
+    if (mfaParam === 'manage' && profile?.mfa_enabled) {
+      setMfaMethodsLoading(true);
+      djangoClient.auth.getMFAMethods()
+        .then((res) => {
+          setMfaMethodsList(res.methods || []);
+          setHasBackupCodes(!!res.has_backup_codes);
+        })
+        .catch(() => {
+          setMfaMethodsList([]);
+          setHasBackupCodes(false);
+        })
+        .finally(() => setMfaMethodsLoading(false));
+    } else {
+      setMfaMethodsList([]);
+    }
+  }, [mfaParam, profile?.mfa_enabled]);
 
   useEffect(() => {
     if (!profile?.email_verified) {
@@ -226,25 +288,120 @@ export function OCHSettingsSecurity() {
     }
   };
 
-  const handleMFAEnable = async () => {
-    setSaving(true);
-    setSaveStatus(null);
-    
+  const handleMFAEnable = () => {
+    router.push(pathname + '?mfa=true');
+    setShowMFAEnable(false);
+  };
+
+  const toggleMethod = (id: 'totp' | 'sms' | 'email') => {
+    setSelectedMethods((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  };
+
+  const closeWizard = () => {
+    setWizardStep('choose');
+    setSelectedMethods([]);
+    setEnrollingIndex(0);
+    setEnrollData(null);
+    setVerifyCode('');
+    setSmsPhone('');
+    setError(null);
+    setMfaManageAdding(null);
+    router.replace(pathname);
+    loadProfile();
+    reloadUser();
+  };
+
+  const closeManageAddWizard = () => {
+    setMfaManageAdding(null);
+    setWizardStep('choose');
+    setEnrollingIndex(0);
+    setEnrollData(null);
+    setVerifyCode('');
+    setSmsPhone('');
+    setError(null);
+    djangoClient.auth.getMFAMethods().then((res) => {
+      setMfaMethodsList(res.methods || []);
+      setHasBackupCodes(!!res.has_backup_codes);
+    });
+    loadProfile();
+    reloadUser();
+  };
+
+  const methodsToEnroll = mfaManageAdding ? [mfaManageAdding] : selectedMethods;
+  const currentMethod = methodsToEnroll[enrollingIndex];
+  const isLastEnroll = enrollingIndex >= methodsToEnroll.length - 1;
+
+  const doEnrollCurrent = async () => {
+    if (!currentMethod) return;
+    setEnrollLoading(true);
+    setError(null);
+    setEnrollData(null);
+    setVerifyCode('');
     try {
-      // Navigate to MFA setup page or trigger MFA setup flow
-      router.push('/dashboard/student/settings/security?mfa=true');
-      setShowMFAEnable(false);
+      if (currentMethod === 'totp') {
+        const res = await djangoClient.auth.enrollMFA({ method: 'totp' });
+        setEnrollData({ secret: res.secret, qr_code_uri: res.qr_code_uri });
+      } else if (currentMethod === 'sms') {
+        if (!smsPhone.trim()) {
+          setError('Enter your phone number for SMS (e.g. 0712345678 or +254712345678)');
+          setEnrollLoading(false);
+          return;
+        }
+        await djangoClient.auth.enrollMFA({ method: 'sms', phone_number: smsPhone.trim() });
+        setEnrollData({ codeSent: true });
+      } else {
+        await djangoClient.auth.enrollMFA({ method: 'email' });
+        setEnrollData({ codeSent: true });
+      }
     } catch (err: any) {
-      console.error('Error enabling MFA:', err);
-      setSaveStatus('error');
-      setError(err?.message || 'Failed to enable MFA');
-      setTimeout(() => {
-        setSaveStatus(null);
-        setError(null);
-      }, 5000);
+      setError(err?.data?.detail || err?.message || 'Enrollment failed');
     } finally {
-      setSaving(false);
+      setEnrollLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (wizardStep !== 'enroll' || !currentMethod || enrollData !== null || enrollLoading) return;
+    if (currentMethod === 'sms') return;
+    doEnrollCurrent();
+  }, [wizardStep, enrollingIndex, currentMethod]);
+
+  const handleVerifyCurrent = async () => {
+    if (!currentMethod || !verifyCode.trim()) return;
+    setVerifyLoading(true);
+    setError(null);
+    try {
+      const method = currentMethod === 'totp' ? 'totp' : currentMethod;
+      const res = await djangoClient.auth.verifyMFA({ code: verifyCode.trim(), method });
+      if (res.backup_codes) setBackupCodes(res.backup_codes);
+      setEnrollData(null);
+      setVerifyCode('');
+      if (isLastEnroll) {
+        setSaveStatus('success');
+        if (mfaManageAdding) {
+          closeManageAddWizard();
+        } else {
+          closeWizard();
+        }
+      } else {
+        setEnrollingIndex((i) => i + 1);
+      }
+    } catch (err: any) {
+      setError(err?.data?.detail || err?.message || 'Invalid code');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const startEnrollStep = () => {
+    if (selectedMethods.length < minMFARequired) return;
+    setWizardStep('enroll');
+    setEnrollingIndex(0);
+    setEnrollData(null);
+    setVerifyCode('');
+    setError(null);
   };
 
   const handleRevokeSession = async (sessionId: string) => {
@@ -382,10 +539,405 @@ export function OCHSettingsSecurity() {
     );
   }
 
+  const openAddMethodWizard = (method: 'totp' | 'sms' | 'email') => {
+    setMfaManageAdding(method);
+    setSelectedMethods([method]);
+    setWizardStep('enroll');
+    setEnrollingIndex(0);
+    setEnrollData(null);
+    setVerifyCode('');
+    setSmsPhone('');
+    setError(null);
+  };
+
+  const hasMethod = (type: string) => mfaMethodsList.some((m) => m.method_type === type);
+
+  const handleDownloadBackupCodes = async () => {
+    if (!confirm('Regenerating backup codes will invalidate any existing backup codes. You will need to save the new codes securely. Continue?')) return;
+    setError(null);
+    setBackupCodesDownloading(true);
+    try {
+      const { backup_codes } = await djangoClient.auth.regenerateBackupCodes();
+      const instructions = [
+        'Ongoza CyberHub – Backup codes',
+        '================================',
+        '',
+        '• Each code can be used only ONCE. After use, it will no longer work.',
+        '• Use these codes when you cannot use your authenticator app (e.g. lost or replaced phone).',
+        '• Store this file in a secure place. Do not share it or store it in plain view.',
+        '• If you lose this file and use all codes, you may need to contact support to regain access.',
+        '',
+        'Your backup codes (one per line):',
+        '-----------------------------------',
+        ...backup_codes,
+        '',
+        '-----------------------------------',
+        'Generated: ' + new Date().toISOString(),
+      ].join('\n');
+      const blob = new Blob([instructions], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ongoza-backup-codes-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setHasBackupCodes(true);
+    } catch (e: any) {
+      setError(e?.data?.detail || e?.message || 'Failed to generate backup codes');
+    } finally {
+      setBackupCodesDownloading(false);
+    }
+  };
+
   return (
+    <>
+      {/* Manage MFA view: activated methods + add another */}
+      {mfaManageView && !mfaManageWizardOpen && (
+        <div className="max-w-7xl mx-auto space-y-6 mb-8">
+          <Card className="bg-och-midnight/60 border border-och-steel/10 rounded-[2.5rem] p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/dashboard/student/settings/security')}
+                className="text-och-steel hover:text-white"
+              >
+                ← Back
+              </Button>
+              <div className="w-12 h-12 rounded-2xl bg-och-mint/10 flex items-center justify-center border border-och-mint/20">
+                <Shield className="w-6 h-6 text-och-mint" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-white uppercase tracking-tight">Manage MFA</h2>
+                <p className="text-[10px] text-och-steel font-black uppercase tracking-widest mt-1">Your activated methods and add another</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-och-steel mb-6">These are the verification methods you can use when signing in.</p>
+
+            {/* Activated methods */}
+            <div className="space-y-3 mb-8">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide">Activated methods</h3>
+              {mfaMethodsLoading ? (
+                <div className="flex items-center gap-2 text-och-steel text-sm">
+                  <div className="w-4 h-4 border-2 border-och-mint border-t-transparent rounded-full animate-spin" />
+                  Loading…
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {mfaMethodsList.map((m) => {
+                    const meta = MFA_METHODS.find((x) => x.id === m.method_type);
+                    const Icon = meta?.icon ?? Shield;
+                    const label = meta?.label ?? m.method_type;
+                    const detail = m.masked ? ` • ${m.masked}` : '';
+                    return (
+                      <li
+                        key={m.method_type}
+                        className="flex items-center gap-4 p-4 bg-white/5 border border-och-steel/20 rounded-xl"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-och-mint/10 flex items-center justify-center border border-och-mint/20">
+                          <Icon className="w-5 h-5 text-och-mint" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-bold text-white">{label}{detail}</p>
+                          {m.is_primary && (
+                            <Badge variant="mint" className="text-[9px] font-black uppercase mt-1">Primary</Badge>
+                          )}
+                        </div>
+                        <CheckCircle2 className="w-5 h-5 text-och-mint flex-shrink-0" />
+                      </li>
+                    );
+                  })}
+                  {hasBackupCodes && (
+                    <li className="flex items-center gap-4 p-4 bg-white/5 border border-och-steel/20 rounded-xl">
+                      <div className="w-10 h-10 rounded-lg bg-och-gold/10 flex items-center justify-center border border-och-gold/20">
+                        <Key className="w-5 h-5 text-och-gold" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white">Backup codes</p>
+                        <p className="text-xs text-och-steel mt-0.5">One-time codes when you can’t use the app. Each code works once.</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDownloadBackupCodes}
+                        disabled={backupCodesDownloading}
+                        className="border-och-steel/30 text-och-steel hover:border-och-gold/50 hover:text-och-gold shrink-0"
+                      >
+                        {backupCodesDownloading ? (
+                          <span className="flex items-center gap-2"><span className="w-3 h-3 border-2 border-och-gold border-t-transparent rounded-full animate-spin" /> Generating…</span>
+                        ) : (
+                          <span className="flex items-center gap-2"><Download className="w-4 h-4" /> Download codes</span>
+                        )}
+                      </Button>
+                    </li>
+                  )}
+                  <li className="flex items-center gap-4 p-4 bg-white/5 border border-och-steel/20 rounded-xl">
+                    <div className="w-10 h-10 rounded-lg bg-och-defender/10 flex items-center justify-center border border-och-defender/20">
+                      <Link2 className="w-5 h-5 text-och-defender" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-white">Passwordless sign-in link</p>
+                      <p className="text-xs text-och-steel mt-0.5">Receive a one-time sign-in link by email instead of using a password.</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push('/login/student')}
+                      className="border-och-steel/30 text-och-steel hover:border-och-defender/50 hover:text-och-defender shrink-0"
+                    >
+                      Use on sign-in
+                    </Button>
+                  </li>
+                </ul>
+              )}
+            </div>
+
+            {error && mfaManageView && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* Add another method */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide">Add another method</h3>
+              <p className="text-xs text-och-steel mb-3">Add TOTP, SMS, or Email to use as a second option when signing in.</p>
+              <div className="flex flex-wrap gap-3">
+                {!hasMethod('totp') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAddMethodWizard('totp')}
+                    className="border-och-steel/30 text-och-steel hover:border-och-mint/50 hover:text-och-mint"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Add authenticator app
+                  </Button>
+                )}
+                {!hasMethod('sms') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAddMethodWizard('sms')}
+                    className="border-och-steel/30 text-och-steel hover:border-och-mint/50 hover:text-och-mint"
+                  >
+                    <Smartphone className="w-4 h-4 mr-2" />
+                    Add SMS
+                  </Button>
+                )}
+                {!hasMethod('email') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAddMethodWizard('email')}
+                    className="border-och-steel/30 text-och-steel hover:border-och-mint/50 hover:text-och-mint"
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Add email
+                  </Button>
+                )}
+                {hasMethod('totp') && hasMethod('sms') && hasMethod('email') && (
+                  <p className="text-xs text-och-steel">You have all methods enabled.</p>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* MFA Setup Wizard (initial setup or add-one from Manage) */}
+      <AnimatePresence>
+        {(mfaWizardOpen || mfaManageWizardOpen) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="bg-och-midnight border border-och-steel/20 rounded-2xl shadow-2xl max-w-lg w-full my-8"
+            >
+              {wizardStep === 'choose' && !mfaManageAdding && (
+                <>
+                  <div className="p-6 border-b border-och-steel/20">
+                    <h2 className="text-xl font-black text-white uppercase tracking-tight mb-2">Choose MFA methods</h2>
+                    <p className="text-sm text-och-steel">
+                      Select at least {minMFARequired} method{minMFARequired > 1 ? 's' : ''}. 
+                      {minMFARequired === 2 && ' Directors, Admin, Finance, Analysts and Mentors must use at least 2 methods.'}
+                    </p>
+                  </div>
+                  <div className="p-6 space-y-3">
+                    {MFA_METHODS.map((m) => {
+                      const Icon = m.icon;
+                      const selected = selectedMethods.includes(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => toggleMethod(m.id)}
+                          className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all ${
+                            selected
+                              ? 'border-och-mint bg-och-mint/10 text-white'
+                              : 'border-och-steel/20 bg-white/5 text-och-steel hover:border-och-steel/40'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-och-defender/20 flex items-center justify-center flex-shrink-0">
+                            <Icon className="w-5 h-5 text-och-defender" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white">{m.label}</p>
+                            <p className="text-xs text-och-steel">{m.description}</p>
+                          </div>
+                          {selected && <CheckCircle2 className="w-5 h-5 text-och-mint flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                    {selectedMethods.length > 0 && (
+                      <p className="text-xs text-och-steel">
+                        Selected: {selectedMethods.length} of {minMFARequired} required minimum.
+                      </p>
+                    )}
+                  </div>
+                  <div className="p-6 flex gap-3 border-t border-och-steel/20">
+                    <Button variant="outline" onClick={closeWizard} className="flex-1">
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="defender"
+                      className="flex-1"
+                      disabled={selectedMethods.length < minMFARequired}
+                      onClick={startEnrollStep}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {wizardStep === 'enroll' && currentMethod && (
+                <>
+                  <div className="p-6 border-b border-och-steel/20">
+                    {mfaManageAdding && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={closeManageAddWizard}
+                        className="text-och-steel hover:text-white mb-3 -ml-2"
+                      >
+                        ← Back
+                      </Button>
+                    )}
+                    <h2 className="text-xl font-black text-white uppercase tracking-tight mb-2">
+                      Set up {MFA_METHODS.find((m) => m.id === currentMethod)?.label}
+                    </h2>
+                    <p className="text-sm text-och-steel">
+                      {currentMethod === 'totp' && 'Scan the QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.), then enter the 6-digit code below.'}
+                      {currentMethod === 'sms' && 'Enter your phone number to receive a code, then enter it below.'}
+                      {currentMethod === 'email' && 'A code was sent to your email. Enter it below.'}
+                    </p>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    {error && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                        {error}
+                      </div>
+                    )}
+
+                    {currentMethod === 'totp' && enrollData && 'secret' in enrollData && (
+                      <div className="space-y-4">
+                        <p className="text-sm font-medium text-white">Scan QR code with your authenticator app</p>
+                        {enrollData.qr_code_uri ? (
+                          <div className="flex justify-center p-4 bg-white rounded-xl inline-block">
+                            <QRCodeSVG
+                              value={enrollData.qr_code_uri}
+                              size={220}
+                              level="M"
+                              includeMargin={false}
+                            />
+                          </div>
+                        ) : null}
+                        <details className="group">
+                          <summary className="text-xs text-och-steel cursor-pointer hover:text-och-mint list-none [&::-webkit-details-marker]:hidden">
+                            Can&apos;t scan? Enter secret key manually
+                          </summary>
+                          <div className="mt-2 space-y-1">
+                            <p className="font-mono text-sm text-white break-all bg-white/5 p-3 rounded-lg select-all">{enrollData.secret}</p>
+                          </div>
+                        </details>
+                      </div>
+                    )}
+
+                    {currentMethod === 'sms' && !enrollData && (
+                      <div>
+                        <label className="block text-sm font-medium text-och-steel mb-2">Phone number</label>
+                        <input
+                          type="tel"
+                          value={smsPhone}
+                          onChange={(e) => setSmsPhone(e.target.value)}
+                          placeholder="0712345678 or +254712345678"
+                          className="w-full px-4 py-3 rounded-lg bg-white/5 border border-och-steel/20 text-white placeholder-och-steel"
+                        />
+                        <Button
+                          variant="defender"
+                          className="mt-3 w-full"
+                          disabled={!smsPhone.trim() || enrollLoading}
+                          onClick={doEnrollCurrent}
+                        >
+                          {enrollLoading ? 'Sending...' : 'Send code'}
+                        </Button>
+                      </div>
+                    )}
+
+                    {(currentMethod === 'email' && enrollData && 'codeSent' in enrollData) ||
+                     (currentMethod === 'sms' && enrollData && 'codeSent' in enrollData) ||
+                     (currentMethod === 'totp' && enrollData && 'secret' in enrollData) ? (
+                      <>
+                        <label className="block text-sm font-medium text-och-steel">Verification code</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          value={verifyCode}
+                          onChange={(e) => setVerifyCode(e.target.value)}
+                          placeholder="000000"
+                          className="w-full px-4 py-3 rounded-lg bg-white/5 border border-och-steel/20 text-white placeholder-och-steel"
+                        />
+                        <Button
+                          variant="defender"
+                          className="w-full"
+                          disabled={!verifyCode.trim() || verifyLoading}
+                          onClick={handleVerifyCurrent}
+                        >
+                          {verifyLoading ? 'Verifying...' : isLastEnroll ? 'Finish setup' : 'Verify & continue'}
+                        </Button>
+                      </>
+                    ) : null}
+
+                    {enrollLoading && currentMethod !== 'sms' && (
+                      <p className="text-sm text-och-steel">Setting up...</p>
+                    )}
+                  </div>
+                  {backupCodes.length > 0 && (
+                    <div className="p-6 border-t border-och-steel/20 bg-och-gold/5 rounded-b-2xl">
+                      <p className="text-sm font-semibold text-white mb-2">Save your backup codes (use once each):</p>
+                      <div className="font-mono text-xs text-och-steel break-all">{backupCodes.join(' ')}</div>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-och-midnight to-slate-950 p-6 lg:p-12">
       <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700">
-        
+        {!mfaManageView && (
+        <>
         {/* Status Messages */}
         <AnimatePresence>
           {error && (
@@ -734,8 +1286,11 @@ export function OCHSettingsSecurity() {
             </motion.div>
           )}
         </AnimatePresence>
+        </>
+        )}
       </div>
     </div>
+    </>
   );
 }
 

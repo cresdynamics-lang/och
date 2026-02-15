@@ -37,6 +37,9 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
+# Disable APPEND_SLASH to avoid RuntimeError in CommonMiddleware.get_full_path_with_slash
+APPEND_SLASH = False
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -308,9 +311,13 @@ PASSWORD_RESET_TOKEN_EXPIRY = int(os.environ.get('PASSWORD_RESET_TOKEN_EXPIRY', 
 # MFA: TOTP secret encryption at rest (use MFA_TOTP_ENCRYPTION_KEY or fallback to SECRET_KEY)
 MFA_TOTP_ENCRYPTION_KEY = os.environ.get('MFA_TOTP_ENCRYPTION_KEY') or SECRET_KEY
 
-# SMS: provider (textbelt for testing, twilio for production) and credentials
-SMS_PROVIDER = (os.environ.get('SMS_PROVIDER') or 'textbelt').lower()
-TEXTSMS_API_KEY = os.environ.get('TEXTSMS_API_KEY', '')  # Textbelt API key
+# SMS: provider (textsms = sms.textsms.co.ke, textbelt = testing, twilio = production)
+SMS_PROVIDER = (os.environ.get('SMS_PROVIDER') or 'textsms').lower()
+# TextSMS (https://sms.textsms.co.ke)
+TEXTSMS_PARTNER_ID = os.environ.get('TEXTSMS_PARTNER_ID', '')
+TEXTSMS_API_KEY = os.environ.get('TEXTSMS_API_KEY', '')
+TEXTSMS_SENDER_ID = os.environ.get('TEXTSMS_SENDER_ID', '')
+# Twilio
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
 TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
 TWILIO_FROM_NUMBER = os.environ.get('TWILIO_FROM_NUMBER', '')

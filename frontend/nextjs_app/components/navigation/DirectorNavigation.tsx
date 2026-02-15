@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuth } from '@/hooks/useAuth'
 import { useNavigation } from '@/hooks/useNavigation'
-import { getPrimaryRole } from '@/utils/rbac'
+import { getPrimaryRole, hasPermission } from '@/utils/rbac'
 import { 
   LayoutDashboard, Target, CheckCircle, Handshake, BookOpen, TrendingUp, 
   Calendar, Settings, Route, Plus, Users, Clock, RefreshCw, Ticket, 
@@ -37,61 +37,78 @@ interface NavItem {
   href: string
   icon: React.ComponentType<{ className?: string }>
   badge?: number
+  permission?: string
   children?: NavItem[]
   priority?: 'high' | 'medium' | 'low'
 }
 
 const navItems: NavItem[] = [
-  { label: 'Overview', href: '/dashboard/director', icon: LayoutDashboard },
+  { label: 'Overview', href: '/dashboard/director', icon: LayoutDashboard, permission: 'read_analytics' },
   { 
     label: 'Setup & Foundation', 
     href: '/dashboard/director/programs', 
     icon: Target,
+    permission: 'list_tracks',
     children: [
-      { label: 'Programs', href: '/dashboard/director/programs', icon: BookOpen },
-      { label: 'Tracks', href: '/dashboard/director/tracks', icon: Route },
-      { label: 'Missions', href: '/dashboard/director/missions', icon: Rocket },
-      { label: 'Milestones', href: '/dashboard/director/milestones', icon: CheckCircle },
-      { label: 'Modules', href: '/dashboard/director/modules', icon: Grid3X3 },
-      { label: 'Specializations', href: '/dashboard/director/specializations', icon: Star },
+      { label: 'Programs', href: '/dashboard/director/programs', icon: BookOpen, permission: 'list_tracks' },
+      { label: 'Tracks', href: '/dashboard/director/tracks', icon: Route, permission: 'list_tracks' },
+      { label: 'Missions', href: '/dashboard/director/missions', icon: Rocket, permission: 'list_tracks' },
+      { label: 'Milestones', href: '/dashboard/director/milestones', icon: CheckCircle, permission: 'list_tracks' },
+      { label: 'Modules', href: '/dashboard/director/modules', icon: Grid3X3, permission: 'list_tracks' },
+      { label: 'Specializations', href: '/dashboard/director/specializations', icon: Star, permission: 'list_tracks' },
     ]
   },
   { 
     label: 'Cohort Management', 
     href: '/dashboard/director/cohorts', 
     icon: Users,
+    permission: 'list_cohorts',
     children: [
-      { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users },
-      { label: 'Applications', href: '/dashboard/director/applications', icon: CheckCircle },
-      { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar },
-      { label: 'Sponsors', href: '/dashboard/director/cohorts/sponsors', icon: Star },
-      { label: 'Students', href: '/dashboard/director/students', icon: GraduationCap },
+      { label: 'All Cohorts', href: '/dashboard/director/cohorts', icon: Users, permission: 'list_cohorts' },
+      { label: 'Applications', href: '/dashboard/director/applications', icon: CheckCircle, permission: 'list_cohorts' },
+      { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar, permission: 'list_cohorts' },
+      { label: 'Sponsors', href: '/dashboard/director/cohorts/sponsors', icon: Star, permission: 'list_organizations' },
+      { label: 'Students', href: '/dashboard/director/students', icon: GraduationCap, permission: 'list_users' },
     ]
   },
   { 
     label: 'Enrollment & Placement', 
     href: '/dashboard/director/enrollment', 
     icon: CheckCircle,
+    permission: 'manage_cohorts',
     children: [
-      { label: 'Enrollment', href: '/dashboard/director/enrollment', icon: Clock },
-      { label: 'Seat Management', href: '/dashboard/director/enrollment/seats', icon: Ticket },
-      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw },
+      { label: 'Enrollment', href: '/dashboard/director/enrollment', icon: Clock, permission: 'manage_cohorts' },
+      { label: 'Seat Management', href: '/dashboard/director/enrollment/seats', icon: Ticket, permission: 'manage_cohorts' },
+      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw, permission: 'manage_cohorts' },
     ]
   },
   { 
     label: 'Mentorship Management', 
     href: '/dashboard/director/mentorship', 
     icon: Handshake,
+    permission: 'list_mentorship',
     children: [
-      { label: 'View All Mentors', href: '/dashboard/director/mentors', icon: Users },
-      { label: 'Mentor Assignment', href: '/dashboard/director/mentorship/matching', icon: Shuffle },
-      { label: 'Mentor Reviews', href: '/dashboard/director/mentorship/reviews', icon: Star },
-      { label: 'Cycle Configuration', href: '/dashboard/director/mentorship/cycles', icon: RotateCcw },
+      { label: 'View All Mentors', href: '/dashboard/director/mentors', icon: Users, permission: 'list_mentorship' },
+      { label: 'Mentor Assignment', href: '/dashboard/director/mentorship/matching', icon: Shuffle, permission: 'create_mentorship' },
+      { label: 'Mentor Reviews', href: '/dashboard/director/mentorship/reviews', icon: Star, permission: 'read_mentorship' },
+      { label: 'Cycle Configuration', href: '/dashboard/director/mentorship/cycles', icon: RotateCcw, permission: 'update_mentorship' },
     ]
   },
-  { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: TrendingUp },
-  { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: Settings },
+  { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: TrendingUp, permission: 'read_analytics' },
+  { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: Settings, permission: 'manage_cohorts' },
 ]
+
+function filterNavByPermission(items: NavItem[], user: { permissions?: string[]; roles?: unknown } | null): NavItem[] {
+  if (!user) return []
+  const check = (item: NavItem) => !item.permission || hasPermission(user as any, item.permission!)
+  return items
+    .filter((item) => check(item))
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((c) => check(c)),
+    }))
+    .filter((item) => !item.children || item.children.length > 0)
+}
 
 export function DirectorNavigation() {
   const pathname = usePathname()
@@ -112,6 +129,31 @@ export function DirectorNavigation() {
   // Get primary role dynamically
   const primaryRole = useMemo(() => getPrimaryRole(user), [user])
   const roleDisplayName = useMemo(() => getRoleDisplayName(primaryRole), [primaryRole])
+
+  // Filter nav items by search query (must be before baseNavItems)
+  const filteredNavItems = useMemo(() => {
+    if (!searchQuery) return navItems
+    const query = searchQuery.toLowerCase()
+    return navItems
+      .map((item) => {
+        const matchesLabel = item.label.toLowerCase().includes(query)
+        const matchingChildren = item.children?.filter(
+          (child) => child.label.toLowerCase().includes(query) || child.href.toLowerCase().includes(query)
+        )
+        if (matchesLabel || (matchingChildren && matchingChildren.length > 0)) {
+          return { ...item, children: matchingChildren || item.children }
+        }
+        return null
+      })
+      .filter(Boolean) as NavItem[]
+  }, [searchQuery])
+
+  // Filter nav items by user RBAC permissions (sidebar visibility by permission)
+  const baseNavItems = searchQuery ? filteredNavItems : navItems
+  const visibleNavItems = useMemo(
+    () => filterNavByPermission(baseNavItems, user),
+    [baseNavItems, user]
+  )
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -178,31 +220,6 @@ export function DirectorNavigation() {
       searchInputRef.current.focus()
     }
   }, [showSearch])
-
-  // Filter nav items by search query
-  const filteredNavItems = useMemo(() => {
-    if (!searchQuery) return navItems
-
-    const query = searchQuery.toLowerCase()
-    return navItems
-      .map((item) => {
-        const matchesLabel = item.label.toLowerCase().includes(query)
-        const matchingChildren = item.children?.filter(
-          (child) => child.label.toLowerCase().includes(query) || child.href.toLowerCase().includes(query)
-        )
-
-        if (matchesLabel || (matchingChildren && matchingChildren.length > 0)) {
-          return {
-            ...item,
-            children: matchingChildren || item.children,
-          }
-        }
-        return null
-      })
-      .filter(Boolean) as NavItem[]
-  }, [searchQuery])
-
-
 
   // Expand all function that works with nav items
   const handleExpandAll = useCallback(() => {
@@ -316,7 +333,7 @@ export function DirectorNavigation() {
 
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-          {(searchQuery ? filteredNavItems : navItems).map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item.href)
             const hasChildren = item.children && item.children.length > 0
             const isExpanded = expandedItems.has(item.label)

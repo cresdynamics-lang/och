@@ -119,7 +119,7 @@ def send_verification_email(user, verification_url):
 
                 <div style="text-align: center; margin-top: 24px;">
                     <p style="color: #64748B; font-size: 13px;">
-                        © {getattr(settings, 'CURRENT_YEAR', '2024')} Ongoza CyberHub | Mission-Driven Education<br>
+                        © {getattr(settings, 'CURRENT_YEAR', '2026')} Ongoza CyberHub | Mission-Driven Education<br>
                         Bank Row, Cloud Park, OT Valley Districts
                     </p>
                 </div>

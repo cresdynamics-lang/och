@@ -63,6 +63,15 @@ const PERSONAS = {
 
 const VALID_ROLES = Object.keys(PERSONAS);
 
+const MFA_RESEND_COOLDOWN_SECONDS = 60;
+const MFA_CODE_EXPIRY_SECONDS = 300; // 5 minutes
+
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useParams();
@@ -98,6 +107,8 @@ function LoginForm() {
   const [mfaMethod, setMfaMethod] = useState<'totp' | 'sms' | 'email' | 'backup_codes'>('totp');
   const [mfaSending, setMfaSending] = useState(false);
   const [mfaSubmitting, setMfaSubmitting] = useState(false);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [expirySecondsRemaining, setExpirySecondsRemaining] = useState(0);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -130,6 +141,33 @@ function LoginForm() {
     }
   }, [isAuthenticated, user, isLoading, isLoggingIn, isRedirecting, router, searchParams]);
 
+  // Countdown for MFA resend cooldown and code expiry (SMS/email only)
+  const isMfaSmsOrEmail = mfaPending && (mfaPending.mfa_method === 'sms' || mfaPending.mfa_method === 'email');
+  useEffect(() => {
+    if (!isMfaSmsOrEmail) return;
+    const interval = setInterval(() => {
+      setResendCooldownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+      setExpirySecondsRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isMfaSmsOrEmail]);
+
+  // Auto-send MFA code when landing on SMS/email step (backend does not send on login response)
+  const mfaSentRef = useRef(false);
+  useEffect(() => {
+    if (!mfaPending?.refresh_token || (mfaPending.mfa_method !== 'sms' && mfaPending.mfa_method !== 'email')) {
+      mfaSentRef.current = false;
+      return;
+    }
+    if (mfaSentRef.current) return;
+    mfaSentRef.current = true;
+    const method = mfaPending.mfa_method === 'sms' ? 'sms' : 'email';
+    sendMFAChallenge(mfaPending.refresh_token, method).catch((e: any) => {
+      mfaSentRef.current = false;
+      setError(e?.data?.detail || e?.message || 'Failed to send verification code');
+    });
+  }, [mfaPending?.refresh_token, mfaPending?.mfa_method, sendMFAChallenge]);
+
   const currentPersona = PERSONAS[currentRole as keyof typeof PERSONAS] || PERSONAS.student;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -153,12 +191,32 @@ function LoginForm() {
       const result = await login(formData);
       console.log('[Login] Login result:', { 
         hasResult: !!result, 
-        hasUser: !!result?.user,
-        hasToken: !!result?.access_token,
-        userRoles: result?.user?.roles 
+        hasUser: !!(result && 'user' in result && result.user),
+        hasToken: !!(result && 'access_token' in result && result.access_token),
+        mfaRequired: !!(result && 'mfaRequired' in result && result.mfaRequired),
       });
 
-      if (!result || !result.user) {
+      // MFA required — show MFA step without throwing
+      if (result && 'mfaRequired' in result && result.mfaRequired && result.refresh_token) {
+        const backendMethod = (result.mfa_method || 'totp').toLowerCase();
+        setMfaPending({
+          refresh_token: result.refresh_token,
+          mfa_method: backendMethod,
+        });
+        if (backendMethod === 'sms' || backendMethod === 'email') {
+          setMfaMethod(backendMethod === 'sms' ? 'sms' : 'email');
+          setResendCooldownSeconds(MFA_RESEND_COOLDOWN_SECONDS);
+          setExpirySecondsRemaining(MFA_CODE_EXPIRY_SECONDS);
+        } else {
+          setMfaMethod((backendMethod === 'backup_codes' ? 'backup_codes' : 'totp') as 'totp' | 'sms' | 'email' | 'backup_codes');
+        }
+        setMfaCode('');
+        setError(null);
+        setIsLoggingIn(false);
+        return;
+      }
+
+      if (!result || !('user' in result) || !result.user) {
         throw new Error('Login failed: No user data received');
       }
 
@@ -565,11 +623,18 @@ function LoginForm() {
       let message = 'Login failed. Please check your credentials.';
 
       if (err?.mfa_required && err?.refresh_token) {
+        const backendMethod = (err.mfa_method || 'totp').toLowerCase();
         setMfaPending({
           refresh_token: err.refresh_token,
-          mfa_method: err.mfa_method || 'totp',
+          mfa_method: backendMethod,
         });
-        setMfaMethod((err.mfa_method === 'sms' || err.mfa_method === 'email' ? err.mfa_method : 'totp') as 'totp' | 'sms' | 'email' | 'backup_codes');
+        if (backendMethod === 'sms' || backendMethod === 'email') {
+          setMfaMethod(backendMethod === 'sms' ? 'sms' : 'email');
+          setResendCooldownSeconds(MFA_RESEND_COOLDOWN_SECONDS);
+          setExpirySecondsRemaining(MFA_CODE_EXPIRY_SECONDS);
+        } else {
+          setMfaMethod((backendMethod === 'backup_codes' ? 'backup_codes' : 'totp') as 'totp' | 'sms' | 'email' | 'backup_codes');
+        }
         setMfaCode('');
         setError(null);
         setIsLoggingIn(false);
@@ -720,36 +785,65 @@ function LoginForm() {
               <div>
                 <h2 className="text-xl font-bold text-white mb-1">Verify your identity</h2>
                 <p className="text-slate-400 text-sm">
-                  {mfaPending.mfa_method === 'totp'
+                  {mfaPending.mfa_method === 'totp' || mfaMethod === 'totp'
                     ? 'Enter the code from your authenticator app.'
-                    : mfaPending.mfa_method === 'backup_codes'
+                    : mfaPending.mfa_method === 'backup_codes' || mfaMethod === 'backup_codes'
                     ? 'Enter one of your backup codes.'
-                    : mfaPending.mfa_method === 'sms'
+                    : mfaMethod === 'sms'
                     ? 'Enter the code we sent to your phone.'
                     : 'Enter the code we sent to your email.'}
                 </p>
               </div>
               {(mfaPending.mfa_method === 'sms' || mfaPending.mfa_method === 'email') && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full py-2 rounded-lg border-slate-600 text-slate-300"
-                  disabled={mfaSending}
-                  onClick={async () => {
-                    setError(null);
-                    setMfaSending(true);
-                    try {
-                      await sendMFAChallenge(mfaPending.refresh_token);
+                <div className="space-y-2">
+                  <p className="text-slate-400 text-xs">
+                    {expirySecondsRemaining > 0
+                      ? `Code expires in ${formatCountdown(expirySecondsRemaining)}`
+                      : 'Code expired. Request a new code below.'}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full py-2 rounded-lg border-slate-600 text-slate-300"
+                    disabled={mfaSending || resendCooldownSeconds > 0}
+                    onClick={async () => {
                       setError(null);
-                    } catch (e: any) {
-                      setError(e?.data?.detail || e?.message || 'Failed to send code');
-                    } finally {
-                      setMfaSending(false);
-                    }
-                  }}
-                >
-                  {mfaSending ? 'Sending...' : `Send code via ${mfaPending.mfa_method}`}
-                </Button>
+                      setMfaSending(true);
+                      try {
+                        await sendMFAChallenge(mfaPending.refresh_token, mfaMethod === 'sms' ? 'sms' : 'email');
+                        setError(null);
+                        setResendCooldownSeconds(MFA_RESEND_COOLDOWN_SECONDS);
+                        setExpirySecondsRemaining(MFA_CODE_EXPIRY_SECONDS);
+                      } catch (e: any) {
+                        setError(e?.data?.detail || e?.message || 'Failed to send code');
+                      } finally {
+                        setMfaSending(false);
+                      }
+                    }}
+                  >
+                    {mfaSending
+                      ? 'Sending...'
+                      : resendCooldownSeconds > 0
+                        ? `Resend code (${formatCountdown(resendCooldownSeconds)})`
+                        : mfaMethod === 'sms'
+                          ? 'Resend code via SMS'
+                          : 'Resend code via email'}
+                  </Button>
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      className="text-sm text-och-steel hover:text-och-mint transition-colors"
+                      disabled={mfaSending || resendCooldownSeconds > 0}
+                      onClick={() => {
+                        setMfaMethod(mfaMethod === 'sms' ? 'email' : 'sms');
+                        setMfaCode('');
+                        setError(null);
+                      }}
+                    >
+                      {mfaMethod === 'sms' ? 'Use email instead' : 'Use SMS instead'}
+                    </button>
+                  </div>
+                </div>
               )}
               <form
                 onSubmit={async (e) => {
@@ -765,6 +859,8 @@ function LoginForm() {
                     });
                     setMfaPending(null);
                     setMfaCode('');
+                    setResendCooldownSeconds(0);
+                    setExpirySecondsRemaining(0);
                     setIsRedirecting(true);
                     const { getRedirectRoute } = await import('@/utils/redirect');
                     const u = result?.user;
@@ -830,7 +926,7 @@ function LoginForm() {
                     type="button"
                     variant="outline"
                     className="py-3 border-slate-600 text-slate-300"
-                    onClick={() => { setMfaPending(null); setMfaCode(''); setError(null); }}
+                    onClick={() => { setMfaPending(null); setMfaCode(''); setError(null); setResendCooldownSeconds(0); setExpirySecondsRemaining(0); }}
                   >
                     Back
                   </Button>

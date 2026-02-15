@@ -284,7 +284,7 @@ export default function AboutPage() {
             </div>
           </div>
           <div className="border-t border-och-steel/20 pt-8 text-center text-och-steel">
-            <p>&copy; 2024 OCH Platform. All rights reserved.</p>
+            <p>&copy; 2026 OCH Platform. All rights reserved.</p>
           </div>
         </div>
       </footer>

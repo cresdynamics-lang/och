@@ -178,7 +178,7 @@ class EmailService:
 
                     <div style="text-align: center; margin-top: 24px;">
                         <p style="color: #64748B; font-size: 13px;">
-                            © 2024 Ongoza CyberHub | Mission-Driven Education<br>
+                            © 2026 Ongoza CyberHub | Mission-Driven Education<br>
                             Bank Row, Cloud Park, OT Valley Districts
                         </p>
                     </div>
@@ -241,7 +241,7 @@ class EmailService:
 
                     <div style="text-align: center; margin-top: 24px;">
                         <p style="color: #64748B; font-size: 13px;">
-                            © 2024 Ongoza CyberHub | Mission-Driven Education<br>
+                            © 2026 Ongoza CyberHub | Mission-Driven Education<br>
                             Bank Row, Cloud Park, OT Valley Districts
                         </p>
                     </div>
@@ -317,7 +317,7 @@ class EmailService:
 
                     <div style="text-align: center; margin-top: 24px;">
                         <p style="color: #64748B; font-size: 13px;">
-                            © 2024 Ongoza CyberHub | Mission-Driven Education<br>
+                            © 2026 Ongoza CyberHub | Mission-Driven Education<br>
                             Bank Row, Cloud Park, OT Valley Districts
                         </p>
                     </div>
@@ -446,7 +446,7 @@ class EmailService:
 
                     <div style="text-align: center; margin-top: 24px;">
                         <p style="color: #64748B; font-size: 13px;">
-                            © 2024 Ongoza CyberHub | Mission-Driven Education<br>
+                            © 2026 Ongoza CyberHub | Mission-Driven Education<br>
                             Bank Row, Cloud Park, OT Valley Districts
                         </p>
                     </div>

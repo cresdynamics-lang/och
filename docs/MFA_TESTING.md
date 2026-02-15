@@ -16,6 +16,81 @@ How to verify that Multi-Factor Authentication (TOTP, SMS, Email, backup codes) 
 
 ---
 
+## Quick start: Test MFA as a student (where to start)
+
+**Goal:** Log in as a student → turn on MFA → log in again in another browser and complete the MFA step.
+
+### Step 1 – Start apps and get a student user
+
+1. Start backend (from `backend/django_app`):  
+   `python manage.py runserver`  
+   Or start your stack (e.g. Docker).
+2. Start frontend (from `frontend/nextjs_app`):  
+   `npm run dev`
+3. Create test users if needed:  
+   `python manage.py create_test_users`  
+   Student: **student@test.com** / **testpass123**
+
+### Step 2 – Enroll the student in MFA (TOTP)
+
+Student MFA is enabled via the API (settings UI shows status; enrollment is via API for now).
+
+1. **Log in** to get an access token (PowerShell or Git Bash):
+
+   ```bash
+   curl -s -X POST http://localhost:8000/api/v1/auth/login/ -H "Content-Type: application/json" -d "{\"email\":\"student@test.com\",\"password\":\"testpass123\"}"
+   ```
+
+   Copy the `access_token` from the JSON response.
+
+2. **Enroll TOTP** (replace `YOUR_ACCESS_TOKEN`):
+
+   ```bash
+   curl -s -X POST http://localhost:8000/api/v1/auth/mfa/enroll/ -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_ACCESS_TOKEN" -d "{\"method\":\"totp\"}"
+   ```
+
+   You get `secret` and `qr_code_uri`. Add the **secret** to an authenticator app (Google Authenticator, Authy, etc.) or generate a QR from `qr_code_uri` and scan it.
+
+3. **Verify enrollment** (use the **current 6-digit code** from the app):
+
+   ```bash
+   curl -s -X POST http://localhost:8000/api/v1/auth/mfa/verify/ -H "Content-Type: application/json" -H "Authorization: Bearer YOUR_ACCESS_TOKEN" -d "{\"method\":\"totp\",\"code\":\"123456\"}"
+   ```
+
+   Replace `123456` with the real code. Success = `"MFA enabled successfully"` (and optional `backup_codes` – save them).
+
+### Step 3 – See the MFA step at login (browser)
+
+Because `@test.com` users get their **first device auto-trusted**, you must use a **new** device/browser to see the MFA challenge:
+
+1. Open an **incognito/private** window (or another browser).
+2. Go to: **http://localhost:3000/login/student**
+3. Log in with **student@test.com** / **testpass123**.
+4. You should see **“Verify your identity”** and a code field.
+5. Open your authenticator app, get the current 6-digit code, enter it, and choose **“Authenticator app”** if there’s a toggle.
+6. Click **Verify** → you should be logged in and redirected to the student dashboard.
+
+### Step 4 – Optional: test via API only
+
+To trigger MFA without a second browser, call login with a **different** `device_fingerprint`:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/login/ -H "Content-Type: application/json" -d "{\"email\":\"student@test.com\",\"password\":\"testpass123\",\"device_fingerprint\":\"test-device-2\"}"
+```
+
+You should get `mfa_required: true` and a `refresh_token`. Then complete MFA:
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/mfa/complete/ -H "Content-Type: application/json" -d "{\"refresh_token\":\"PASTE_REFRESH_TOKEN_HERE\",\"code\":\"123456\",\"method\":\"totp\"}"
+```
+
+Use the current TOTP code. Response should include `access_token` and `user`.
+
+**Where to start summary:**  
+Create test users → enroll student in TOTP via the three curl calls above → open **/login/student** in **incognito** and log in → enter TOTP code on the “Verify your identity” screen.
+
+---
+
 ## 1. Test TOTP (authenticator app) end-to-end
 
 ### 1.1 Enroll in TOTP

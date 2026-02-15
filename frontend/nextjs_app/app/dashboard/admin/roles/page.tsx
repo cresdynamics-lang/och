@@ -95,6 +95,10 @@ export default function RolesPage() {
     )
   }
 
+  const clearSectionPermissions = (permIds: number[]) => {
+    setPermissionIdsForRole((prev) => prev.filter((id) => !permIds.includes(id)))
+  }
+
   return (
     <RouteGuard>
       <AdminLayout>
@@ -198,12 +202,26 @@ export default function RolesPage() {
                             </Button>
                           </div>
                           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {Object.entries(permissionsByResource).map(([resource, perms]) => (
+                            {Object.entries(permissionsByResource).map(([resource, perms]) => {
+                              const permIds = perms.map((p) => p.id)
+                              const selectedInSection = permIds.filter((id) => permissionIdsForRole.includes(id)).length
+                              return (
                               <div
                                 key={resource}
                                 className="p-4 rounded-lg border border-och-steel/20 bg-och-midnight/50"
                               >
-                                <h4 className="text-white font-semibold mb-3 capitalize">{resource.replace(/_/g, ' ')}</h4>
+                                <div className="flex items-center justify-between mb-3">
+                                  <h4 className="text-white font-semibold capitalize">{resource.replace(/_/g, ' ')}</h4>
+                                  {selectedInSection > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => clearSectionPermissions(permIds)}
+                                      className="text-xs text-och-steel hover:text-och-orange transition-colors"
+                                    >
+                                      Deselect all
+                                    </button>
+                                  )}
+                                </div>
                                 <ul className="space-y-2">
                                   {perms.map((p) => (
                                     <li key={p.id} className="flex items-center gap-2">
@@ -221,7 +239,7 @@ export default function RolesPage() {
                                   ))}
                                 </ul>
                               </div>
-                            ))}
+                            )})}
                           </div>
                         </>
                       )}

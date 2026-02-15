@@ -558,8 +558,15 @@ export async function fetcher<T>(
                   }
                   
                   // Only log if we have meaningful errorData OR if there are meaningful non-basic fields
-                  if (hasMeaningfulErrorData || !allNonBasicEmpty) {
+                  // Never log when cleanErrorInfo would display as empty (e.g. {} or only url/status/statusText)
+                  const cleanKeys = Object.keys(cleanErrorInfo);
+                  const wouldDisplayEmpty = cleanKeys.length === 0 ||
+                    (cleanKeys.length <= 3 && cleanKeys.every(k => ['url', 'status', 'statusText'].includes(k)));
+                  if (!wouldDisplayEmpty && (hasMeaningfulErrorData || !allNonBasicEmpty)) {
                     safeConsoleError('API Error:', cleanErrorInfo);
+                  } else if (response.status >= 400 && (errorData?.detail || errorData?.message)) {
+                    const msg = typeof errorData.detail === 'string' ? errorData.detail : (Array.isArray(errorData.detail) && errorData.detail.length ? String(errorData.detail[0]) : errorData?.message);
+                    if (msg) safeConsoleError('API Error:', response.status, msg);
                   } else {
                     // Suppress - all non-basic fields are empty, only has basic fields
                     return;
@@ -648,12 +655,13 @@ export async function fetcher<T>(
         // Completely suppress: 404s, empty objects, client errors without error data
       }
       
-      throw new ApiError(
-        response.status,
-        response.statusText,
-        errorData,
-        errorData?.error || errorData?.detail || errorData?.message || `HTTP ${response.status}`
-      );
+      const message =
+        (typeof errorData?.detail === 'string' && errorData.detail) ||
+        (Array.isArray(errorData?.detail) && errorData.detail.length > 0 ? String(errorData.detail[0]) : null) ||
+        errorData?.error ||
+        errorData?.message ||
+        `HTTP ${response.status} ${response.statusText}`;
+      throw new ApiError(response.status, response.statusText, errorData, message || undefined);
     }
 
     // Handle empty responses

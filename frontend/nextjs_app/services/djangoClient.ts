@@ -174,11 +174,13 @@ export const djangoClient = {
     },
 
     /**
-     * Send MFA challenge (SMS or email code) when primary method is sms/email.
-     * Call with refresh_token from mfa_required login response.
+     * Send MFA challenge (SMS or email code).
+     * Optional method: 'email' | 'sms' to choose channel when user has both (default: email).
      */
-    async sendMFAChallenge(refresh_token: string): Promise<{ detail: string }> {
-      return apiGateway.post('/auth/mfa/send-challenge', { refresh_token });
+    async sendMFAChallenge(refresh_token: string, method?: 'email' | 'sms'): Promise<{ detail: string }> {
+      const body: { refresh_token: string; method?: string } = { refresh_token };
+      if (method) body.method = method;
+      return apiGateway.post('/auth/mfa/send-challenge', body);
     },
 
     /**
@@ -196,6 +198,23 @@ export const djangoClient = {
       consent_scopes?: any[];
     }> {
       return apiGateway.post('/auth/mfa/complete', data);
+    },
+
+    /**
+     * List enabled MFA methods (for Manage MFA UI).
+     */
+    async getMFAMethods(): Promise<{
+      methods: { method_type: string; is_primary: boolean; masked?: string }[];
+      has_backup_codes?: boolean;
+    }> {
+      return apiGateway.get('/auth/mfa/methods');
+    },
+
+    /**
+     * Regenerate backup codes (invalidates existing). Returns new codes for one-time download.
+     */
+    async regenerateBackupCodes(): Promise<{ backup_codes: string[] }> {
+      return apiGateway.post('/auth/mfa/backup-codes/regenerate', {});
     },
 
     /**

@@ -21,9 +21,12 @@ export function hasPermission(user: User | null, permissionName: string): boolea
     if (roles.includes('admin')) return true
     return false
   }
-  // No permissions loaded: fall back to role-based (e.g. admin sees all)
+  // No permissions loaded: fall back to role-based (admin sees all; program_director sees director items)
   const roles = getUserRoles(user)
   if (roles.includes('admin')) return true
+  // program_director with empty permissions (seed not run): allow director nav so they can reach roles/seed page
+  const directorPerms = new Set(Object.values(DIRECTOR_NAV_PERMISSIONS))
+  if (roles.includes('program_director') && directorPerms.has(permissionName)) return true
   return false
 }
 
@@ -31,6 +34,34 @@ export function hasPermission(user: User | null, permissionName: string): boolea
  * Admin sidebar: path or href -> required permission name (from backend permissions table).
  * Sidebar items are shown only if user has the required permission (or is admin).
  */
+/**
+ * Director sidebar: path or href -> required permission name.
+ * Sidebar items are shown only if user has the required permission (or is admin).
+ */
+export const DIRECTOR_NAV_PERMISSIONS: Record<string, string> = {
+  '/dashboard/director': 'read_analytics',
+  '/dashboard/director/programs': 'list_tracks',
+  '/dashboard/director/tracks': 'list_tracks',
+  '/dashboard/director/missions': 'list_tracks',
+  '/dashboard/director/milestones': 'list_tracks',
+  '/dashboard/director/modules': 'list_tracks',
+  '/dashboard/director/specializations': 'list_tracks',
+  '/dashboard/director/cohorts': 'list_cohorts',
+  '/dashboard/director/applications': 'list_cohorts',
+  '/dashboard/director/calendar': 'list_cohorts',
+  '/dashboard/director/cohorts/sponsors': 'list_organizations',
+  '/dashboard/director/students': 'list_users',
+  '/dashboard/director/enrollment': 'manage_cohorts',
+  '/dashboard/director/enrollment/seats': 'manage_cohorts',
+  '/dashboard/director/enrollment/overrides': 'manage_cohorts',
+  '/dashboard/director/mentors': 'list_mentorship',
+  '/dashboard/director/mentorship/matching': 'create_mentorship',
+  '/dashboard/director/mentorship/reviews': 'read_mentorship',
+  '/dashboard/director/mentorship/cycles': 'update_mentorship',
+  '/dashboard/director/analytics': 'read_analytics',
+  '/dashboard/director/settings': 'manage_cohorts',
+}
+
 export const ADMIN_NAV_PERMISSIONS: Record<string, string> = {
   '/dashboard/admin': 'read_analytics',
   '/dashboard/admin/users': 'list_users',

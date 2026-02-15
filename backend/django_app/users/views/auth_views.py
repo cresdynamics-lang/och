@@ -45,6 +45,7 @@ from users.utils.auth_utils import (
     decrypt_totp_secret,
     verify_mfa_challenge,
     hash_refresh_token,
+    generate_totp_backup_codes,
 )
 from users.utils.risk_utils import calculate_risk_score, requires_mfa
 from users.utils.consent_utils import (
@@ -772,7 +773,7 @@ class MFAVerifyView(APIView):
 class MFASendChallengeView(APIView):
     """
     POST /api/v1/auth/mfa/send-challenge
-    Send MFA code (SMS or email) when user's primary method is sms/email.
+    Send MFA code (SMS or email). Optional body: method=email|sms to choose channel when user has both.
     Call with refresh_token from login (mfa_required) response.
     """
     permission_classes = [permissions.AllowAny]
@@ -795,7 +796,25 @@ class MFASendChallengeView(APIView):
                 {'detail': 'MFA already verified'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        requested = (request.data.get('method') or '').strip().lower()
         method = (user.mfa_method or '').lower()
+        has_sms = MFAMethod.objects.filter(user=user, method_type='sms', enabled=True).exists()
+        has_email = MFAMethod.objects.filter(user=user, method_type='email', enabled=True).exists()
+        if requested in ('sms', 'email'):
+            if requested == 'sms' and has_sms:
+                method = 'sms'
+            elif requested == 'email' and has_email:
+                method = 'email'
+            elif requested == 'sms' and not has_sms:
+                return Response(
+                    {'detail': 'SMS is not set up for your account. Use email or another method.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif requested == 'email' and not has_email:
+                return Response(
+                    {'detail': 'Email code is not set up for your account. Use SMS or another method.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         if method not in ('sms', 'email'):
             return Response(
                 {'detail': 'Send challenge only for SMS or email MFA. Use TOTP or backup code.'},
@@ -900,6 +919,68 @@ class MFACompleteView(APIView):
             samesite='Lax',
         )
         return response
+
+
+class MFAMethodsListView(APIView):
+    """
+    GET /api/v1/auth/mfa/methods
+    List enabled MFA methods for the current user (for Manage MFA UI).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        methods = MFAMethod.objects.filter(user=user, enabled=True).order_by('-is_primary', 'method_type')
+        user_email = getattr(user, 'email', '') or ''
+        out = []
+        for m in methods:
+            item = {
+                'method_type': m.method_type,
+                'is_primary': m.is_primary,
+            }
+            if m.method_type == 'sms' and m.phone_e164:
+                # Mask phone: +1234567890 -> ***7890
+                s = m.phone_e164
+                item['masked'] = f'***{s[-4:]}' if len(s) >= 4 else '***'
+            elif m.method_type == 'email':
+                # Mask email: a***@domain.com
+                if '@' in user_email:
+                    local, domain = user_email.split('@', 1)
+                    item['masked'] = f'{local[:1]}***@{domain}' if local else f'***@{domain}'
+                else:
+                    item['masked'] = '***'
+            out.append(item)
+        has_totp = MFAMethod.objects.filter(user=user, method_type='totp', enabled=True).exists()
+        return Response({
+            'methods': out,
+            'has_backup_codes': has_totp,
+        }, status=status.HTTP_200_OK)
+
+
+class MFABackupCodesRegenerateView(APIView):
+    """
+    POST /api/v1/auth/mfa/backup-codes/regenerate
+    Regenerate backup codes (invalidates existing ones). Returns new codes for one-time download.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        mfa_method = MFAMethod.objects.filter(
+            user=user,
+            method_type='totp',
+            enabled=True,
+        ).first()
+        if not mfa_method:
+            return Response(
+                {'detail': 'Authenticator app (TOTP) must be enabled to use backup codes.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        backup_codes, hashed_codes = generate_totp_backup_codes(count=10)
+        mfa_method.totp_backup_codes = hashed_codes
+        mfa_method.save()
+        _log_audit_event(user, 'mfa_backup_codes_regenerate', 'mfa', 'success')
+        return Response({'backup_codes': backup_codes}, status=status.HTTP_200_OK)
 
 
 class MFADisableView(APIView):
