@@ -19,6 +19,8 @@ import type {
   TalentScopeMentorView,
   MentorInfluenceIndex,
   MentorshipMessage,
+  DirectorMentorMessage,
+  DirectorMentorConversation,
   NotificationLog,
 } from './types/mentor'
 
@@ -468,6 +470,35 @@ export const mentorClient = {
    */
   async markMessageRead(messageId: string): Promise<MentorshipMessage> {
     return apiGateway.patch(`/mentorship/messages/${messageId}/read`)
+  },
+
+  /**
+   * Director–mentor messaging (mentor chats with directors, director chats with mentors)
+   */
+  async getDirectorMentorConversations(): Promise<DirectorMentorConversation[]> {
+    return apiGateway.get('/mentorship/director-mentor/conversations')
+  },
+
+  async getDirectorMentorAvailable(): Promise<Array<{ id: number; name: string; email: string }>> {
+    return apiGateway.get('/mentorship/director-mentor/available')
+  },
+
+  async getDirectorMentorMessages(otherUserId: number): Promise<DirectorMentorMessage[]> {
+    return apiGateway.get('/mentorship/director-mentor/messages', {
+      params: { other_user_id: otherUserId },
+    })
+  },
+
+  async sendDirectorMentorMessage(data: {
+    recipient_id: number
+    subject?: string
+    body: string
+  }): Promise<DirectorMentorMessage> {
+    return apiGateway.post('/mentorship/director-mentor/messages', data)
+  },
+
+  async markDirectorMentorMessageRead(messageId: string): Promise<DirectorMentorMessage> {
+    return apiGateway.patch(`/mentorship/director-mentor/messages/${messageId}/read`)
   },
 
   /**

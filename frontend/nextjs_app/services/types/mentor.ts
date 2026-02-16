@@ -334,6 +334,30 @@ export interface MessageAttachment {
   created_at: string
 }
 
+/** Director–mentor one-on-one message (e.g. student case, change of track). */
+export interface DirectorMentorMessage {
+  id: string
+  sender: { id: string; name: string; email: string }
+  recipient: { id: string; name: string; email: string }
+  sender_name?: string
+  sender_email?: string
+  recipient_name?: string
+  recipient_email?: string
+  subject?: string
+  body: string
+  is_read: boolean
+  read_at?: string
+  created_at: string
+  updated_at: string
+}
+
+/** Conversation list item for director–mentor chat. */
+export interface DirectorMentorConversation {
+  other_user: { id: number; name: string; email: string }
+  last_message: DirectorMentorMessage | null
+  unread_count: number
+}
+
 export interface NotificationLog {
   id: string
   notification_id: string

@@ -99,6 +99,10 @@ export default function RolesPage() {
     setPermissionIdsForRole((prev) => prev.filter((id) => !permIds.includes(id)))
   }
 
+  const selectSectionPermissions = (permIds: number[]) => {
+    setPermissionIdsForRole((prev) => [...new Set([...prev, ...permIds])])
+  }
+
   return (
     <RouteGuard>
       <AdminLayout>
@@ -212,15 +216,26 @@ export default function RolesPage() {
                               >
                                 <div className="flex items-center justify-between mb-3">
                                   <h4 className="text-white font-semibold capitalize">{resource.replace(/_/g, ' ')}</h4>
-                                  {selectedInSection > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => clearSectionPermissions(permIds)}
-                                      className="text-xs text-och-steel hover:text-och-orange transition-colors"
-                                    >
-                                      Deselect all
-                                    </button>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {selectedInSection < perms.length && (
+                                      <button
+                                        type="button"
+                                        onClick={() => selectSectionPermissions(permIds)}
+                                        className="text-xs text-och-steel hover:text-och-mint transition-colors"
+                                      >
+                                        Select all
+                                      </button>
+                                    )}
+                                    {selectedInSection > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => clearSectionPermissions(permIds)}
+                                        className="text-xs text-och-steel hover:text-och-orange transition-colors"
+                                      >
+                                        Deselect all
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <ul className="space-y-2">
                                   {perms.map((p) => (

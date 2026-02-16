@@ -449,6 +449,40 @@ class MessageAttachment(models.Model):
         return f"Attachment: {self.filename} ({self.message.message_id})"
 
 
+class DirectorMentorMessage(models.Model):
+    """One-on-one messages between a program director and a mentor (e.g. student case, change of track)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sender = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='director_mentor_messages_sent',
+        db_index=True,
+    )
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='director_mentor_messages_received',
+        db_index=True,
+    )
+    subject = models.CharField(max_length=255, blank=True, help_text='Optional context e.g. student case, change of track')
+    body = models.TextField()
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'directormentormessages'
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['sender', 'recipient', 'created_at']),
+            models.Index(fields=['recipient', 'is_read']),
+        ]
+
+    def __str__(self):
+        return f"DirectorMentorMessage {self.id} from {self.sender_id} to {self.recipient_id}"
+
+
 class NotificationLog(models.Model):
     """Audit log for all notifications sent (Email/SMS reminders, milestones, etc.)."""
     TYPE_CHOICES = [

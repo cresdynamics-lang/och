@@ -33,6 +33,10 @@ from .views import (
     mentorship_registry,
     messages_endpoint,
     mark_message_read,
+    director_mentor_conversations,
+    director_mentor_available,
+    director_mentor_messages,
+    director_mentor_message_read,
     send_notification,
     get_notifications
 )
@@ -83,6 +87,11 @@ urlpatterns = [
     # Messaging endpoints
     path('mentorship/assignments/<uuid:assignment_id>/messages', messages_endpoint, name='messages-endpoint'),
     path('mentorship/messages/<uuid:message_id>/read', mark_message_read, name='mark-message-read'),
+    # Director-mentor messaging
+    path('mentorship/director-mentor/conversations', director_mentor_conversations, name='director-mentor-conversations'),
+    path('mentorship/director-mentor/available', director_mentor_available, name='director-mentor-available'),
+    path('mentorship/director-mentor/messages', director_mentor_messages, name='director-mentor-messages'),
+    path('mentorship/director-mentor/messages/<uuid:message_id>/read', director_mentor_message_read, name='director-mentor-message-read'),
     # Notifications endpoints
     path('mentorship/notifications', send_notification, name='send-notification'),
     path('mentorship/users/<int:user_id>/notifications', get_notifications, name='get-notifications'),

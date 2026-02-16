@@ -1,8 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { GraduationCap, Link, Search, MoreHorizontal } from 'lucide-react'
+import { GraduationCap, Link, Search, MoreHorizontal, Route } from 'lucide-react'
 import { apiGateway } from '@/services/apiGateway'
+
+interface CurriculumTrack {
+  id: string
+  slug: string
+  name: string
+  title?: string
+  code: string
+  description?: string
+  level?: string
+  tier?: number
+  order_number?: number
+}
 
 interface DirectMentor {
   assignment_id: string
@@ -56,6 +68,12 @@ export function StudentsManagementClient() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [openActionRow, setOpenActionRow] = useState<string | null>(null)
+  const [showChangeTrackModal, setShowChangeTrackModal] = useState(false)
+  const [showChangeTrackConfirmModal, setShowChangeTrackConfirmModal] = useState(false)
+  const [studentForTrackChange, setStudentForTrackChange] = useState<Student | null>(null)
+  const [curriculumTracks, setCurriculumTracks] = useState<CurriculumTrack[]>([])
+  const [selectedTrackSlug, setSelectedTrackSlug] = useState('')
+  const [changeTrackLoading, setChangeTrackLoading] = useState(false)
 
   const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setMessage({ type, text })
@@ -169,6 +187,54 @@ export function StudentsManagementClient() {
       setActionLoading(null)
     }
   }
+
+  const openChangeTrackModal = (student: Student) => {
+    setStudentForTrackChange(student)
+    setSelectedTrackSlug('')
+    setShowChangeTrackModal(true)
+    setShowChangeTrackConfirmModal(false)
+    setOpenActionRow(null)
+    apiGateway
+      .get('/curriculum/tracks/')
+      .then((data: any) => {
+        const list = data?.results ?? data?.data ?? data ?? []
+        setCurriculumTracks(Array.isArray(list) ? list : [])
+      })
+      .catch(() => setCurriculumTracks([]))
+  }
+
+  const proceedToConfirmChangeTrack = () => {
+    if (!selectedTrackSlug) return
+    setShowChangeTrackModal(false)
+    setShowChangeTrackConfirmModal(true)
+  }
+
+  const confirmChangeTrack = async () => {
+    if (!studentForTrackChange || !selectedTrackSlug) return
+    setChangeTrackLoading(true)
+    try {
+      await apiGateway.post('/director/students/change-track/', {
+        student_id: studentForTrackChange.uuid_id,
+        curriculum_track_slug: selectedTrackSlug,
+      })
+      setShowChangeTrackConfirmModal(false)
+      setStudentForTrackChange(null)
+      setSelectedTrackSlug('')
+      showMsg("Student's track has been updated.")
+      await fetchStudents(true)
+    } catch (e: any) {
+      const errMsg = e?.response?.data?.error || e?.message || 'Failed to change track'
+      showMsg(errMsg, 'error')
+    } finally {
+      setChangeTrackLoading(false)
+    }
+  }
+
+  const selectedTrack = curriculumTracks.find((t) => t.slug === selectedTrackSlug)
+  const studentDisplayName =
+    studentForTrackChange?.first_name && studentForTrackChange?.last_name
+      ? `${studentForTrackChange.first_name} ${studentForTrackChange.last_name}`
+      : studentForTrackChange?.email ?? ''
 
   const filteredStudents = students.filter(student =>
     student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -337,6 +403,13 @@ export function StudentsManagementClient() {
                           <div className="absolute right-0 top-full mt-1 py-1 min-w-[200px] bg-och-midnight border border-och-steel/30 rounded-lg shadow-xl z-20">
                             <button
                               type="button"
+                              onClick={() => openChangeTrackModal(student)}
+                              className="w-full text-left px-3 py-2 text-sm text-och-mint hover:bg-och-mint/10 disabled:opacity-50"
+                            >
+                              Change track
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => openMentorModal(student)}
                               className="w-full text-left px-3 py-2 text-sm text-och-mint hover:bg-och-mint/10 disabled:opacity-50"
                             >
@@ -421,6 +494,93 @@ export function StudentsManagementClient() {
                 className="flex-1 px-4 py-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Link Students
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change track: step 1 – select new track */}
+      {showChangeTrackModal && studentForTrackChange && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="change-track-title">
+          <div className="bg-och-midnight border border-och-steel/20 rounded-lg p-6 w-full max-w-md shadow-xl">
+            <h3 id="change-track-title" className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+              <Route className="w-5 h-5 text-och-mint" />
+              Change student track
+            </h3>
+            <p className="text-sm text-och-steel mb-4">
+              Select the new track for {studentDisplayName}. You will confirm in the next step.
+            </p>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-och-steel mb-2">Curriculum track</label>
+              <select
+                value={selectedTrackSlug}
+                onChange={(e) => setSelectedTrackSlug(e.target.value)}
+                className="w-full px-3 py-2 bg-och-midnight border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-mint"
+              >
+                <option value="">Choose a track...</option>
+                {curriculumTracks.map((track) => (
+                  <option key={track.id} value={track.slug}>
+                    {track.title || track.name}
+                    {track.code ? ` (${track.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowChangeTrackModal(false); setStudentForTrackChange(null); setSelectedTrackSlug('') }}
+                className="flex-1 px-4 py-2 border border-och-steel/20 text-och-steel rounded-lg hover:bg-och-steel/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={proceedToConfirmChangeTrack}
+                disabled={!selectedTrackSlug}
+                className="flex-1 px-4 py-2 bg-och-mint text-och-midnight rounded-lg hover:bg-och-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change track: step 2 – confirm with explanation */}
+      {showChangeTrackConfirmModal && studentForTrackChange && selectedTrack && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="change-track-confirm-title">
+          <div className="bg-och-midnight border border-och-steel/20 rounded-lg p-6 w-full max-w-lg shadow-xl">
+            <h3 id="change-track-confirm-title" className="text-lg font-semibold text-white mb-3">Confirm track change</h3>
+            <p className="text-sm text-och-steel mb-2">
+              You are about to change <span className="text-white font-medium">{studentDisplayName}</span> from their current track to <span className="text-och-mint font-medium">{selectedTrack.title || selectedTrack.name}</span>.
+            </p>
+            <div className="p-4 rounded-lg bg-och-midnight/80 border border-och-steel/20 text-sm text-och-steel mb-6">
+              <p className="font-medium text-white mb-2">When you confirm:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>The student&apos;s track will be updated and they will see content and curriculum for the new track.</li>
+                <li>Track-based mentor assignments may change according to the new track.</li>
+                <li>Their cohort enrollment (if any) is unchanged; only their track assignment is updated.</li>
+                <li>Progress tied to the previous track may no longer apply to the new track.</li>
+              </ul>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setShowChangeTrackConfirmModal(false); setShowChangeTrackModal(true); setSelectedTrackSlug(selectedTrack.slug) }}
+                disabled={changeTrackLoading}
+                className="flex-1 px-4 py-2 border border-och-steel/20 text-och-steel rounded-lg hover:bg-och-steel/10 disabled:opacity-50"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={confirmChangeTrack}
+                disabled={changeTrackLoading}
+                className="flex-1 px-4 py-2 bg-och-mint text-och-midnight rounded-lg hover:bg-och-mint/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {changeTrackLoading ? 'Updating…' : 'Confirm change'}
               </button>
             </div>
           </div>

@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
     console.log('[Login API] Has refresh_token:', !!apiData.refresh_token);
     console.log('[Login API] Has mfa_required:', !!apiData.mfa_required);
 
-    // Check if MFA is required
+    // Check if MFA is required (backend sends preferred method: TOTP → email → SMS + list of user's methods)
     if (apiData.mfa_required) {
       console.log('[Login API] MFA required for user');
       return NextResponse.json({
@@ -174,6 +174,7 @@ export async function POST(request: NextRequest) {
         session_id: apiData.session_id,
         refresh_token: apiData.refresh_token,
         mfa_method: apiData.mfa_method || 'totp',
+        mfa_methods_available: Array.isArray(apiData.mfa_methods_available) ? apiData.mfa_methods_available : undefined,
         detail: apiData.detail || 'MFA required',
       }, { status: 200 });
     }

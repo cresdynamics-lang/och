@@ -3,7 +3,7 @@ Serializers for Mentorship Coordination Engine.
 """
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import MenteeMentorAssignment, MentorSession, MentorWorkQueue, MentorFlag, MentorshipMessage, MessageAttachment, NotificationLog
+from .models import MenteeMentorAssignment, MentorSession, MentorWorkQueue, MentorFlag, MentorshipMessage, MessageAttachment, DirectorMentorMessage, NotificationLog
 
 User = get_user_model()
 
@@ -390,6 +390,75 @@ class SendMessageSerializer(serializers.Serializer):
     assignment_id = serializers.UUIDField(help_text='Mentor-mentee assignment ID')
     recipient_id = serializers.IntegerField(help_text='Recipient user ID')
     subject = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    body = serializers.CharField(help_text='Message content')
+
+
+class DirectorMentorMessageSerializer(serializers.ModelSerializer):
+    """Serializer for director-mentor messages."""
+    sender_name = serializers.SerializerMethodField()
+    sender_email = serializers.SerializerMethodField()
+    recipient_name = serializers.SerializerMethodField()
+    recipient_email = serializers.SerializerMethodField()
+    sender = serializers.SerializerMethodField()
+    recipient = serializers.SerializerMethodField()
+
+    def _user_display(self, user):
+        if not user:
+            return "", ""
+        try:
+            get_full_name = getattr(user, "get_full_name", None)
+            if callable(get_full_name):
+                name = get_full_name() or ""
+            else:
+                name = ""
+            if not name:
+                first = getattr(user, "first_name", "") or ""
+                last = getattr(user, "last_name", "") or ""
+                name = f"{first} {last}".strip()
+            if not name:
+                name = getattr(user, "email", None) or ""
+            return (name, getattr(user, "email", None) or "")
+        except Exception:
+            return (getattr(user, "email", "") or "", "")
+
+    def _user_obj(self, user):
+        if not user:
+            return None
+        name, email = self._user_display(user)
+        return {'id': str(user.id), 'name': name, 'email': email}
+
+    def get_sender_name(self, obj):
+        return self._user_display(obj.sender)[0]
+
+    def get_sender_email(self, obj):
+        return self._user_display(obj.sender)[1]
+
+    def get_recipient_name(self, obj):
+        return self._user_display(obj.recipient)[0]
+
+    def get_recipient_email(self, obj):
+        return self._user_display(obj.recipient)[1]
+
+    def get_sender(self, obj):
+        return self._user_obj(obj.sender)
+
+    def get_recipient(self, obj):
+        return self._user_obj(obj.recipient)
+
+    class Meta:
+        model = DirectorMentorMessage
+        fields = [
+            'id', 'sender', 'recipient', 'sender_name', 'sender_email',
+            'recipient_name', 'recipient_email', 'subject', 'body',
+            'is_read', 'read_at', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'sender', 'created_at', 'updated_at', 'read_at']
+
+
+class SendDirectorMentorMessageSerializer(serializers.Serializer):
+    """Serializer for sending a director-mentor message."""
+    recipient_id = serializers.IntegerField(help_text='Recipient user ID (director if sender is mentor, mentor if sender is director)')
+    subject = serializers.CharField(max_length=255, required=False, allow_blank=True)
     body = serializers.CharField(help_text='Message content')
 
 

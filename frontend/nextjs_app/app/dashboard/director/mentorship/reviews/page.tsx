@@ -6,6 +6,8 @@ import { DirectorLayout } from '@/components/director/DirectorLayout'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { DirectorMentorChat } from '@/components/mentor/DirectorMentorChat'
 import { djangoClient } from '@/services/djangoClient'
 import { useCohorts, usePrograms, useTracks } from '@/hooks/usePrograms'
 import { useUsers } from '@/hooks/useUsers'
@@ -81,6 +83,7 @@ export default function MentorReviewsPage() {
   const [expandedReview, setExpandedReview] = useState<string | null>(null)
   const [commentText, setCommentText] = useState<Record<string, string>>({})
   const [isSubmittingComment, setIsSubmittingComment] = useState<string | null>(null)
+  const [chatMentor, setChatMentor] = useState<{ id: number; name: string; email: string } | null>(null)
 
   // Debounce search
   useEffect(() => {
@@ -438,15 +441,30 @@ export default function MentorReviewsPage() {
                               </div>
                             </div>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setExpandedReview(review.id)}
-                              className="mt-4"
-                            >
-                              <MessageSquareIcon />
-                              <span className="ml-2">Add Comment</span>
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2 mt-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setExpandedReview(review.id)}
+                              >
+                                <MessageSquareIcon />
+                                <span className="ml-2">Add Comment</span>
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setChatMentor({
+                                    id: Number(review.mentor_id),
+                                    name: review.mentor_name ?? review.mentor_email ?? 'Mentor',
+                                    email: review.mentor_email ?? '',
+                                  })
+                                }
+                              >
+                                <MessageSquareIcon />
+                                <span className="ml-2">Chat with mentor</span>
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -456,6 +474,23 @@ export default function MentorReviewsPage() {
               )}
             </div>
           </Card>
+
+          {/* Director–mentor chat dialog */}
+          <Dialog
+            open={!!chatMentor}
+            onOpenChange={(open) => !open && setChatMentor(null)}
+          >
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              {chatMentor ? (
+                <div className="flex-1 min-h-0 -m-6">
+                  <DirectorMentorChat
+                    otherUser={chatMentor}
+                    onMessagesUpdated={() => {}}
+                  />
+                </div>
+              ) : null}
+            </DialogContent>
+          </Dialog>
         </div>
       </DirectorLayout>
     </RouteGuard>

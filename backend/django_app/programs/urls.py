@@ -47,6 +47,7 @@ from .views.director_students_views import (
     director_sponsors_list,
     link_students_to_sponsor,
     unlink_students_from_sponsor,
+    change_student_track,
     remove_direct_mentor_assignment,
     sponsor_linked_students
 )
@@ -128,6 +129,7 @@ urlpatterns = [
     path('director/sponsors/', director_sponsors_list, name='director-sponsors-list'),
     path('director/students/link-sponsor/', link_students_to_sponsor, name='link-students-to-sponsor'),
     path('director/students/unlink-sponsor/', unlink_students_from_sponsor, name='unlink-students-from-sponsor'),
+    path('director/students/change-track/', change_student_track, name='change-student-track'),
     path('director/students/remove-mentor/', remove_direct_mentor_assignment, name='remove-direct-mentor-assignment'),
     path('director/sponsors/<str:sponsor_id>/students/', sponsor_linked_students, name='sponsor-linked-students'),
     path('director/mentors/<int:mentor_id>/analytics/', director_mentor_analytics_view, name='director-mentor-analytics'),

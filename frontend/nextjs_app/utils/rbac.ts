@@ -54,6 +54,7 @@ export const DIRECTOR_NAV_PERMISSIONS: Record<string, string> = {
   '/dashboard/director/mentors': 'list_mentorship',
   '/dashboard/director/mentorship/matching': 'create_mentorship',
   '/dashboard/director/mentorship/reviews': 'read_mentorship',
+  '/dashboard/director/messages': 'read_mentorship',
   '/dashboard/director/mentorship/cycles': 'update_mentorship',
   '/dashboard/director/analytics': 'read_analytics',
   '/dashboard/director/settings': 'manage_cohorts',

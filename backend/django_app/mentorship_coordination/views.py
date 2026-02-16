@@ -13,7 +13,7 @@ from datetime import timedelta
 import json
 import uuid
 
-from .models import MenteeMentorAssignment, MentorSession, MentorWorkQueue, MentorFlag, SessionAttendance, SessionFeedback, MentorshipMessage, MessageAttachment, NotificationLog
+from .models import MenteeMentorAssignment, MentorSession, MentorWorkQueue, MentorFlag, SessionAttendance, SessionFeedback, MentorshipMessage, MessageAttachment, DirectorMentorMessage, NotificationLog
 from .serializers import (
     MenteeMentorAssignmentSerializer,
     MentorSessionSerializer,
@@ -24,6 +24,8 @@ from .serializers import (
     MissionReviewSerializer,
     CreateFlagSerializer,
     MentorshipMessageSerializer,
+    DirectorMentorMessageSerializer,
+    SendDirectorMentorMessageSerializer,
     NotificationLogSerializer,
     CreateNotificationSerializer
 )
@@ -3852,6 +3854,191 @@ def mark_message_read(request, message_id):
             {'error': 'Internal server error'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+def _user_is_director(user):
+    return user.user_roles.filter(role__name='program_director', is_active=True).exists()
+
+
+def _user_is_mentor(user):
+    return user.user_roles.filter(role__name='mentor', is_active=True).exists()
+
+
+def _user_display_name(user):
+    if not user:
+        return ""
+    name = getattr(user, "get_full_name", None)
+    if callable(name):
+        name = name()
+    if name:
+        return name
+    first = getattr(user, "first_name", "") or ""
+    last = getattr(user, "last_name", "") or ""
+    combined = f"{first} {last}".strip()
+    return combined or (getattr(user, "email", None) or "")
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def director_mentor_conversations(request):
+    """
+    GET /api/v1/mentorship/director-mentor/conversations
+    List conversations: if mentor → list directors I have chatted with; if director → list mentors.
+    Each item includes other_user (id, name, email), last_message, unread_count.
+    """
+    is_director = _user_is_director(request.user)
+    is_mentor = _user_is_mentor(request.user)
+    if not is_director and not is_mentor:
+        return Response(
+            {'error': 'Only directors and mentors can access director-mentor conversations'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    # Other user: if I'm mentor, other = director; if I'm director, other = mentor
+    sent = DirectorMentorMessage.objects.filter(sender=request.user).values_list('recipient_id', flat=True).distinct()
+    received = DirectorMentorMessage.objects.filter(recipient=request.user).values_list('sender_id', flat=True).distinct()
+    other_ids = list(set(sent) | set(received))
+    if not other_ids:
+        return Response([], status=status.HTTP_200_OK)
+    users = User.objects.filter(id__in=other_ids).distinct()
+    # Filter by role: other must be director if I'm mentor, mentor if I'm director
+    if is_mentor:
+        users = users.filter(user_roles__role__name='program_director', user_roles__is_active=True)
+    else:
+        users = users.filter(user_roles__role__name='mentor', user_roles__is_active=True)
+    users = users.distinct()
+    last_msg_map = {}
+    for m in DirectorMentorMessage.objects.filter(
+        Q(sender=request.user, recipient_id__in=other_ids) | Q(recipient=request.user, sender_id__in=other_ids)
+    ).order_by('created_at'):
+        key = m.recipient_id if m.sender_id == request.user.id else m.sender_id
+        last_msg_map[key] = m
+    unread_map = {}
+    for row in DirectorMentorMessage.objects.filter(recipient=request.user, is_read=False).values('sender_id').annotate(cnt=Count('id')):
+        unread_map[row['sender_id']] = row['cnt']
+    out = []
+    for u in users:
+        last_m = last_msg_map.get(u.id)
+        out.append({
+            'other_user': {
+                'id': u.id,
+                'name': _user_display_name(u),
+                'email': u.email or '',
+            },
+            'last_message': DirectorMentorMessageSerializer(last_m).data if last_m else None,
+            'unread_count': unread_map.get(u.id, 0),
+        })
+    out.sort(
+        key=lambda x: (x['last_message']['created_at'] if x['last_message'] else '1970-01-01T00:00:00Z'),
+        reverse=True,
+    )
+    return Response(out, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def director_mentor_available(request):
+    """
+    GET /api/v1/mentorship/director-mentor/available
+    List users I can start a conversation with: if mentor → directors; if director → mentors.
+    """
+    is_director = _user_is_director(request.user)
+    is_mentor = _user_is_mentor(request.user)
+    if not is_director and not is_mentor:
+        return Response(
+            {'error': 'Only directors and mentors can use this endpoint'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    if is_mentor:
+        users = User.objects.filter(
+            user_roles__role__name='program_director',
+            user_roles__is_active=True
+        ).distinct().order_by('first_name', 'last_name')
+    else:
+        users = User.objects.filter(
+            user_roles__role__name='mentor',
+            user_roles__is_active=True
+        ).distinct().order_by('first_name', 'last_name')
+    out = [
+        {'id': u.id, 'name': _user_display_name(u), 'email': u.email or ''}
+        for u in users
+    ]
+    return Response(out, status=status.HTTP_200_OK)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def director_mentor_messages(request):
+    """
+    GET /api/v1/mentorship/director-mentor/messages?other_user_id=<id>
+    Get messages between me and other_user_id.
+    POST /api/v1/mentorship/director-mentor/messages
+    Send a message (body, recipient_id, optional subject).
+    """
+    is_director = _user_is_director(request.user)
+    is_mentor = _user_is_mentor(request.user)
+    if not is_director and not is_mentor:
+        return Response(
+            {'error': 'Only directors and mentors can access director-mentor messages'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    if request.method == 'GET':
+        other_id = request.query_params.get('other_user_id')
+        if not other_id:
+            return Response({'error': 'other_user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            other = User.objects.get(id=other_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if is_mentor and not _user_is_director(other):
+            return Response({'error': 'You can only message directors'}, status=status.HTTP_403_FORBIDDEN)
+        if is_director and not _user_is_mentor(other):
+            return Response({'error': 'You can only message mentors'}, status=status.HTTP_403_FORBIDDEN)
+        messages = DirectorMentorMessage.objects.filter(
+            Q(sender=request.user, recipient=other) | Q(sender=other, recipient=request.user)
+        ).select_related('sender', 'recipient').order_by('created_at')
+        serializer = DirectorMentorMessageSerializer(messages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        serializer = SendDirectorMentorMessageSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        try:
+            recipient = User.objects.get(id=data['recipient_id'])
+        except User.DoesNotExist:
+            return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
+        if is_mentor and not _user_is_director(recipient):
+            return Response({'error': 'You can only message directors'}, status=status.HTTP_403_FORBIDDEN)
+        if is_director and not _user_is_mentor(recipient):
+            return Response({'error': 'You can only message mentors'}, status=status.HTTP_403_FORBIDDEN)
+        msg = DirectorMentorMessage.objects.create(
+            sender=request.user,
+            recipient=recipient,
+            subject=data.get('subject', ''),
+            body=data['body'],
+        )
+        msg = DirectorMentorMessage.objects.select_related('sender', 'recipient').get(id=msg.id)
+        return Response(DirectorMentorMessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def director_mentor_message_read(request, message_id):
+    """
+    PATCH /api/v1/mentorship/director-mentor/messages/<message_id>/read
+    Mark a director-mentor message as read.
+    """
+    try:
+        message = DirectorMentorMessage.objects.get(id=message_id)
+        if request.user.id != message.recipient.id:
+            return Response({'error': 'You can only mark your own messages as read'}, status=status.HTTP_403_FORBIDDEN)
+        if not message.is_read:
+            message.is_read = True
+            message.read_at = timezone.now()
+            message.save(update_fields=['is_read', 'read_at'])
+        return Response(DirectorMentorMessageSerializer(message).data, status=status.HTTP_200_OK)
+    except DirectorMentorMessage.DoesNotExist:
+        return Response({'error': 'Message not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['POST'])

@@ -4,6 +4,7 @@ Director Students Management API Views
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from programs.permissions import IsProgramDirector
+from programs.models import Track
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
@@ -344,6 +345,51 @@ def unlink_students_from_sponsor(request):
             'success': False,
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsProgramDirector])
+def change_student_track(request):
+    """Change a student's track. Body: student_id (uuid_id), curriculum_track_slug (e.g. defender, grc). Updates User.track_key from curriculum track."""
+    try:
+        student_id = request.data.get('student_id')
+        curriculum_track_slug = (request.data.get('curriculum_track_slug') or '').strip()
+        track_id = request.data.get('track_id')
+        if not student_id:
+            return Response({'success': False, 'error': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            student = User.objects.get(uuid_id=student_id, is_active=True)
+        except User.DoesNotExist:
+            return Response({'success': False, 'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        track_key_value = None
+        track_name = None
+        if curriculum_track_slug:
+            from curriculum.models import CurriculumTrack
+            try:
+                ct = CurriculumTrack.objects.get(slug=curriculum_track_slug, is_active=True)
+            except CurriculumTrack.DoesNotExist:
+                return Response({'success': False, 'error': 'Curriculum track not found'}, status=status.HTTP_404_NOT_FOUND)
+            track_key_value = ct.slug or ct.code.lower() if ct.code else ''
+            track_name = ct.title or ct.name
+        elif track_id:
+            try:
+                track = Track.objects.get(id=track_id)
+            except Track.DoesNotExist:
+                return Response({'success': False, 'error': 'Track not found'}, status=status.HTTP_404_NOT_FOUND)
+            track_key_value = track.key or ''
+            track_name = track.name
+        if not track_key_value:
+            return Response({'success': False, 'error': 'curriculum_track_slug or track_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        student.track_key = track_key_value
+        student.save(update_fields=['track_key'])
+        return Response({
+            'success': True,
+            'message': f"Student's track updated to {track_name}",
+            'track_key': track_key_value,
+            'track_name': track_name,
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])

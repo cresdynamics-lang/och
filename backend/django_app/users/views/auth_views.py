@@ -456,13 +456,22 @@ class LoginView(APIView):
                 ip_address=ip_address,
                 user_agent=user_agent
             )
+            # User's enabled MFA method types (priority order: TOTP, email, SMS)
+            enabled_types = list(
+                MFAMethod.objects.filter(user=user, enabled=True)
+                .values_list('method_type', flat=True)
+                .distinct()
+            )
+            mfa_priority = ['totp', 'email', 'sms']
+            preferred = next((m for m in mfa_priority if m in enabled_types), (enabled_types[0] if enabled_types else 'totp'))
             return Response(
                 {
                     'detail': 'MFA required',
                     'mfa_required': True,
                     'session_id': str(session.id),
                     'refresh_token': refresh_token,
-                    'mfa_method': (user.mfa_method or 'totp').lower(),
+                    'mfa_method': preferred,
+                    'mfa_methods_available': [m for m in mfa_priority if m in enabled_types],
                 },
                 status=status.HTTP_200_OK
             )

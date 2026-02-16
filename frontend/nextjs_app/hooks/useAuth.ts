@@ -122,6 +122,9 @@ export function useAuth() {
           refresh_token: responseData.refresh_token,
           session_id: responseData.session_id,
           mfa_method: responseData.mfa_method || 'totp',
+          mfa_methods_available: Array.isArray(responseData.mfa_methods_available)
+            ? responseData.mfa_methods_available
+            : undefined,
         };
       }
       
@@ -203,6 +206,17 @@ export function useAuth() {
     localStorage.setItem('auth_token', access_token);
     if (newRefreshToken) {
       localStorage.setItem('refresh_token', newRefreshToken);
+    }
+    // Set auth cookies so middleware sees the user on next request (prevents redirect back to login)
+    try {
+      await fetch('/api/auth/set-tokens', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token, refresh_token: newRefreshToken }),
+      });
+    } catch (e) {
+      console.warn('[useAuth] set-tokens failed:', e);
     }
     let fullUser = userData;
     try {

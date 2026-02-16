@@ -102,7 +102,11 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const hasRedirectedRef = useRef(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [mfaPending, setMfaPending] = useState<{ refresh_token: string; mfa_method: string } | null>(null);
+  const [mfaPending, setMfaPending] = useState<{
+    refresh_token: string;
+    mfa_method: string;
+    mfa_methods_available?: string[];
+  } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaMethod, setMfaMethod] = useState<'totp' | 'sms' | 'email' | 'backup_codes'>('totp');
   const [mfaSending, setMfaSending] = useState(false);
@@ -196,12 +200,16 @@ function LoginForm() {
         mfaRequired: !!(result && 'mfaRequired' in result && result.mfaRequired),
       });
 
-      // MFA required — show MFA step without throwing
+      // MFA required — show MFA step without throwing (backend sends preferred method: TOTP → email → SMS)
       if (result && 'mfaRequired' in result && result.mfaRequired && result.refresh_token) {
         const backendMethod = (result.mfa_method || 'totp').toLowerCase();
+        const available: string[] = Array.isArray((result as any).mfa_methods_available)
+          ? (result as any).mfa_methods_available
+          : [backendMethod];
         setMfaPending({
           refresh_token: result.refresh_token,
           mfa_method: backendMethod,
+          mfa_methods_available: available,
         });
         if (backendMethod === 'sms' || backendMethod === 'email') {
           setMfaMethod(backendMethod === 'sms' ? 'sms' : 'email');
@@ -644,9 +652,11 @@ function LoginForm() {
 
       if (err?.mfa_required && err?.refresh_token) {
         const backendMethod = (err.mfa_method || 'totp').toLowerCase();
+        const available: string[] = Array.isArray(err.mfa_methods_available) ? err.mfa_methods_available : [backendMethod];
         setMfaPending({
           refresh_token: err.refresh_token,
           mfa_method: backendMethod,
+          mfa_methods_available: available,
         });
         if (backendMethod === 'sms' || backendMethod === 'email') {
           setMfaMethod(backendMethod === 'sms' ? 'sms' : 'email');
@@ -805,16 +815,16 @@ function LoginForm() {
               <div>
                 <h2 className="text-xl font-bold text-white mb-1">Verify your identity</h2>
                 <p className="text-slate-400 text-sm">
-                  {mfaPending.mfa_method === 'totp' || mfaMethod === 'totp'
+                  {mfaMethod === 'totp'
                     ? 'Enter the code from your authenticator app.'
-                    : mfaPending.mfa_method === 'backup_codes' || mfaMethod === 'backup_codes'
+                    : mfaMethod === 'backup_codes'
                     ? 'Enter one of your backup codes.'
                     : mfaMethod === 'sms'
                     ? 'Enter the code we sent to your phone.'
                     : 'Enter the code we sent to your email.'}
                 </p>
               </div>
-              {(mfaPending.mfa_method === 'sms' || mfaPending.mfa_method === 'email') && (
+              {(mfaMethod === 'sms' || mfaMethod === 'email') && (
                 <div className="space-y-2">
                   <p className="text-slate-400 text-xs">
                     {expirySecondsRemaining > 0
@@ -849,20 +859,43 @@ function LoginForm() {
                           ? 'Resend code via SMS'
                           : 'Resend code via email'}
                   </Button>
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      className="text-sm text-och-steel hover:text-och-mint transition-colors"
-                      disabled={mfaSending || resendCooldownSeconds > 0}
-                      onClick={() => {
-                        setMfaMethod(mfaMethod === 'sms' ? 'email' : 'sms');
-                        setMfaCode('');
-                        setError(null);
-                      }}
-                    >
-                      {mfaMethod === 'sms' ? 'Use email instead' : 'Use SMS instead'}
-                    </button>
-                  </div>
+                  {(() => {
+                    const available = mfaPending.mfa_methods_available ?? [mfaPending.mfa_method];
+                    const others = available.filter((m) => m !== mfaMethod && (m === 'totp' || m === 'email' || m === 'sms'));
+                    if (others.length === 0) return null;
+                    const labels: Record<string, string> = { totp: 'Use authenticator app', email: 'Use email instead', sms: 'Use SMS instead' };
+                    return (
+                      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                        {others.map((method) => (
+                          <button
+                            key={method}
+                            type="button"
+                            className="text-sm text-och-steel hover:text-och-mint transition-colors disabled:opacity-50"
+                            disabled={mfaSending || resendCooldownSeconds > 0}
+                            onClick={async () => {
+                              setMfaCode('');
+                              setError(null);
+                              setMfaMethod(method as 'totp' | 'sms' | 'email');
+                              if (method === 'email' || method === 'sms') {
+                                setMfaSending(true);
+                                try {
+                                  await sendMFAChallenge(mfaPending.refresh_token, method);
+                                  setResendCooldownSeconds(MFA_RESEND_COOLDOWN_SECONDS);
+                                  setExpirySecondsRemaining(MFA_CODE_EXPIRY_SECONDS);
+                                } catch (e: any) {
+                                  setError(e?.data?.detail || e?.message || 'Failed to send code');
+                                } finally {
+                                  setMfaSending(false);
+                                }
+                              }
+                            }}
+                          >
+                            {labels[method] ?? method}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               <form
@@ -915,22 +948,58 @@ function LoginForm() {
                     placeholder={mfaMethod === 'backup_codes' ? 'Backup code' : '000000'}
                   />
                 </div>
-                {mfaPending.mfa_method === 'totp' && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMfaMethod('totp')}
-                      className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'totp' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400'}`}
-                    >
-                      Authenticator app
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMfaMethod('backup_codes')}
-                      className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'backup_codes' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400'}`}
-                    >
-                      Backup code
-                    </button>
+                {((mfaPending.mfa_methods_available?.includes('totp')) ?? (mfaPending.mfa_method === 'totp')) && (mfaMethod === 'totp' || mfaMethod === 'backup_codes') && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMfaMethod('totp')}
+                        className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'totp' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400 hover:text-slate-300'}`}
+                      >
+                        Authenticator app
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMfaMethod('backup_codes')}
+                        className={`px-3 py-1.5 text-sm rounded-lg ${mfaMethod === 'backup_codes' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'border border-slate-600 text-slate-400 hover:text-slate-300'}`}
+                      >
+                        Backup code
+                      </button>
+                    </div>
+                    {(() => {
+                      const available = mfaPending.mfa_methods_available ?? [mfaPending.mfa_method];
+                      const others = available.filter((m) => m === 'email' || m === 'sms');
+                      if (others.length === 0) return null;
+                      const labels: Record<string, string> = { email: 'Use email instead', sms: 'Use SMS instead' };
+                      return (
+                        <div className="flex flex-wrap justify-center gap-x-4">
+                          {others.map((method) => (
+                            <button
+                              key={method}
+                              type="button"
+                              className="text-sm text-och-steel hover:text-och-mint transition-colors"
+                              onClick={async () => {
+                                setMfaCode('');
+                                setError(null);
+                                setMfaMethod(method as 'email' | 'sms');
+                                setMfaSending(true);
+                                try {
+                                  await sendMFAChallenge(mfaPending.refresh_token, method);
+                                  setResendCooldownSeconds(MFA_RESEND_COOLDOWN_SECONDS);
+                                  setExpirySecondsRemaining(MFA_CODE_EXPIRY_SECONDS);
+                                } catch (e: any) {
+                                  setError(e?.data?.detail || e?.message || 'Failed to send code');
+                                } finally {
+                                  setMfaSending(false);
+                                }
+                              }}
+                            >
+                              {labels[method]}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 <div className="flex gap-2">
