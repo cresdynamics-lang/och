@@ -14,6 +14,7 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Case, When, Value, IntegerField
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -930,7 +931,20 @@ class MFAMethodsListView(APIView):
 
     def get(self, request):
         user = request.user
-        methods = MFAMethod.objects.filter(user=user, enabled=True).order_by('-is_primary', 'method_type')
+        # Order: Authenticator (totp) first, then Email, then SMS; primary first within each.
+        methods = (
+            MFAMethod.objects.filter(user=user, enabled=True)
+            .annotate(
+                _order=Case(
+                    When(method_type='totp', then=Value(0)),
+                    When(method_type='email', then=Value(1)),
+                    When(method_type='sms', then=Value(2)),
+                    default=Value(99),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by('_order', '-is_primary')
+        )
         user_email = getattr(user, 'email', '') or ''
         out = []
         for m in methods:

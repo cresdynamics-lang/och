@@ -14,10 +14,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiGateway } from '@/services/apiGateway';
 import { djangoClient } from '@/services/djangoClient';
 
+// Display/challenge order: Authenticator first, then Email, then SMS
+const MFA_PRIORITY_ORDER: ('totp' | 'email' | 'sms')[] = ['totp', 'email', 'sms'];
 const MFA_METHODS: { id: 'totp' | 'sms' | 'email'; label: string; description: string; icon: typeof Shield }[] = [
   { id: 'totp', label: 'Authenticator app', description: 'Code from an app (Google Authenticator, Authy)', icon: Shield },
-  { id: 'sms', label: 'SMS', description: 'Code sent to your phone', icon: Smartphone },
   { id: 'email', label: 'Email', description: 'Code sent to your email', icon: Mail },
+  { id: 'sms', label: 'SMS', description: 'Code sent to your phone', icon: Smartphone },
 ];
 
 const ROLES_REQUIRING_TWO_MFA = ['program_director', 'director', 'admin', 'finance', 'finance_admin', 'analyst', 'mentor'];
@@ -80,6 +82,24 @@ export function OCHSettingsSecurity() {
   const mfaWizardOpen = mfaParam === 'true' && !loading && !!profile && !profile.mfa_enabled;
   const mfaManageView = mfaParam === 'manage' && !!profile?.mfa_enabled;
   const mfaManageWizardOpen = mfaManageView && mfaManageAdding !== null;
+
+  /** Current security page URL (same dashboard: mentor profile, director settings, etc.) with optional ?mfa= */
+  const getSecurityUrl = (mfaValue?: string): string => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    if (mfaValue !== undefined) params.set('mfa', mfaValue);
+    else params.delete('mfa');
+    const q = params.toString();
+    return q ? `${pathname}?${q}` : pathname;
+  };
+
+  /** MFA methods list sorted: Authenticator first, then Email, then SMS */
+  const mfaMethodsListSorted = useMemo(() => {
+    return [...(mfaMethodsList || [])].sort((a, b) => {
+      const i = MFA_PRIORITY_ORDER.indexOf((a.method_type as 'totp' | 'email' | 'sms'));
+      const j = MFA_PRIORITY_ORDER.indexOf((b.method_type as 'totp' | 'email' | 'sms'));
+      return (i === -1 ? 99 : i) - (j === -1 ? 99 : j);
+    });
+  }, [mfaMethodsList]);
 
   const minMFARequired = useMemo(() => getMFARequiredMin(user?.roles), [user?.roles]);
 
@@ -289,7 +309,7 @@ export function OCHSettingsSecurity() {
   };
 
   const handleMFAEnable = () => {
-    router.push(pathname + '?mfa=true');
+    router.push(getSecurityUrl('true'));
     setShowMFAEnable(false);
   };
 
@@ -308,7 +328,7 @@ export function OCHSettingsSecurity() {
     setSmsPhone('');
     setError(null);
     setMfaManageAdding(null);
-    router.replace(pathname);
+    router.replace(getSecurityUrl());
     loadProfile();
     reloadUser();
   };
@@ -599,7 +619,7 @@ export function OCHSettingsSecurity() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => router.push('/dashboard/student/settings/security')}
+                onClick={() => router.push(getSecurityUrl())}
                 className="text-och-steel hover:text-white"
               >
                 ← Back
@@ -625,7 +645,7 @@ export function OCHSettingsSecurity() {
                 </div>
               ) : (
                 <ul className="space-y-2">
-                  {mfaMethodsList.map((m) => {
+                  {mfaMethodsListSorted.map((m) => {
                     const meta = MFA_METHODS.find((x) => x.id === m.method_type);
                     const Icon = meta?.icon ?? Shield;
                     const label = meta?.label ?? m.method_type;
@@ -702,7 +722,7 @@ export function OCHSettingsSecurity() {
             {/* Add another method */}
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-white uppercase tracking-wide">Add another method</h3>
-              <p className="text-xs text-och-steel mb-3">Add TOTP, SMS, or Email to use as a second option when signing in.</p>
+              <p className="text-xs text-och-steel mb-3">Add Authenticator app, Email, or SMS to use as a second option when signing in.</p>
               <div className="flex flex-wrap gap-3">
                 {!hasMethod('totp') && (
                   <Button
@@ -715,17 +735,6 @@ export function OCHSettingsSecurity() {
                     Add authenticator app
                   </Button>
                 )}
-                {!hasMethod('sms') && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openAddMethodWizard('sms')}
-                    className="border-och-steel/30 text-och-steel hover:border-och-mint/50 hover:text-och-mint"
-                  >
-                    <Smartphone className="w-4 h-4 mr-2" />
-                    Add SMS
-                  </Button>
-                )}
                 {!hasMethod('email') && (
                   <Button
                     variant="outline"
@@ -735,6 +744,17 @@ export function OCHSettingsSecurity() {
                   >
                     <Mail className="w-4 h-4 mr-2" />
                     Add email
+                  </Button>
+                )}
+                {!hasMethod('sms') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openAddMethodWizard('sms')}
+                    className="border-och-steel/30 text-och-steel hover:border-och-mint/50 hover:text-och-mint"
+                  >
+                    <Smartphone className="w-4 h-4 mr-2" />
+                    Add SMS
                   </Button>
                 )}
                 {hasMethod('totp') && hasMethod('sms') && hasMethod('email') && (
@@ -1075,7 +1095,7 @@ export function OCHSettingsSecurity() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push('/dashboard/student/settings/security?mfa=manage')}
+                    onClick={() => router.push(getSecurityUrl('manage'))}
                     disabled={saving}
                   >
                     Manage
