@@ -97,19 +97,18 @@ DELETE FROM roles_permissions WHERE role_id = (SELECT id FROM roles WHERE name =
 INSERT INTO roles_permissions (role_id, permission_id)
 SELECT (SELECT id FROM roles WHERE name = 'admin'), id FROM permissions;
 
--- Program Director
+-- Program Director (minimal dashboard only: read_analytics)
+-- Full: Overview, Setup, Cohorts, Enrollment, Mentorship, Analytics, Settings
 DELETE FROM roles_permissions WHERE role_id = (SELECT id FROM roles WHERE name = 'program_director');
 INSERT INTO roles_permissions (role_id, permission_id)
 SELECT (SELECT id FROM roles WHERE name = 'program_director'), id FROM permissions
 WHERE name IN (
-  'read_user', 'list_users',
-  'read_organization', 'list_organizations',
-  'create_cohort', 'read_cohort', 'update_cohort', 'list_cohorts', 'manage_cohorts',
-  'create_track', 'read_track', 'update_track', 'list_tracks', 'manage_tracks',
-  'read_portfolio', 'list_portfolios',
-  'read_profiling', 'list_profiling',
-  'create_mentorship', 'read_mentorship', 'update_mentorship', 'list_mentorship',
-  'read_analytics', 'list_analytics'
+  'read_analytics', 'list_analytics',
+  'list_tracks', 'read_track', 'create_track', 'update_track', 'manage_tracks',
+  'list_cohorts', 'read_cohort', 'create_cohort', 'update_cohort', 'manage_cohorts',
+  'list_users', 'read_user', 'list_organizations', 'read_organization',
+  'list_mentorship', 'read_mentorship', 'create_mentorship', 'update_mentorship',
+  'read_portfolio', 'list_portfolios', 'read_profiling', 'list_profiling'
 );
 
 -- Mentor

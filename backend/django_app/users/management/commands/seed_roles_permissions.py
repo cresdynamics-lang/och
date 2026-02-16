@@ -112,70 +112,74 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"Created permission: {name}"))
         
         # Define roles with their permissions
+        # Permissions map to sidebars: see frontend utils/rbac.ts (DIRECTOR_NAV, ADMIN_NAV) and nav components
         roles_data = [
             {
                 'name': 'admin',
                 'display_name': 'Admin',
                 'description': 'Full platform admin; manage roles/policies, tenants, secrets',
+                # Admin sidebar: Overview, Users, Subscriptions, Recipes, Marketplace, Roles, Audit, Settings, API Keys
                 'permissions': [p for p in created_permissions.keys()],  # All permissions
             },
             {
                 'name': 'program_director',
                 'display_name': 'Program Director',
-                'description': 'Manage programs/cohorts/tracks; view analytics; assign mentors',
+                'description': 'Manage programs/cohorts/tracks; view analytics; assign mentors. Minimal (dashboard only): read_analytics',
+                # Director sidebar permissions (see DirectorNavigation + rbac.ts DIRECTOR_NAV_PERMISSIONS):
+                # Overview, Analytics -> read_analytics
+                # Setup & Foundation (programs, tracks, missions, etc.) -> list_tracks
+                # Cohort Mgmt (cohorts, applications, calendar) -> list_cohorts
+                # Sponsors -> list_organizations | Students -> list_users
+                # Enrollment, Seats, Overrides, Settings -> manage_cohorts
+                # Mentors, Matching, Reviews, Cycles -> list_mentorship, create_mentorship, read_mentorship, update_mentorship
                 'permissions': [
-                    'read_user', 'list_users',
-                    'read_organization', 'list_organizations',
-                    'create_cohort', 'read_cohort', 'update_cohort', 'list_cohorts', 'manage_cohorts',
-                    'create_track', 'read_track', 'update_track', 'list_tracks', 'manage_tracks',
-                    'read_portfolio', 'list_portfolios',
-                    'read_profiling', 'list_profiling',
-                    'create_mentorship', 'read_mentorship', 'update_mentorship', 'list_mentorship',
-                    'read_analytics', 'list_analytics',
+                    'read_analytics', 'list_analytics',  # Dashboard overview + Analytics & Reports
+                    'list_tracks', 'read_track', 'create_track', 'update_track', 'manage_tracks',  # Setup & Foundation
+                    'list_cohorts', 'read_cohort', 'create_cohort', 'update_cohort', 'manage_cohorts',  # Cohort Mgmt
+                    'list_users', 'read_user',  # Students
+                    'list_organizations', 'read_organization',  # Sponsors
+                    'list_mentorship', 'read_mentorship', 'create_mentorship', 'update_mentorship',  # Mentorship
+                    'read_portfolio', 'list_portfolios',  # Portfolio access for director view
+                    'read_profiling', 'list_profiling',  # Profiling for director view
                 ],
             },
             {
                 'name': 'mentor',
                 'display_name': 'Mentor',
                 'description': 'Access assigned mentees; create notes; review portfolios; limited analytics',
+                # Mentor sidebar: Dashboard, Cohorts & Tracks, Sessions, Messages, Analytics, Profile, Missions, Reviews
                 'permissions': [
-                    'read_user',  # Only assigned mentees
-                    'read_portfolio', 'update_portfolio',
-                    'read_profiling',  # Only with consent
-                    'create_mentorship', 'read_mentorship', 'update_mentorship',
-                    'read_analytics',  # Limited analytics
+                    'read_user', 'read_portfolio', 'update_portfolio',
+                    'read_profiling', 'create_mentorship', 'read_mentorship', 'update_mentorship',
+                    'read_analytics',
                 ],
             },
             {
                 'name': 'mentee',
                 'display_name': 'Mentee',
                 'description': 'Primary user role for mentees in the OCH ecosystem (Tier 0 and Tier 1)',
+                # Mentee/Student dashboard: profile, portfolio, profiler, future-you, missions, community
                 'permissions': [
-                    'read_user',  # Own profile
-                    'update_user',  # Own profile
-                    'read_portfolio',  # Own portfolio
-                    'create_portfolio', 'update_portfolio',
-                    'read_profiling',  # Own profiling
-                    'create_profiling', 'update_profiling',
-                    'read_mentorship',  # Own mentorship
-                    'read_analytics',  # Own analytics
+                    'read_user', 'update_user', 'read_portfolio', 'create_portfolio', 'update_portfolio',
+                    'read_profiling', 'create_profiling', 'update_profiling',
+                    'read_mentorship', 'read_analytics',
                 ],
             },
             {
                 'name': 'student',
                 'display_name': 'Student',
                 'description': 'Access personal modules (profiling, learning, portfolio, mentorship)',
+                # Student dashboard: profile, portfolio, profiler, missions, community
                 'permissions': [
-                    'read_user', 'update_user',  # Own profile
-                    'read_portfolio', 'create_portfolio', 'update_portfolio',  # Own portfolio
-                    'read_profiling', 'update_profiling',  # Own profiling
-                    'read_mentorship',  # Own mentorship
+                    'read_user', 'update_user', 'read_portfolio', 'create_portfolio', 'update_portfolio',
+                    'read_profiling', 'update_profiling', 'read_mentorship',
                 ],
             },
             {
                 'name': 'finance',
                 'display_name': 'Finance',
                 'description': 'Access billing/revenue, refunds, sponsorship wallets; no student PII beyond billing',
+                # Finance dashboard: catalog, analytics, billing, sponsorship, rewards, security, profile
                 'permissions': [
                     'read_billing', 'update_billing', 'manage_billing',
                     'create_invoice', 'read_invoice', 'update_invoice', 'list_invoices',
@@ -185,30 +189,30 @@ class Command(BaseCommand):
                 'name': 'finance_admin',
                 'display_name': 'Finance Admin',
                 'description': 'Full finance administration access; manage billing, invoices, refunds, and financial reports',
+                # Finance Admin: full finance + limited user for billing
                 'permissions': [
                     'read_billing', 'update_billing', 'manage_billing',
                     'create_invoice', 'read_invoice', 'update_invoice', 'list_invoices', 'delete_invoice',
-                    'read_user',  # Limited access for billing purposes
+                    'read_user',
                 ],
             },
             {
                 'name': 'sponsor_admin',
                 'display_name': 'Sponsor/Employer Admin',
                 'description': 'Manage sponsored users, view permitted profiles per consent',
+                # Sponsor dashboard: users, org, portfolio, profiling (consent-scoped)
                 'permissions': [
-                    'read_user', 'list_users',  # Only sponsored users
-                    'read_organization', 'update_organization',  # Own organization
-                    'read_portfolio', 'list_portfolios',  # With consent
-                    'read_profiling', 'list_profiling',  # With consent
+                    'read_user', 'list_users', 'read_organization', 'update_organization',
+                    'read_portfolio', 'list_portfolios', 'read_profiling', 'list_profiling',
                 ],
             },
             {
                 'name': 'employer',
                 'display_name': 'Employer',
                 'description': 'Browse talent, filter by skill/readiness; contact Professional-tier mentees; post assignments',
+                # Employer/Marketplace dashboard: talent, roles, orgs
                 'permissions': [
-                    'read_user', 'list_users',  # Limited to talent visibility
-                    'read_portfolio', 'list_portfolios',
+                    'read_user', 'list_users', 'read_portfolio', 'list_portfolios',
                     'read_organization', 'list_organizations',
                 ],
             },
@@ -216,9 +220,8 @@ class Command(BaseCommand):
                 'name': 'analyst',
                 'display_name': 'Analyst',
                 'description': 'Analytics read with RLS/CLS; no PII without scope',
-                'permissions': [
-                    'read_analytics', 'list_analytics',
-                ],
+                # Analyst dashboard: analytics views only
+                'permissions': ['read_analytics', 'list_analytics'],
             },
         ]
         

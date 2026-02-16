@@ -20,6 +20,7 @@ from programs.director_dashboard_serializers import (
 )
 from programs.models import Cohort, Enrollment, MentorAssignment, CalendarEvent
 from programs.director_dashboard_tasks import refresh_director_dashboard_cache_task
+from programs.permissions import IsProgramDirector
 
 
 @extend_schema(
@@ -32,7 +33,7 @@ from programs.director_dashboard_tasks import refresh_director_dashboard_cache_t
     }
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def director_dashboard_summary(request):
     """
     GET /api/v1/director/dashboard/summary
@@ -137,7 +138,7 @@ def director_dashboard_summary(request):
     }
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def director_cohorts_list(request):
     """
     GET /api/v1/director/dashboard/cohorts
@@ -213,7 +214,7 @@ def director_cohorts_list(request):
     }
 )
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def director_cohort_detail(request, cohort_id):
     """
     GET /api/v1/director/dashboard/cohorts/{cohort_id}

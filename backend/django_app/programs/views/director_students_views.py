@@ -3,6 +3,7 @@ Director Students Management API Views
 """
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from programs.permissions import IsProgramDirector
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
@@ -103,7 +104,7 @@ def _get_all_mentors_for_student(student):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def director_students_list(request):
     """Get all students with their sponsor information."""
     try:
@@ -185,7 +186,7 @@ def director_students_list(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def director_sponsors_list(request):
     """Get all sponsors for linking students."""
     try:
@@ -229,7 +230,7 @@ def director_sponsors_list(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def link_students_to_sponsor(request):
     """Link multiple students to a sponsor."""
     try:
@@ -298,7 +299,7 @@ def link_students_to_sponsor(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def unlink_students_from_sponsor(request):
     """Unlink one or more students from a sponsor (or from their current sponsor)."""
     try:
@@ -346,7 +347,7 @@ def unlink_students_from_sponsor(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def remove_direct_mentor_assignment(request):
     """Remove a direct mentor assignment (director only). Body: assignment_id."""
     try:
@@ -384,7 +385,7 @@ def remove_direct_mentor_assignment(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsProgramDirector])
 def sponsor_linked_students(request, sponsor_id):
     """Get students linked to a specific sponsor."""
     try:

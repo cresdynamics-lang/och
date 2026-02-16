@@ -111,8 +111,13 @@ def check_permission(user, resource_type, action, context=None):
     """
     Check if user has permission for resource/action.
     Combines RBAC (role permissions) and ABAC (policy evaluation).
+    Staff/superuser bypass for operational access.
     """
-    # First check RBAC (role-based permissions)
+    if not user or not user.is_authenticated:
+        return False, "User not authenticated"
+    if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+        return True, "Staff/superuser access"
+    # RBAC: check role-based permissions
     user_roles = UserRole.objects.filter(user=user, is_active=True)
     
     for user_role in user_roles:

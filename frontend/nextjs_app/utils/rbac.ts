@@ -21,12 +21,9 @@ export function hasPermission(user: User | null, permissionName: string): boolea
     if (roles.includes('admin')) return true
     return false
   }
-  // No permissions loaded: fall back to role-based (admin sees all; program_director sees director items)
+  // No permissions loaded: fall back to role-based (admin sees all). No fallback for program_director - RBAC must be enforced.
   const roles = getUserRoles(user)
   if (roles.includes('admin')) return true
-  // program_director with empty permissions (seed not run): allow director nav so they can reach roles/seed page
-  const directorPerms = new Set(Object.values(DIRECTOR_NAV_PERMISSIONS))
-  if (roles.includes('program_director') && directorPerms.has(permissionName)) return true
   return false
 }
 
@@ -311,6 +308,18 @@ export function hasRouteAccess(user: User | null, path: string): boolean {
   if (isMentor && isMentorRoute) {
     console.log('✅ hasRouteAccess: Mentor accessing mentor route - granting access to:', path)
     return true
+  }
+
+  // RBAC: Program director routes require actual permissions (not just role)
+  // If program_director has 0 permissions, deny access to director dashboard
+  const isDirector = userRoles.includes('program_director')
+  const isDirectorRoute = path.startsWith('/dashboard/director')
+  if (isDirector && isDirectorRoute) {
+    const perms = user.permissions
+    if (!Array.isArray(perms) || perms.length === 0) return false
+    const directorPerms = new Set(Object.values(DIRECTOR_NAV_PERMISSIONS))
+    const hasAnyDirectorPerm = perms.some((p) => directorPerms.has(p))
+    if (!hasAnyDirectorPerm) return false
   }
   
   // Find most-specific matching route permission (longest path wins)

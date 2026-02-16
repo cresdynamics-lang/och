@@ -3,53 +3,54 @@ ABAC Permissions for Program Director.
 """
 from rest_framework import permissions
 from programs.services.director_service import DirectorService
+from users.utils.policy_engine import check_permission
+
+
+def _has_any_director_permission(user):
+    """Return True if user has at least one director-related RBAC permission (or is staff/superuser)."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False):
+        return True
+    director_checks = [
+        ('cohort', 'list'), ('cohort', 'manage'), ('track', 'list'), ('track', 'manage'),
+        ('mentorship', 'list'), ('mentorship', 'create'), ('analytics', 'read'),
+        ('user', 'list'), ('organization', 'list'), ('portfolio', 'list'),
+    ]
+    for resource_type, action in director_checks:
+        if check_permission(user, resource_type, action)[0]:
+            return True
+    return False
 
 
 class IsProgramDirector(permissions.BasePermission):
-    """Permission check for Program Director role."""
+    """RBAC: requires program_director or admin role AND at least one director-related permission."""
     
     def has_permission(self, request, view):
-        """Check if user has program_director role."""
         if not request.user or not request.user.is_authenticated:
             return False
-        
-        # Use raw SQL to avoid UUID/bigint issues
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        # Must have program_director or admin role
         from django.db import connection
-        
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT 1 FROM user_roles ur
                 JOIN roles r ON ur.role_id = r.id
-                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
+                WHERE ur.user_id = %s AND r.name IN ('program_director', 'admin') AND ur.is_active = true
                 LIMIT 1
             """, [request.user.id])
-            
-            return cursor.fetchone() is not None
+            if cursor.fetchone() is None:
+                return False
+        # RBAC: must have at least one director permission (blocks 0-permission directors)
+        return _has_any_director_permission(request.user)
 
 
 class IsDirectorOrAdmin(permissions.BasePermission):
-    """Permission check for Program Director or Admin role."""
+    """RBAC: same as IsProgramDirector - requires role AND at least one director permission."""
     
     def has_permission(self, request, view):
-        """Check if user has program_director or admin role."""
-        if not request.user or not request.user.is_authenticated:
-            return False
-        
-        if request.user.is_staff or request.user.is_superuser:
-            return True
-        
-        # Use raw SQL to avoid UUID/bigint issues
-        from django.db import connection
-        
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT 1 FROM user_roles ur
-                JOIN roles r ON ur.role_id = r.id
-                WHERE ur.user_id = %s AND r.name = 'program_director' AND ur.is_active = true
-                LIMIT 1
-            """, [request.user.id])
-            
-            return cursor.fetchone() is not None
+        return IsProgramDirector().has_permission(request, view)
 
 
 class CanManageProgram(permissions.BasePermission):
@@ -86,7 +87,7 @@ class CanManageCohort(permissions.BasePermission):
 
 
 def _is_director_or_admin(user):
-    """Return True if user is staff, superuser, or has program_director or admin role."""
+    """Return True if user is staff, superuser, or has program_director/admin role with at least one director permission."""
     if not user or not user.is_authenticated:
         return False
     if user.is_staff or user.is_superuser:
@@ -101,7 +102,9 @@ def _is_director_or_admin(user):
               AND ur.is_active = true
             LIMIT 1
         """, [user.id])
-        return cursor.fetchone() is not None
+        if cursor.fetchone() is None:
+            return False
+    return _has_any_director_permission(user)
 
 
 class IsDirectorOrAdminOrMentorCohortsReadOnly(permissions.BasePermission):
