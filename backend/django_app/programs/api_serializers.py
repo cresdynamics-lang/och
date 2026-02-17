@@ -41,7 +41,7 @@ class CohortSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cohort
         fields = [
-            'id', 'track', 'name', 'start_date', 'end_date', 'mode',
+            'id', 'track', 'curriculum_tracks', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id', 'coordinator',
             'seat_pool', 'status', 'enrollment_count', 'seat_utilization',
             'completion_rate', 'published_to_homepage', 'profile_image', 'profile_image_url',
@@ -65,11 +65,17 @@ class CreateCohortSerializer(serializers.ModelSerializer):
     track = serializers.UUIDField(required=False)
     coordinator = serializers.UUIDField(required=False, allow_null=True)
     assigned_staff = serializers.DictField(required=False, allow_empty=True)
+    curriculum_tracks = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+        help_text='List of curriculum track slugs'
+    )
     
     class Meta:
         model = Cohort
         fields = [
-            'track', 'name', 'start_date', 'end_date', 'mode',
+            'track', 'curriculum_tracks', 'name', 'start_date', 'end_date', 'mode',
             'seat_cap', 'mentor_ratio', 'calendar_template_id',
             'coordinator', 'seat_pool', 'assigned_staff', 'status',
             'published_to_homepage', 'profile_image', 'registration_form_fields'
@@ -90,13 +96,15 @@ class CreateCohortSerializer(serializers.ModelSerializer):
         return None
     
     def create(self, validated_data):
-        track = validated_data.pop('track')
+        track = validated_data.pop('track', None)
         coordinator = validated_data.pop('coordinator', None)
         assigned_staff = validated_data.pop('assigned_staff', {})
+        curriculum_tracks = validated_data.pop('curriculum_tracks', [])
         
         cohort = Cohort.objects.create(
             track=track,
             coordinator=coordinator,
+            curriculum_tracks=curriculum_tracks,
             **validated_data
         )
         

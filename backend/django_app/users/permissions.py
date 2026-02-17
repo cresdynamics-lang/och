@@ -152,3 +152,41 @@ class IsAnalyst(BasePermission):
             role__name='analyst',
             is_active=True
         ).exists()
+
+
+class IsAdmin(BasePermission):
+    """
+    Permission class for admin access.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        user_roles = getattr(request.user, 'user_roles', None)
+        if not user_roles:
+            return False
+        return user_roles.filter(
+            role__name='admin',
+            is_active=True
+        ).exists()
+
+
+class IsAdminOrDirector(BasePermission):
+    """
+    Permission class for admin or program director access.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        user_roles = getattr(request.user, 'user_roles', None)
+        if not user_roles:
+            return False
+        return user_roles.filter(
+            role__name__in=['admin', 'program_director'],
+            is_active=True
+        ).exists()

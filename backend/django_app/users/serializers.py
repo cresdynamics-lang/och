@@ -57,6 +57,7 @@ class UserSerializer(serializers.ModelSerializer):
             # Onboarding and profile completion tracking
             'onboarding_complete',
             'profile_complete',
+            'onboarded_email_status',
             # Profiling completion tracking (Tier 0)
             'profiling_complete',
             'profiling_completed_at',
@@ -220,6 +221,7 @@ class SignupSerializer(serializers.Serializer):
     invite_token = serializers.CharField(required=False)  # For invite flow
     cohort_id = serializers.CharField(required=False)
     track_key = serializers.CharField(required=False)
+    org_id = serializers.IntegerField(required=False, allow_null=True)  # Organization ID
     # Role assignment for signup
     role = serializers.ChoiceField(
         choices=['student', 'mentor', 'admin', 'program_director', 'sponsor_admin', 'employer', 'analyst', 'finance'],

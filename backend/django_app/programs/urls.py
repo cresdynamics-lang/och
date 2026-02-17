@@ -51,6 +51,7 @@ from .views.director_students_views import (
     remove_direct_mentor_assignment,
     sponsor_linked_students
 )
+from .views.enrollment_update_views import UpdateEnrollmentOrganizationView
 
 router = DefaultRouter()
 router.register(r'programs', ProgramViewSet, basename='program')
@@ -93,6 +94,8 @@ from .views.public_registration_views import (
     set_review_cutoff,
     set_interview_cutoff,
     enroll_applications,
+    reject_application,
+    send_application_credentials_email_view,
     list_mentor_applications,
     grade_application,
     grade_interview,
@@ -105,6 +108,8 @@ urlpatterns = [
     path('director/public-applications/set-review-cutoff/', set_review_cutoff, name='set-review-cutoff'),
     path('director/public-applications/set-interview-cutoff/', set_interview_cutoff, name='set-interview-cutoff'),
     path('director/public-applications/enroll/', enroll_applications, name='enroll-applications'),
+    path('director/public-applications/reject/', reject_application, name='reject-application'),
+    path('director/public-applications/send-credentials/', send_application_credentials_email_view, name='send-application-credentials'),
     # Mentor: applications to review
     path('mentor/applications-to-review/', list_mentor_applications, name='mentor-applications-to-review'),
     path('mentor/applications-to-review/<uuid:application_id>/grade/', grade_application, name='grade-application'),
@@ -139,6 +144,9 @@ urlpatterns = [
     
     # Explicit cohort waitlist (ensures /cohorts/{uuid}/waitlist/ resolves - router may not match UUID)
     path('cohorts/<uuid:pk>/waitlist/', cohort_waitlist_view, name='cohort-waitlist'),
+    
+    # Enrollment update endpoint
+    path('cohorts/<uuid:cohort_id>/enrollments/<uuid:enrollment_id>/', UpdateEnrollmentOrganizationView.as_view(), name='update-enrollment'),
     
     # All other routes (includes /programs/ and /programs/{id}/ for ProgramViewSet)
     path('', include(router.urls)),

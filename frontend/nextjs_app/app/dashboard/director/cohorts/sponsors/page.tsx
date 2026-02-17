@@ -87,8 +87,8 @@ export default function SponsorsPage() {
     setIsLoading(true)
     setError(null)
     try {
-      // Load sponsors (users with sponsor role or from sponsor organizations)
-      const sponsorsData = await apiGateway.get('/users?role=sponsor') as any
+      // Load sponsors (users with sponsor_admin role; Django list is at /users/)
+      const sponsorsData = await apiGateway.get('/users/', { params: { role: 'sponsor_admin' } }) as any
       const sponsorsList = sponsorsData?.results || sponsorsData?.data || sponsorsData || []
       setSponsors(sponsorsList)
 

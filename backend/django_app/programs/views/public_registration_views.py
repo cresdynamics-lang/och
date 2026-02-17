@@ -483,6 +483,7 @@ def enroll_applications(request):
     if not app_ids:
         return Response({'error': 'application_ids is required'}, status=status.HTTP_400_BAD_REQUEST)
 
+    # 1) Enroll student applications that are marked as eligible
     apps = CohortPublicApplication.objects.filter(
         id__in=app_ids,
         applicant_type='student',
@@ -539,4 +540,133 @@ def enroll_applications(request):
                 )
         enrolled += 1
 
-    return Response({'success': True, 'enrolled_count': enrolled})
+    # 2) Enroll sponsor applications (create sponsor admin user + sponsor–cohort assignment)
+    from sponsors.models import SponsorCohortAssignment
+
+    sponsor_apps = CohortPublicApplication.objects.filter(
+        id__in=app_ids,
+        applicant_type='sponsor',
+    ).select_related('cohort')
+    sponsor_role, _ = Role.objects.get_or_create(name='sponsor_admin')
+    sponsor_enrolled = 0
+
+    for app in sponsor_apps:
+        email = (app.form_data.get('email') or app.form_data.get('contact_email') or '').strip()
+        if not email:
+            continue
+
+        # Create or fetch sponsor user
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            contact_name = (app.form_data.get('contact_name') or '').strip()
+            org_name = (app.form_data.get('organization_name') or '').strip()
+            first_name = contact_name.split(' ')[0] if contact_name else (org_name or email).split(' ')[0]
+            last_name = ' '.join(contact_name.split(' ')[1:]) if contact_name and len(contact_name.split(' ')) > 1 else ''
+            user = User.objects.create(
+                email=email,
+                username=email,
+                first_name=first_name[:150],
+                last_name=last_name[:150],
+            )
+        UserRole.objects.get_or_create(user=user, role=sponsor_role, defaults={'is_active': True})
+
+        # Create sponsor–cohort assignment (basic funding role, 1 seat) if it doesn't exist
+        SponsorCohortAssignment.objects.get_or_create(
+            sponsor_uuid_id=user,
+            cohort_id=app.cohort,
+            defaults={
+                'role': 'funding',
+                'seat_allocation': 1,
+            },
+        )
+
+        # Mark application as converted/enrolled (for tracking)
+        app.enrollment_status = 'enrolled'
+        app.status = 'converted'
+        app.save(update_fields=['enrollment_status', 'status', 'updated_at'])
+        sponsor_enrolled += 1
+
+    return Response({
+        'success': True,
+        'enrolled_count': enrolled,
+        'sponsor_enrolled_count': sponsor_enrolled,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reject_application(request):
+    """
+    POST /api/v1/director/public-applications/reject/
+    Director rejects a single application.
+    Body: { application_id: uuid, reason?: string }
+    """
+    from ..permissions import _is_director_or_admin
+    if not _is_director_or_admin(request.user):
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Directors and admins only.")
+
+    app_id = request.data.get('application_id')
+    reason = (request.data.get('reason') or '').strip()
+    if not app_id:
+        return Response({'error': 'application_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    app = get_object_or_404(CohortPublicApplication, id=app_id)
+    app.status = 'rejected'
+    # Reset enrollment status if it was set earlier
+    app.enrollment_status = 'none'
+    if reason:
+        app.notes = (app.notes or '') + (f"\n\nRejected: {reason}" if app.notes else f"Rejected: {reason}")
+        app.save(update_fields=['status', 'enrollment_status', 'notes', 'updated_at'])
+    else:
+        app.save(update_fields=['status', 'enrollment_status', 'updated_at'])
+
+    return Response({'success': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_application_credentials_email_view(request):
+    """
+    POST /api/v1/director/public-applications/send-credentials/
+    Send acceptance + credentials email (password setup link) for a given application.
+    Body: { application_id: uuid }
+    """
+    from ..permissions import _is_director_or_admin
+    if not _is_director_or_admin(request.user):
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Directors and admins only.")
+
+    from django.contrib.auth import get_user_model
+    from users.utils.auth_utils import create_mfa_code
+    from users.utils.email_utils import send_application_credentials_email
+
+    app_id = request.data.get('application_id')
+    if not app_id:
+        return Response({'error': 'application_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    app = get_object_or_404(CohortPublicApplication, id=app_id)
+    # Resolve email from form data
+    email = (app.form_data.get('email') or app.form_data.get('contact_email') or '').strip()
+    if not email:
+        return Response({'error': 'No email found on application'}, status=status.HTTP_400_BAD_REQUEST)
+
+    User = get_user_model()
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
+        return Response({'error': 'User not found. Enroll the application first to create an account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Generate one-time code and build reset URL
+    code, _ = create_mfa_code(user, method='email', expires_minutes=60)
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+    reset_url = f"{frontend_url}/auth/reset-password?token={code}&email={email}"
+
+    cohort_name = app.cohort.name
+    send_application_credentials_email(
+        user=user,
+        cohort_name=cohort_name,
+        reset_url=reset_url,
+        applicant_type=app.applicant_type,
+    )
+
+    return Response({'success': True})

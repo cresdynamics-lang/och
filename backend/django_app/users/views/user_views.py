@@ -170,6 +170,191 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save(update_fields=['avatar_url'])
         return Response({'avatar_url': url}, status=status.HTTP_200_OK)
     
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete a user instance.
+        Handles cases where related tables (like chat_messages) may not exist.
+        """
+        instance = self.get_object()
+        
+        # Check permissions
+        user = request.user
+        if not user.is_staff:
+            # Program directors can delete users
+            from ..models import Role, UserRole
+            director_roles = Role.objects.filter(name__in=['program_director', 'admin'])
+            has_director_role = UserRole.objects.filter(
+                user=user,
+                role__in=director_roles,
+                is_active=True
+            ).exists()
+            
+            if not has_director_role:
+                return Response(
+                    {'detail': 'You do not have permission to delete users'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Prevent deleting yourself
+        if instance.id == user.id:
+            return Response(
+                {'detail': 'You cannot delete your own account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Delete related records first to avoid foreign key constraint violations
+            user_id = instance.id
+            
+            # Delete user roles
+            from ..models import UserRole
+            try:
+                UserRole.objects.filter(user_id=user_id).delete()
+            except Exception:
+                # If table doesn't exist or error, try raw SQL
+                from django.db import connection
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("DELETE FROM user_roles WHERE user_id = %s", [user_id])
+                except Exception:
+                    pass  # Table might not exist, continue
+            
+            # Delete consent scopes
+            from ..models import ConsentScope
+            try:
+                ConsentScope.objects.filter(user_id=user_id).delete()
+            except Exception:
+                pass
+            
+            # Delete entitlements
+            from ..models import Entitlement
+            try:
+                Entitlement.objects.filter(user_id=user_id).delete()
+            except Exception:
+                pass
+            
+            # Delete user sessions
+            from ..auth_models import UserSession
+            try:
+                UserSession.objects.filter(user_id=user_id).delete()
+            except Exception:
+                pass
+            
+            # Delete MFA methods
+            from ..auth_models import MFAMethod
+            try:
+                MFAMethod.objects.filter(user_id=user_id).delete()
+            except Exception:
+                pass
+            
+            # Delete user identities
+            from ..identity_models import UserIdentity
+            try:
+                UserIdentity.objects.filter(user_id=user_id).delete()
+            except Exception:
+                pass
+            
+            # Delete or nullify audit logs (should be SET_NULL but handle deletion if needed)
+            from ..audit_models import AuditLog
+            try:
+                # Set user to NULL in audit logs (as per model: on_delete=models.SET_NULL)
+                AuditLog.objects.filter(user_id=user_id).update(user=None)
+            except Exception:
+                # If update fails, try to delete audit logs
+                try:
+                    AuditLog.objects.filter(user_id=user_id).delete()
+                except Exception:
+                    pass
+            
+            # Try to delete the user
+            instance.delete()
+        except Exception as e:
+            # Handle case where related tables don't exist or other errors
+            from django.db import ProgrammingError, IntegrityError, connection
+            
+            error_str = str(e)
+            
+            # Check if it's a foreign key constraint error
+            if isinstance(e, IntegrityError) and 'foreign key constraint' in error_str.lower():
+                # Try to delete using raw SQL with CASCADE
+                try:
+                    user_id = instance.id
+                    with connection.cursor() as cursor:
+                        # Delete related records manually
+                        # Delete user_roles
+                        try:
+                            cursor.execute("DELETE FROM user_roles WHERE user_id = %s", [user_id])
+                        except Exception:
+                            pass
+                        
+                        # Set audit_logs.user_id to NULL (as per model: SET_NULL)
+                        # This preserves audit trail while removing user reference
+                        try:
+                            cursor.execute("UPDATE audit_logs SET user_id = NULL WHERE user_id = %s", [user_id])
+                        except Exception:
+                            # If update fails (constraint might not allow NULL), try delete as fallback
+                            try:
+                                cursor.execute("DELETE FROM audit_logs WHERE user_id = %s", [user_id])
+                            except Exception:
+                                pass
+                        
+                        # Delete user directly
+                        cursor.execute("DELETE FROM users WHERE id = %s", [user_id])
+                        if cursor.rowcount == 0:
+                            return Response(
+                                {'detail': 'User not found'},
+                                status=status.HTTP_404_NOT_FOUND
+                            )
+                    
+                    return Response(
+                        {'detail': 'User deleted successfully'},
+                        status=status.HTTP_200_OK
+                    )
+                except Exception as sql_err:
+                    return Response(
+                        {'detail': f'Failed to delete user: {str(sql_err)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            elif isinstance(e, ProgrammingError) or 'does not exist' in error_str.lower() or 'relation' in error_str.lower():
+                # Table doesn't exist, delete user using raw SQL to bypass ORM checks
+                try:
+                    user_id = instance.id
+                    with connection.cursor() as cursor:
+                        # Set audit_logs.user_id to NULL first (SET NULL)
+                        try:
+                            cursor.execute("UPDATE audit_logs SET user_id = NULL WHERE user_id = %s", [user_id])
+                        except Exception:
+                            pass
+                        
+                        # Delete user directly (CASCADE will handle related records in existing tables)
+                        cursor.execute("DELETE FROM users WHERE id = %s", [user_id])
+                        if cursor.rowcount == 0:
+                            return Response(
+                                {'detail': 'User not found'},
+                                status=status.HTTP_404_NOT_FOUND
+                            )
+                    
+                    return Response(
+                        {'detail': 'User deleted successfully'},
+                        status=status.HTTP_200_OK
+                    )
+                except Exception as sql_err:
+                    return Response(
+                        {'detail': f'Failed to delete user: {str(sql_err)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            else:
+                # Other error, return error message
+                return Response(
+                    {'detail': f'Failed to delete user: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        return Response(
+            {'detail': 'User deleted successfully'},
+            status=status.HTTP_200_OK
+        )
+    
     @action(detail=False, methods=['get'])
     def me(self, request):
         """

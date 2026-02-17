@@ -32,11 +32,38 @@ class IsAdmin(permissions.BasePermission):
         ).exists()
 
 
+class IsAdminOrDirector(permissions.BasePermission):
+    """Permission check for admin or program_director users — for subscription management."""
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        from users.models import UserRole
+        # Check for admin or program_director role
+        return UserRole.objects.filter(
+            user=request.user, 
+            role__name__in=['admin', 'program_director'], 
+            is_active=True
+        ).exists()
+
+
 class SubscriptionPlanViewSet(viewsets.ModelViewSet):
     """Admin viewset for managing subscription plans."""
     queryset = SubscriptionPlan.objects.all()
     serializer_class = SubscriptionPlanSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    
+    def get_permissions(self):
+        """
+        Allow program_director to read plans (for enrollment).
+        Only admin can create/update/delete plans.
+        """
+        # For list/retrieve actions, allow admin and program_director
+        if self.action in ['list', 'retrieve']:
+            return [permissions.IsAuthenticated(), IsAdminOrDirector()]
+        # For create/update/delete actions, only allow admin
+        else:
+            return [permissions.IsAuthenticated(), IsAdmin()]
     
     def get_serializer_class(self):
         from .serializers import SubscriptionPlanSerializer
@@ -47,7 +74,7 @@ class UserSubscriptionAdminViewSet(viewsets.ModelViewSet):
     """Admin viewset for managing user subscriptions."""
     queryset = UserSubscription.objects.select_related('user', 'plan').all()
     serializer_class = UserSubscriptionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsAdminOrDirector]
     
     def get_queryset(self):
         queryset = super().get_queryset()

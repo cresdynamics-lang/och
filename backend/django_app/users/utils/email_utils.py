@@ -183,6 +183,40 @@ def send_password_reset_email(user, reset_url):
     )
 
 
+def send_application_credentials_email(user, cohort_name, reset_url, applicant_type='student'):
+  """
+  Send an acceptance + credentials email for a cohort application.
+
+  Args:
+      user: User instance
+      cohort_name: Name of the cohort the user was accepted to
+      reset_url: Password setup/reset URL
+      applicant_type: 'student' or 'sponsor'
+  """
+  if applicant_type == 'sponsor':
+      subject = f'Your Sponsor Access for {cohort_name}'
+  else:
+      subject = f'You are enrolled in {cohort_name}'
+
+  html_message = render_to_string('emails/application_credentials.html', {
+      'user': user,
+      'cohort_name': cohort_name,
+      'reset_url': reset_url,
+      'applicant_type': applicant_type,
+  })
+
+  plain_message = strip_tags(html_message)
+
+  send_mail(
+      subject=subject,
+      message=plain_message,
+      from_email=settings.DEFAULT_FROM_EMAIL,
+      recipient_list=[user.email],
+      html_message=html_message,
+      fail_silently=False,
+  )
+
+
 def send_mfa_enrollment_email(user, method):
     """
     Send MFA enrollment confirmation email.

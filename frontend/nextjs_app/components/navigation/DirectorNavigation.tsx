@@ -59,6 +59,17 @@ const navItems: NavItem[] = [
     ]
   },
   { 
+    label: 'Enrollment & Placement', 
+    href: '/dashboard/director/enrollment', 
+    icon: CheckCircle,
+    permission: 'manage_cohorts',
+    children: [
+      { label: 'Enrollment', href: '/dashboard/director/enrollment', icon: Clock, permission: 'manage_cohorts' },
+      { label: 'Seat Management', href: '/dashboard/director/enrollment/seats', icon: Ticket, permission: 'manage_cohorts' },
+      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw, permission: 'manage_cohorts' },
+    ]
+  },
+  { 
     label: 'Cohort Management', 
     href: '/dashboard/director/cohorts', 
     icon: Users,
@@ -69,17 +80,6 @@ const navItems: NavItem[] = [
       { label: 'Calendar & Events', href: '/dashboard/director/calendar', icon: Calendar, permission: 'list_cohorts' },
       { label: 'Sponsors', href: '/dashboard/director/cohorts/sponsors', icon: Star, permission: 'list_organizations' },
       { label: 'Students', href: '/dashboard/director/students', icon: GraduationCap, permission: 'list_users' },
-    ]
-  },
-  { 
-    label: 'Enrollment & Placement', 
-    href: '/dashboard/director/enrollment', 
-    icon: CheckCircle,
-    permission: 'manage_cohorts',
-    children: [
-      { label: 'Enrollment', href: '/dashboard/director/enrollment', icon: Clock, permission: 'manage_cohorts' },
-      { label: 'Seat Management', href: '/dashboard/director/enrollment/seats', icon: Ticket, permission: 'manage_cohorts' },
-      { label: 'Override Placements', href: '/dashboard/director/enrollment/overrides', icon: RefreshCw, permission: 'manage_cohorts' },
     ]
   },
   { 

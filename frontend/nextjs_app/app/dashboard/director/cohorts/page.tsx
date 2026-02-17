@@ -87,7 +87,8 @@ export default function CohortsPage() {
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-white mb-1">{cohort.name}</h3>
                         <p className="text-sm text-och-mint">
-                          {cohort.track.name} • {cohort.track.program.name}
+                          {cohort.track?.name || cohort.curriculum_tracks?.join(', ') || 'No Track Assigned'}
+                          {cohort.track?.program?.name && ` • ${cohort.track.program.name}`}
                         </p>
                       </div>
                       <div className="text-xs text-och-steel bg-och-steel/10 px-2 py-1 rounded">

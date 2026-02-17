@@ -52,12 +52,18 @@ function ApplicationDetailsModal({
   onOpenChange,
   getStatusVariant,
   getApplicationStatusLabel,
+  onEnroll,
+  onReject,
+  onSendCredentials,
 }: {
   application: Application | null
   open: boolean
   onOpenChange: (open: boolean) => void
   getStatusVariant: (s: string) => 'defender' | 'orange' | 'steel'
   getApplicationStatusLabel: (s: string) => string
+  onEnroll?: (application: Application) => void
+  onReject?: (application: Application) => void
+  onSendCredentials?: (application: Application) => void
 }) {
   if (!application) return null
 
@@ -177,6 +183,53 @@ function ApplicationDetailsModal({
             View cohort <ExternalLink className="w-3 h-3" />
           </Link>
         </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-och-steel/20 pt-3 text-sm">
+          <div className="flex flex-wrap gap-2">
+            {/* Enroll: students only when eligible, sponsors always */}
+            {onEnroll && (
+              <Button
+                variant="defender"
+                size="sm"
+                onClick={() => onEnroll(application)}
+                disabled={
+                  application.applicant_type === 'student' &&
+                  application.enrollment_status !== 'eligible'
+                }
+                className="gap-1"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                {application.applicant_type === 'student' ? 'Enroll student' : 'Enroll sponsor'}
+              </Button>
+            )}
+            {onReject && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onReject(application)}
+                className="gap-1 text-och-orange border-och-orange/40"
+              >
+                Reject
+              </Button>
+            )}
+            {/* System-sent acceptance + credentials email (only when enrolled) */}
+            {onSendCredentials && application.email && application.enrollment_status === 'enrolled' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onSendCredentials(application)}
+                className="gap-1 text-och-mint border-och-mint/40"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Send acceptance email
+              </Button>
+            )}
+          </div>
+          {application.enrollment_status === 'enrolled' && application.email && (
+            <span className="text-xs text-och-steel">
+              Credentials can be set up via the acceptance email (includes password link).
+            </span>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -267,6 +320,7 @@ export default function ApplicationsPage() {
   const [settingCutoff, setSettingCutoff] = useState(false)
   const [showEnrollModal, setShowEnrollModal] = useState(false)
   const [enrolling, setEnrolling] = useState(false)
+  const [enrollingSingleId, setEnrollingSingleId] = useState<string | null>(null)
 
   useEffect(() => {
     const cohortId = searchParams.get('cohort_id') || ''
@@ -466,6 +520,39 @@ export default function ApplicationsPage() {
       alert((err as { message?: string })?.message || 'Failed to enroll')
     } finally {
       setEnrolling(false)
+    }
+  }
+
+  const handleEnrollSingle = async (app: Application) => {
+    setEnrollingSingleId(app.id)
+    try {
+      await apiGateway.post('/director/public-applications/enroll/', { application_ids: [app.id] })
+      fetchApplications()
+    } catch (err: unknown) {
+      alert((err as { message?: string })?.message || 'Failed to enroll application')
+    } finally {
+      setEnrollingSingleId(null)
+    }
+  }
+
+  const handleRejectSingle = async (app: Application) => {
+    try {
+      await apiGateway.post('/director/public-applications/reject/', { application_id: app.id })
+      fetchApplications()
+    } catch (err: unknown) {
+      alert((err as { message?: string })?.message || 'Failed to reject application')
+    }
+  }
+
+  const handleSendCredentials = async (app: Application) => {
+    if (!app.email) return
+    try {
+      await apiGateway.post('/director/public-applications/send-credentials/', {
+        application_id: app.id,
+      })
+      alert('Acceptance email with credentials link has been sent.')
+    } catch (err: unknown) {
+      alert((err as { message?: string })?.message || 'Failed to send credentials')
     }
   }
 
@@ -791,6 +878,9 @@ export default function ApplicationsPage() {
                 onOpenChange={(open) => !open && setSelectedApp(null)}
                 getStatusVariant={getStatusVariant}
                 getApplicationStatusLabel={getApplicationStatusLabel}
+                onEnroll={(app) => !enrollingSingleId && handleEnrollSingle(app)}
+                onReject={handleRejectSingle}
+                onSendCredentials={handleSendCredentials}
               />
               <AssignToMentorModal
                 open={showAssignModal}

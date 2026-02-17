@@ -713,7 +713,7 @@ export default function CohortEnrollmentsPage() {
                           <span className="text-white text-sm">Select All</span>
                         </label>
                         <div className="border-t border-och-steel/20 my-1"></div>
-                        {['self', 'sponsor', 'invite', 'director'].map((enrollmentType) => (
+                        {['self', 'invite', 'director'].map((enrollmentType) => (
                           <label
                             key={enrollmentType}
                             className="flex items-center gap-2 p-2 hover:bg-och-midnight/50 rounded cursor-pointer"

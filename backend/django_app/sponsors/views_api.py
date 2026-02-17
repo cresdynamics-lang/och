@@ -400,56 +400,14 @@ def create_sponsored_cohort(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsSponsorAdmin])
 def enroll_sponsored_students(request, cohort_id):
-    """POST /api/v1/programs/cohorts/{id}/enrollments - Enroll sponsored students."""
-    data = request.data
-    
-    required_fields = ['student_emails']
-    for field in required_fields:
-        if field not in data:
-            return Response({
-                'error': f'{field} is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        cohort = get_object_or_404(SponsorCohort, id=cohort_id)
-        
-        enrolled_students = []
-        for email in data['student_emails']:
-            try:
-                student = User.objects.get(email=email)
-                enrollment, created = SponsorStudentCohort.objects.get_or_create(
-                    sponsor_cohort=cohort,
-                    student=student,
-                    defaults={
-                        'enrollment_status': 'enrolled',
-                        'is_active': True
-                    }
-                )
-                
-                if created:
-                    enrolled_students.append({
-                        'student_id': str(student.id),
-                        'email': email,
-                        'enrollment_id': str(enrollment.id)
-                    })
-                    
-            except User.DoesNotExist:
-                continue
-        
-        # Update cohort enrollment count
-        cohort.students_enrolled = cohort.student_enrollments.filter(is_active=True).count()
-        cohort.save()
-        
-        return Response({
-            'enrolled_students': enrolled_students,
-            'total_enrolled': len(enrolled_students),
-            'message': f'Enrolled {len(enrolled_students)} students in cohort'
-        }, status=status.HTTP_201_CREATED)
-        
-    except Exception as e:
-        return Response({
-            'error': f'Failed to enroll students: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """
+    POST /api/v1/programs/cohorts/{id}/enrollments - DISABLED
+    Sponsors cannot enroll students. Sponsors can only post jobs and connect with job-ready students.
+    """
+    return Response({
+        'error': 'Sponsors cannot enroll students. Sponsors can only post jobs and connect with job-ready students through the marketplace.',
+        'detail': 'Enrollment functionality has been removed for sponsors. Please contact a program director for student enrollment.'
+    }, status=status.HTTP_403_FORBIDDEN)
 
 
 @api_view(['GET'])

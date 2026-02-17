@@ -128,7 +128,7 @@ export interface Enrollment {
   user_email?: string
   user_name?: string
   org: string | null
-  enrollment_type: 'self' | 'sponsor' | 'invite'
+  enrollment_type: 'self' | 'invite' | 'director'
   seat_type: 'paid' | 'scholarship' | 'sponsored'
   payment_status: 'pending' | 'paid' | 'waived'
   status: 'pending_payment' | 'pending' | 'active' | 'suspended' | 'withdrawn' | 'completed' | 'incomplete'
@@ -625,7 +625,7 @@ class ProgramsClient {
   async bulkCreateEnrollments(cohortId: string, data: {
     user_ids: Array<string | number>
     seat_type?: 'paid' | 'scholarship' | 'sponsored'
-    enrollment_type?: 'director' | 'invite' | 'sponsor' | 'self'
+    enrollment_type?: 'director' | 'invite' | 'self'
   }): Promise<{
     created: Enrollment[]
     waitlisted: any[]

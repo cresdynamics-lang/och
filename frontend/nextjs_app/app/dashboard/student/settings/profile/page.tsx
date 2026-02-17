@@ -24,7 +24,7 @@ interface ProfileData extends UserType {
       track_name?: string
       cohort_name?: string
       enrollment_status?: string
-      enrollment_type?: 'self' | 'sponsor' | 'invite' | 'director'
+      enrollment_type?: 'self' | 'invite' | 'director'
       seat_type?: 'paid' | 'scholarship' | 'sponsored'
       payment_status?: 'pending' | 'paid' | 'waived'
       profiler_completed?: boolean
@@ -862,13 +862,13 @@ export default function ProfileSettingsPage() {
                   <Badge 
                     variant={
                       profile.role_specific_data.student.enrollment_type === 'director' ? 'gold' :
-                      profile.role_specific_data.student.enrollment_type === 'sponsor' ? 'mint' :
+                      false ? 'mint' : // Removed sponsor enrollment type
                       profile.role_specific_data.student.enrollment_type === 'invite' ? 'defender' :
                       'steel'
                     }
                   >
                     {profile.role_specific_data.student.enrollment_type === 'director' ? 'Director Assignation' :
-                     profile.role_specific_data.student.enrollment_type === 'sponsor' ? 'Sponsor Assigned' :
+                     false ? 'Sponsor Assigned' : // Removed sponsor enrollment type
                      profile.role_specific_data.student.enrollment_type === 'invite' ? 'Invited' :
                      'Self-Enrolled'}
                   </Badge>

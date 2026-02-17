@@ -241,7 +241,31 @@ const safeConsoleError = (...args: any[]) => {
   
   // Only log if we have meaningful content
   if (filteredArgs.length > 0) {
-    console.error(...filteredArgs);
+    // Check if the last argument is an empty object
+    const lastArg = filteredArgs[filteredArgs.length - 1];
+    const isEmptyObject = typeof lastArg === 'object' && 
+                          lastArg !== null && 
+                          !Array.isArray(lastArg) &&
+                          Object.keys(lastArg).length === 0;
+    
+    // If it's an empty object, try to extract meaningful info from other args
+    if (isEmptyObject && filteredArgs.length > 1) {
+      // Check if we have other meaningful args
+      const hasOtherArgs = filteredArgs.slice(0, -1).some(arg => {
+        if (typeof arg === 'string' && arg.trim().length > 0) return true;
+        if (typeof arg === 'number') return true;
+        if (typeof arg === 'object' && arg !== null && Object.keys(arg).length > 0) return true;
+        return false;
+      });
+      
+      if (hasOtherArgs) {
+        // Log without the empty object
+        console.error(...filteredArgs.slice(0, -1));
+      }
+      // Otherwise suppress completely
+    } else {
+      console.error(...filteredArgs);
+    }
   }
 };
 

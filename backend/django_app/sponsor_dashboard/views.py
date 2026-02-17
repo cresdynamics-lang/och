@@ -515,79 +515,16 @@ class SponsorDashboardViewSet(viewsets.ViewSet):
     def seats_assign(self, request):
         """
         POST /api/v1/sponsor/seats/assign
-        Bulk assign seats to users.
+        DISABLED: Sponsors cannot enroll students. 
+        Sponsors can only post jobs and connect with job-ready students.
         """
-        org = self.get_org(request)
-        if not org:
-            return Response(
-                {'detail': 'User is not associated with a sponsor organization'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        serializer = SponsorSeatAssignSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        cohort_id = serializer.validated_data['cohort_id']
-        user_ids = serializer.validated_data['user_ids']
-        code = serializer.validated_data.get('code')
-        
-        try:
-            if code:
-                # Redeem code
-                result = SponsorCodeService.redeem_code(code, cohort_id, user_ids)
-            else:
-                # Direct assignment - only allow students linked to this sponsor admin
-                cohort = Cohort.objects.get(id=cohort_id)
-                assigned = []
-                linked_student_uuids = {
-                    str(u) for u in
-                    SponsorStudentLink.objects.filter(
-                        sponsor=request.user,
-                        is_active=True
-                    ).values_list('student__uuid_id', flat=True)
-                }
-                for user_uuid in user_ids:
-                    uuid_str = str(user_uuid)
-                    if uuid_str not in linked_student_uuids:
-                        continue
-                    try:
-                        student = User.objects.get(uuid_id=user_uuid, is_active=True)
-                    except User.DoesNotExist:
-                        continue
-                    enrollment, created = Enrollment.objects.update_or_create(
-                        cohort=cohort,
-                        user=student,
-                        defaults={
-                            'org': org,
-                            'enrollment_type': 'sponsor',
-                            'seat_type': 'sponsored',
-                            'payment_status': 'waived',
-                            'status': 'active',
-                        }
-                    )
-                    assigned.append(str(enrollment.id))
-                
-                result = {
-                    'seats_assigned': len(assigned),
-                    'enrollment_ids': assigned,
-                }
-            
-            # Refresh cache
-            SponsorDashboardService.refresh_sponsor_cache(org.id)
-            SponsorDashboardService.refresh_cohort_details(org.id, cohort_id)
-            
-            return Response(result, status=status.HTTP_201_CREATED)
-        except ValueError as e:
-            return Response(
-                {'detail': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Cohort.DoesNotExist:
-            return Response(
-                {'detail': 'Cohort not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        return Response(
+            {
+                'error': 'Sponsors cannot enroll students. Sponsors can only post jobs and connect with job-ready students through the marketplace.',
+                'detail': 'Enrollment functionality has been removed for sponsors. Please contact a program director for student enrollment.'
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
     
     @action(detail=False, methods=['post'])
     def codes_generate(self, request):

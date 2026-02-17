@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { apiGateway } from '@/services/apiGateway'
+import { calculateAnnualPrice, formatCurrencyWithSymbol, convertUSDToLocal } from '@/lib/currency'
+import { useAuth } from '@/hooks/useAuth'
 
 interface SubscriptionPlan {
   id: string
@@ -91,6 +93,7 @@ const TIER_FEATURES: TierFeature[] = [
 ]
 
 export default function PlansManagementClient() {
+  const { user } = useAuth()
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null)
@@ -98,10 +101,43 @@ export default function PlansManagementClient() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [activeView, setActiveView] = useState<'overview' | 'manage'>('overview')
+  const [selectedCountry, setSelectedCountry] = useState<string>('KE') // Default to Kenya
+  const [subscriptionStats, setSubscriptionStats] = useState<{
+    total: number
+    active: number
+    byTier: Record<string, number>
+  } | null>(null)
 
   useEffect(() => {
     loadPlans()
-  }, [])
+    loadSubscriptionStats()
+    // Get user's country if available, default to Kenya
+    if (user?.country) {
+      setSelectedCountry(user.country.toUpperCase())
+    }
+  }, [user])
+
+  const loadSubscriptionStats = async () => {
+    try {
+      const response = await apiGateway.get<any>('/admin/subscriptions/')
+      const subscriptions: any[] = Array.isArray(response) ? response : (response?.results || [])
+      
+      const byTier: Record<string, number> = {}
+      subscriptions.forEach((sub: any) => {
+        const tier = sub.plan?.tier || sub.tier || 'unknown'
+        byTier[tier] = (byTier[tier] || 0) + 1
+      })
+      
+      setSubscriptionStats({
+        total: subscriptions.length,
+        active: subscriptions.filter((s: any) => s.status === 'active').length,
+        byTier,
+      })
+    } catch (error) {
+      console.error('Failed to load subscription stats:', error)
+      setSubscriptionStats(null)
+    }
+  }
 
   const loadPlans = async () => {
     try {
@@ -140,6 +176,7 @@ export default function PlansManagementClient() {
         await apiGateway.post('/admin/plans/', planData)
       }
       await loadPlans()
+      await loadSubscriptionStats()
       setIsModalOpen(false)
       setEditingPlan(null)
       alert('Plan saved successfully!')
@@ -157,6 +194,7 @@ export default function PlansManagementClient() {
     try {
       await apiGateway.delete(`/admin/plans/${planId}/`)
       await loadPlans()
+      await loadSubscriptionStats()
       alert('Plan deleted successfully!')
     } catch (error: any) {
       console.error('Failed to delete plan:', error)
@@ -165,15 +203,21 @@ export default function PlansManagementClient() {
     }
   }
 
-  const tierConfig = {
-    free: { label: 'Free Tier', color: 'steel' as const, bgColor: 'bg-och-steel/10' },
-    starter: { label: 'Starter Tier ($3/month)', color: 'defender' as const, bgColor: 'bg-och-defender/10' },
-    premium: { label: 'Premium Tier ($7/month)', color: 'mint' as const, bgColor: 'bg-och-mint/10' },
+  // Dynamic tier config based on loaded plans
+  const getTierConfig = (tier: string) => {
+    const plan = plans.find(p => p.tier === tier)
+    if (!plan) return { label: tier, color: 'steel' as const, bgColor: 'bg-och-steel/10' }
+    
+    const price = plan.price_monthly ? formatCurrencyWithSymbol(convertUSDToLocal(plan.price_monthly, selectedCountry), selectedCountry) : 'Free'
+    return {
+      label: `${plan.name} (${price}/month)`,
+      color: tier === 'free' ? 'steel' as const : tier === 'starter' ? 'defender' as const : 'mint' as const,
+      bgColor: tier === 'free' ? 'bg-och-steel/10' : tier === 'starter' ? 'bg-och-defender/10' : 'bg-och-mint/10'
+    }
   }
 
-  const getFreePlan = () => plans.find(p => p.tier === 'free')
-  const getStarterPlan = () => plans.find(p => p.tier === 'starter')
-  const getPremiumPlan = () => plans.find(p => p.tier === 'premium')
+  // Get paid plans (non-free) for pricing display
+  const paidPlans = plans.filter(p => p.price_monthly && p.price_monthly > 0)
 
   if (isLoading) {
     return (
@@ -191,7 +235,10 @@ export default function PlansManagementClient() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold mb-2 text-och-gold">Subscription Plans Management</h1>
-          <p className="text-och-steel">Configure the three-tier subscription system: Free, Starter ($3), Premium ($7)</p>
+          <p className="text-och-steel">
+            Manage subscription plans: Free (14-day trial), Starter ($5/month), Premium ($54/year). 
+            All prices support currency conversion based on user location.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -211,143 +258,414 @@ export default function PlansManagementClient() {
 
       {activeView === 'overview' && (
         <div className="space-y-6">
+          {/* Header Section with Stats */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Subscription Statistics */}
+            <Card className="lg:col-span-2">
+              <div className="p-6">
+                <h2 className="text-2xl font-bold text-white mb-4">Subscription Overview</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-och-midnight/50 p-4 rounded-lg border border-och-steel/20">
+                    <div className="text-sm text-och-steel mb-1">Total Plans</div>
+                    <div className="text-2xl font-bold text-white">{plans.length}</div>
+                  </div>
+                  <div className="bg-och-midnight/50 p-4 rounded-lg border border-och-steel/20">
+                    <div className="text-sm text-och-steel mb-1">Total Subscriptions</div>
+                    <div className="text-2xl font-bold text-och-mint">
+                      {subscriptionStats?.total || '-'}
+                    </div>
+                  </div>
+                  <div className="bg-och-midnight/50 p-4 rounded-lg border border-och-steel/20">
+                    <div className="text-sm text-och-steel mb-1">Active Subscriptions</div>
+                    <div className="text-2xl font-bold text-och-defender">
+                      {subscriptionStats?.active || '-'}
+                    </div>
+                  </div>
+                  <div className="bg-och-midnight/50 p-4 rounded-lg border border-och-steel/20">
+                    <div className="text-sm text-och-steel mb-1">Paid Plans</div>
+                    <div className="text-2xl font-bold text-och-gold">
+                      {paidPlans.length}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Tier Distribution */}
+                {subscriptionStats && Object.keys(subscriptionStats.byTier).length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-och-steel/20">
+                    <h3 className="text-lg font-semibold text-white mb-3">Subscriptions by Tier</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {Object.entries(subscriptionStats.byTier).map(([tier, count]) => (
+                        <div key={tier} className="bg-och-midnight/30 p-3 rounded border border-och-steel/10">
+                          <div className="text-xs text-och-steel mb-1 capitalize">{tier}</div>
+                          <div className="text-xl font-bold text-white">{count}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Currency Selector */}
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Display Settings</h3>
+                <label className="block text-sm font-medium text-white mb-2">Currency</label>
+                <select
+                  value={selectedCountry}
+                  onChange={(e) => setSelectedCountry(e.target.value)}
+                  className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                >
+                  <option value="KE">Kenya (KES)</option>
+                  <option value="US">United States (USD)</option>
+                  <option value="BW">Botswana (BWP)</option>
+                  <option value="ZA">South Africa (ZAR)</option>
+                  <option value="NG">Nigeria (NGN)</option>
+                  <option value="GH">Ghana (GHS)</option>
+                  <option value="TZ">Tanzania (TZS)</option>
+                  <option value="UG">Uganda (UGX)</option>
+                  <option value="ET">Ethiopia (ETB)</option>
+                  <option value="RW">Rwanda (RWF)</option>
+                </select>
+                <p className="text-xs text-och-steel mt-3">
+                  Prices are converted from USD using current exchange rates. 
+                  Free tier: 14-day trial. Starter: $5/month (monthly). Premium: $54/year (annual, 10% discount).
+                </p>
+              </div>
+            </Card>
+          </div>
+
+          {/* Subscription Pricing Overview */}
+          <Card>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Subscription Plans & Pricing</h2>
+                  <p className="text-och-steel text-sm">
+                    Free: 14-day trial. Starter: Monthly billing at $5/month. Premium: Annual billing at $54/year (equivalent to $4.50/month).
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {plans.map((plan) => {
+                  const subscriptionCount = subscriptionStats?.byTier[plan.tier] || 0
+                  
+                  if (!plan.price_monthly || plan.price_monthly === 0) {
+                    // Free tier - 14-day trial
+                    return (
+                      <div key={plan.id} className="relative p-6 bg-gradient-to-br from-och-steel/20 to-och-steel/5 rounded-lg border-2 border-och-steel/30 hover:border-och-steel/50 transition-all">
+                        <div className="absolute top-4 right-4">
+                          <Badge variant="steel">{plan.name}</Badge>
+                        </div>
+                        <div className="mt-8">
+                          <h3 className="text-2xl font-bold text-white mb-3">{plan.name}</h3>
+                          <div className="mb-4">
+                            <p className="text-4xl font-bold text-white mb-1">Free</p>
+                            <p className="text-sm text-och-steel">14-day free trial</p>
+                            <p className="text-xs text-och-steel mt-1">No charges during trial period</p>
+                          </div>
+                          {subscriptionCount > 0 && (
+                            <div className="mt-4 pt-4 border-t border-och-steel/20">
+                              <p className="text-xs text-och-steel">Active Subscriptions</p>
+                              <p className="text-lg font-semibold text-white">{subscriptionCount}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const isStarter = plan.tier === 'starter'
+                  const isPremium = plan.tier === 'premium'
+                  
+                  // Starter: $5/month (monthly billing)
+                  // Premium: $54/year (annual billing, equivalent to $4.50/month)
+                  let monthlyPriceUSD = plan.price_monthly
+                  let annualPriceUSD = null
+                  let billingType = ''
+                  
+                  if (isStarter) {
+                    // Starter tier: Monthly billing at $5/month
+                    monthlyPriceUSD = plan.price_monthly || 5
+                    annualPriceUSD = monthlyPriceUSD * 12 // $60/year
+                    billingType = 'Monthly'
+                  } else if (isPremium) {
+                    // Premium tier: Annual billing at $54/year (10% discount from $60)
+                    annualPriceUSD = 54 // Fixed annual price
+                    monthlyPriceUSD = annualPriceUSD / 12 // $4.50/month equivalent
+                    billingType = 'Annual'
+                  }
+                  
+                  const monthlyLocal = convertUSDToLocal(monthlyPriceUSD, selectedCountry)
+                  const annualLocal = annualPriceUSD ? convertUSDToLocal(annualPriceUSD, selectedCountry) : null
+                  
+                  return (
+                    <div 
+                      key={plan.id} 
+                      className={`relative p-6 rounded-lg border-2 transition-all ${
+                        isPremium 
+                          ? 'bg-gradient-to-br from-och-mint/20 to-och-mint/5 border-och-mint/40 hover:border-och-mint/60' 
+                          : isStarter
+                          ? 'bg-gradient-to-br from-och-defender/20 to-och-defender/5 border-och-defender/40 hover:border-och-defender/60'
+                          : 'bg-gradient-to-br from-och-midnight/50 to-och-midnight/30 border-och-steel/30 hover:border-och-steel/50'
+                      }`}
+                    >
+                      {isPremium && (
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                          <Badge variant="gold" className="text-xs font-bold px-3 py-1">BEST VALUE</Badge>
+                        </div>
+                      )}
+                      
+                      <div className="absolute top-4 right-4">
+                        <Badge variant={isStarter ? 'defender' : 'mint'}>{plan.name}</Badge>
+                      </div>
+                      
+                      <div className="mt-8">
+                        <h3 className="text-2xl font-bold text-white mb-4">{plan.name}</h3>
+                        
+                        {isStarter ? (
+                          // Starter: Monthly billing
+                          <>
+                            <div className="mb-4 pb-4 border-b border-och-steel/20">
+                              <p className="text-sm text-och-steel mb-1">Monthly Subscription</p>
+                              <div className="flex items-baseline gap-2">
+                                <p className="text-3xl font-bold text-white">
+                                  {formatCurrencyWithSymbol(monthlyLocal, selectedCountry)}
+                                </p>
+                                <span className="text-sm text-och-steel">/month</span>
+                              </div>
+                              <p className="text-xs text-och-steel mt-1">
+                                ${monthlyPriceUSD} USD per month
+                              </p>
+                            </div>
+                            <div className="mb-4">
+                              <p className="text-xs text-och-steel">
+                                Billed monthly. Cancel anytime.
+                              </p>
+                            </div>
+                          </>
+                        ) : isPremium ? (
+                          // Premium: Annual billing
+                          <>
+                            <div className="mb-4 pb-4 border-b border-och-steel/20">
+                              <p className="text-sm text-och-steel mb-1">Annual Subscription</p>
+                              <div className="flex items-baseline gap-2 mb-1">
+                                <p className="text-3xl font-bold text-och-mint">
+                                  {formatCurrencyWithSymbol(annualLocal!, selectedCountry)}
+                                </p>
+                                <span className="text-sm text-och-steel">/year</span>
+                              </div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="text-xs text-och-steel line-through">
+                                  {formatCurrencyWithSymbol(convertUSDToLocal(60, selectedCountry), selectedCountry)}
+                                </p>
+                                <Badge variant="mint" className="text-xs font-bold">10% OFF</Badge>
+                              </div>
+                              <p className="text-xs text-och-steel">
+                                ${annualPriceUSD} USD per year
+                              </p>
+                            </div>
+                            <div className="mb-4">
+                              <p className="text-xs text-och-mint font-medium">
+                                💰 Equivalent to {formatCurrencyWithSymbol(monthlyLocal, selectedCountry)}/month
+                              </p>
+                              <p className="text-xs text-och-steel mt-1">
+                                Billed annually. Save 10% vs monthly.
+                              </p>
+                            </div>
+                          </>
+                        ) : null}
+
+                        {/* Subscription Count */}
+                        {subscriptionCount > 0 && (
+                          <div className="mt-4 pt-4 border-t border-och-steel/20">
+                            <p className="text-xs text-och-steel mb-1">Active Subscriptions</p>
+                            <p className="text-lg font-semibold text-white">{subscriptionCount}</p>
+                          </div>
+                        )}
+
+                        {/* Key Features Preview */}
+                        <div className="mt-4 pt-4 border-t border-och-steel/20">
+                          <p className="text-xs text-och-steel mb-2">Key Features:</p>
+                          <div className="space-y-1">
+                            {plan.mentorship_access && (
+                              <p className="text-xs text-white">✓ Human Mentorship</p>
+                            )}
+                            {plan.missions_access_type === 'full' && (
+                              <p className="text-xs text-white">✓ Full Mission Access</p>
+                            )}
+                            {plan.talentscope_access === 'full' && (
+                              <p className="text-xs text-white">✓ Full TalentScope Analytics</p>
+                            )}
+                            {plan.marketplace_contact && (
+                              <p className="text-xs text-white">✓ Employer Contact Enabled</p>
+                            )}
+                            {plan.ai_coach_daily_limit === null && (
+                              <p className="text-xs text-white">✓ Unlimited AI Coach</p>
+                            )}
+                            {plan.portfolio_item_limit === null && (
+                              <p className="text-xs text-white">✓ Unlimited Portfolio</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </Card>
+
           {/* System Overview */}
           <Card>
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Three-Tier Subscription System</h2>
-              <p className="text-och-steel text-sm mb-6">
-                The OCH platform operates a three-tiered subscription system that governs access to features and content.
-                Access rights are defined by entitlements which are activated instantly upon successful payment.
-              </p>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">Feature Comparison Matrix</h2>
+                <p className="text-och-steel text-sm">
+                  Compare features and access levels across all subscription tiers. Access rights are defined by entitlements 
+                  which are activated instantly upon successful payment. Upgrades take effect immediately, while downgrades 
+                  apply at the end of the current billing cycle.
+                </p>
+              </div>
 
-              {/* Feature Comparison Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-och-steel/20">
-                      <th className="text-left p-3 text-och-steel font-semibold">Feature</th>
-                      <th className="text-left p-3 text-och-steel font-semibold">Free Tier</th>
-                      <th className="text-left p-3 text-och-steel font-semibold">Starter ($3) - Enhanced (First 6 Months)</th>
-                      <th className="text-left p-3 text-och-steel font-semibold">Starter ($3) - Normal Mode</th>
-                      <th className="text-left p-3 text-och-steel font-semibold">Premium ($7)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {TIER_FEATURES.map((feature, idx) => (
-                      <tr key={idx} className="border-b border-och-steel/10 hover:bg-och-midnight/50">
-                        <td className="p-3 text-white font-medium">{feature.feature}</td>
-                        <td className="p-3 text-och-steel">{feature.free}</td>
-                        <td className="p-3 text-och-steel">{feature.starterEnhanced}</td>
-                        <td className="p-3 text-och-steel">{feature.starterNormal}</td>
-                        <td className="p-3 text-och-steel">{feature.premium}</td>
+              {/* Dynamic Feature Comparison Table */}
+              {plans.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-och-steel/20">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-och-midnight/50 border-b border-och-steel/20">
+                        <th className="text-left p-4 text-white font-semibold">Feature</th>
+                        {plans.map((plan) => (
+                          <th key={plan.id} className="text-left p-4 text-white font-semibold">
+                            <div className="flex flex-col">
+                              <span>{plan.name}</span>
+                              {plan.price_monthly ? (
+                                <span className="text-xs text-och-steel mt-1 font-normal">
+                                  {formatCurrencyWithSymbol(convertUSDToLocal(plan.price_monthly, selectedCountry), selectedCountry)}/mo
+                                </span>
+                              ) : (
+                                <span className="text-xs text-och-steel mt-1 font-normal">Free</span>
+                              )}
+                            </div>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </Card>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">Missions Access</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4">
+                            <Badge 
+                              variant={plan.missions_access_type === 'full' ? 'mint' : plan.missions_access_type === 'ai_only' ? 'defender' : 'steel'}
+                              className="capitalize"
+                            >
+                              {plan.missions_access_type.replace('_', ' ')}
+                            </Badge>
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">Human Mentorship</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4">
+                            {plan.mentorship_access ? (
+                              <Badge variant="mint">Full Access</Badge>
+                            ) : (
+                              <Badge variant="steel">No Access</Badge>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">TalentScope Analytics</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4">
+                            <Badge 
+                              variant={plan.talentscope_access === 'full' ? 'mint' : plan.talentscope_access === 'preview' ? 'defender' : plan.talentscope_access === 'basic' ? 'steel' : 'steel'}
+                              className="capitalize"
+                            >
+                              {plan.talentscope_access === 'none' ? 'No Access' : plan.talentscope_access}
+                            </Badge>
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">Employer Contact</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4">
+                            {plan.marketplace_contact ? (
+                              <Badge variant="mint">Enabled</Badge>
+                            ) : (
+                              <Badge variant="steel">Disabled</Badge>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">AI Coach Daily Limit</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4 text-och-steel">
+                            {plan.ai_coach_daily_limit !== null 
+                              ? `${plan.ai_coach_daily_limit} interactions/day`
+                              : <Badge variant="mint">Unlimited</Badge>}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                        <td className="p-4 text-white font-medium">Portfolio Item Limit</td>
+                        {plans.map((plan) => (
+                          <td key={plan.id} className="p-4 text-och-steel">
+                            {plan.portfolio_item_limit !== null 
+                              ? `${plan.portfolio_item_limit} items`
+                              : <Badge variant="mint">Unlimited</Badge>}
+                          </td>
+                        ))}
+                      </tr>
+                      {plans.some(p => p.enhanced_access_days) && (
+                        <tr className="border-b border-och-steel/10 hover:bg-och-midnight/30 transition-colors">
+                          <td className="p-4 text-white font-medium">Enhanced Access Period</td>
+                          {plans.map((plan) => (
+                            <td key={plan.id} className="p-4 text-och-steel">
+                              {plan.enhanced_access_days 
+                                ? (
+                                  <div>
+                                    <Badge variant="defender">{plan.enhanced_access_days} days</Badge>
+                                    <span className="text-xs text-och-steel ml-2">
+                                      ({Math.round(plan.enhanced_access_days / 30)} months)
+                                    </span>
+                                  </div>
+                                )
+                                : <span className="text-och-steel">N/A</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-          {/* Starter Tier Details */}
-          <Card>
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">$3 Starter Tier - Enhanced Access</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-och-defender/10 rounded-lg border border-och-defender/20">
-                  <h3 className="text-white font-semibold mb-2">Enhanced Access (First 6 Months)</h3>
-                  <ul className="space-y-1 text-sm text-och-steel">
-                    <li>• $3/month for the first 6 months</li>
-                    <li>• Enhanced Access flag applied for 180 days</li>
-                    <li>• Full AI features unlocked</li>
-                    <li>• Full mission catalog (AI-only missions)</li>
-                    <li>• Unlimited portfolio capacity</li>
-                    <li>• Full curriculum visibility</li>
-                    <li>• Full community access</li>
-                    <li>• TalentScope preview mode</li>
+              {/* Additional Information */}
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-och-midnight/30 rounded-lg border border-och-steel/20">
+                  <h4 className="text-white font-semibold mb-2">💳 Payment & Billing</h4>
+                  <ul className="text-sm text-och-steel space-y-1">
+                    <li>• Instant activation upon successful payment</li>
+                    <li>• Upgrades take effect immediately</li>
+                    <li>• Downgrades apply at end of billing cycle</li>
+                    <li>• 5-day grace period for payment failures</li>
                   </ul>
                 </div>
-                <div className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
-                  <h3 className="text-white font-semibold mb-2">Normal Mode (After 6 Months)</h3>
-                  <ul className="space-y-1 text-sm text-och-steel">
-                    <li>• $3/month after initial 6 months</li>
-                    <li>• Enhanced Access flag removed</li>
-                    <li>• Limited AI features</li>
-                    <li>• Limited missions</li>
-                    <li>• Limited portfolio capacity (5 items)</li>
-                    <li>• Limited curriculum visibility</li>
-                    <li>• Limited community access</li>
-                    <li>• Basic TalentScope</li>
-                    <li>• No mentorship or employer contact</li>
+                <div className="p-4 bg-och-midnight/30 rounded-lg border border-och-steel/20">
+                  <h4 className="text-white font-semibold mb-2">🔄 Subscription Management</h4>
+                  <ul className="text-sm text-och-steel space-y-1">
+                    <li>• Annual subscriptions save 10% vs monthly</li>
+                    <li>• Auto-downgrade to Free tier after grace period</li>
+                    <li>• Enhanced access periods for new subscribers</li>
+                    <li>• Feature access gated by entitlement status</li>
                   </ul>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Premium Tier Details */}
-          <Card>
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">$7 Premium Tier (Professional Tier)</h2>
-              <p className="text-och-steel text-sm mb-4">
-                Grants full platform capabilities, especially those involving human review and deeper data analytics.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="text-white font-semibold mb-2">Key Features</h3>
-                  <ul className="space-y-1 text-sm text-och-steel">
-                    <li>• $7/month</li>
-                    <li>• Human Mentorship included</li>
-                    <li>• Group sessions (plus recordings)</li>
-                    <li>• Mission mentor reviews with pass/fail grades</li>
-                    <li>• Full AI and Lab integrations</li>
-                    <li>• Unlimited portfolio</li>
-                    <li>• Full curriculum access</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold mb-2">Analytics & Talent</h3>
-                  <ul className="space-y-1 text-sm text-och-steel">
-                    <li>• Full TalentScope analytics</li>
-                    <li>• Readiness breakdown</li>
-                    <li>• CV scoring</li>
-                    <li>• Mentor Influence Index</li>
-                    <li>• Career Readiness Report</li>
-                    <li>• Job fit score</li>
-                    <li>• Hiring timeline prediction</li>
-                    <li>• Talent contact enabled</li>
-                    <li>• Full visibility in Talent Search</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Subscription Management Flow */}
-          <Card>
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Subscription Management Flow</h2>
-              <div className="space-y-4">
-                <div className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
-                  <h3 className="text-white font-semibold mb-2">Upgrade ($3 → $7)</h3>
-                  <p className="text-och-steel text-sm">Takes effect instantly upon successful payment.</p>
-                </div>
-                <div className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
-                  <h3 className="text-white font-semibold mb-2">Downgrade ($7 → $3)</h3>
-                  <p className="text-och-steel text-sm">Takes effect after the billing cycle ends.</p>
-                </div>
-                <div className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
-                  <h3 className="text-white font-semibold mb-2">Payment Failure</h3>
-                  <p className="text-och-steel text-sm">
-                    If payment fails, a 5-day grace period is initiated. After the grace period, 
-                    if payment is still unsuccessful, the account auto-downgrades to the Free Tier (read-only mode).
-                  </p>
-                </div>
-                <div className="p-4 bg-och-midnight/50 rounded-lg border border-och-steel/20">
-                  <h3 className="text-white font-semibold mb-2">Entitlement Enforcement</h3>
-                  <p className="text-och-steel text-sm">
-                    Features like Mentor Review are gated by the user's entitlement status. 
-                    For example, Mentors review missions only if the mentee has the $7 Premium entitlement.
-                  </p>
                 </div>
               </div>
             </div>
@@ -372,17 +690,20 @@ export default function PlansManagementClient() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {plans.map((plan) => {
-              const config = tierConfig[plan.tier]
+              const config = getTierConfig(plan.tier)
               return (
                 <Card key={plan.id} className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <div>
-                      <Badge variant={config.color}>{config.label}</Badge>
+                      <Badge variant={config.color}>{plan.name}</Badge>
                       <h3 className="text-xl font-bold text-white mt-2">{plan.name}</h3>
                       {plan.price_monthly && (
                         <p className="text-och-defender text-lg font-semibold mt-1">
                           ${plan.price_monthly}/month
                         </p>
+                      )}
+                      {!plan.price_monthly && (
+                        <p className="text-och-steel text-lg font-semibold mt-1">Free</p>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -406,15 +727,14 @@ export default function PlansManagementClient() {
                       >
                         Edit
                       </Button>
-                      {plan.tier !== 'free' && plan.tier !== 'starter' && plan.tier !== 'premium' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(plan.id)}
-                        >
-                          Delete
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(plan.id)}
+                        className="text-och-orange hover:text-och-orange hover:border-och-orange"
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
 
@@ -516,13 +836,36 @@ function PlanDetailModal({
   onClose: () => void
   onEdit: () => void
 }) {
+  const { user } = useAuth()
+  const [selectedCountry, setSelectedCountry] = useState<string>(user?.country?.toUpperCase() || 'KE')
+  
   const tierConfig = {
     free: { label: 'Free Tier', color: 'steel' as const },
-    starter: { label: 'Starter Tier ($3/month)', color: 'defender' as const },
-    premium: { label: 'Premium Tier ($7/month)', color: 'mint' as const },
+    starter: { label: 'Starter Tier', color: 'defender' as const },
+    premium: { label: 'Premium Tier', color: 'mint' as const },
   }
 
-  const config = tierConfig[plan.tier] || { label: plan.tier, color: 'steel' as const }
+  const config = tierConfig[plan.tier] || { label: plan.name, color: 'steel' as const }
+  
+  // Calculate pricing based on tier type
+  const isStarter = plan.tier === 'starter'
+  const isPremium = plan.tier === 'premium'
+  
+  let monthlyPriceUSD = plan.price_monthly || 0
+  let annualPriceUSD = null
+  
+  if (isStarter) {
+    // Starter: $5/month (monthly billing)
+    monthlyPriceUSD = plan.price_monthly || 5
+    annualPriceUSD = monthlyPriceUSD * 12 // $60/year
+  } else if (isPremium) {
+    // Premium: $54/year (annual billing, 10% discount from $60)
+    annualPriceUSD = 54
+    monthlyPriceUSD = annualPriceUSD / 12 // $4.50/month equivalent
+  }
+  
+  const monthlyLocal = monthlyPriceUSD > 0 ? convertUSDToLocal(monthlyPriceUSD, selectedCountry) : 0
+  const annualLocal = annualPriceUSD ? convertUSDToLocal(annualPriceUSD, selectedCountry) : null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -530,13 +873,35 @@ function PlanDetailModal({
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <Badge variant={config.color}>{config.label}</Badge>
+              <Badge variant={config.color}>{plan.name}</Badge>
               <h2 className="text-2xl font-bold text-white mt-2">{plan.name}</h2>
-              {plan.price_monthly && (
-                <p className="text-och-defender text-xl font-semibold mt-1">
-                  ${plan.price_monthly}/month
-                </p>
-              )}
+              {plan.tier === 'free' ? (
+                <div className="mt-2">
+                  <p className="text-och-steel text-xl font-semibold">Free</p>
+                  <p className="text-xs text-och-steel mt-1">14-day free trial</p>
+                </div>
+              ) : isStarter ? (
+                <div className="mt-2">
+                  <p className="text-och-defender text-xl font-semibold">
+                    {formatCurrencyWithSymbol(monthlyLocal, selectedCountry)} per month
+                  </p>
+                  <p className="text-xs text-och-steel mt-1">
+                    ${monthlyPriceUSD} USD/month • Monthly billing
+                  </p>
+                </div>
+              ) : isPremium ? (
+                <div className="mt-2">
+                  <p className="text-och-mint text-xl font-semibold">
+                    {formatCurrencyWithSymbol(annualLocal!, selectedCountry)} per year
+                  </p>
+                  <p className="text-xs text-och-steel mt-1">
+                    ${annualPriceUSD} USD/year • Equivalent to {formatCurrencyWithSymbol(monthlyLocal, selectedCountry)}/month
+                  </p>
+                  <p className="text-xs text-och-mint mt-1">
+                    Annual billing • Save 10% vs monthly
+                  </p>
+                </div>
+              ) : null}
             </div>
             <button
               onClick={onClose}
@@ -545,6 +910,29 @@ function PlanDetailModal({
               ✕
             </button>
           </div>
+          
+          {/* Currency Selector */}
+          {pricing && (
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-white mb-2">Display Currency</label>
+              <select
+                value={selectedCountry}
+                onChange={(e) => setSelectedCountry(e.target.value)}
+                className="w-full max-w-xs px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+              >
+                <option value="KE">Kenya (KES)</option>
+                <option value="US">United States (USD)</option>
+                <option value="BW">Botswana (BWP)</option>
+                <option value="ZA">South Africa (ZAR)</option>
+                <option value="NG">Nigeria (NGN)</option>
+                <option value="GH">Ghana (GHS)</option>
+                <option value="TZ">Tanzania (TZS)</option>
+                <option value="UG">Uganda (UGX)</option>
+                <option value="ET">Ethiopia (ETB)</option>
+                <option value="RW">Rwanda (RWF)</option>
+              </select>
+            </div>
+          )}
 
           <div className="space-y-6">
             {/* Basic Information */}
@@ -730,28 +1118,64 @@ function PlanEditModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white mb-2">Tier</label>
+              <label className="block text-sm font-medium text-white mb-2">
+                Tier
+                <span className="text-xs text-och-steel ml-2">(from SubscriptionPlan model)</span>
+              </label>
               <select
                 value={formData.tier}
-                onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
+                onChange={(e) => {
+                  const selectedTier = e.target.value as any
+                  setFormData({ 
+                    ...formData, 
+                    tier: selectedTier,
+                    // Auto-set pricing based on tier
+                    price_monthly: selectedTier === 'free' 
+                      ? null 
+                      : selectedTier === 'starter' 
+                        ? 5 
+                        : 4.5 // Premium: $4.50/month equivalent (actual billing is $54/year)
+                  })
+                }}
                 className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white"
               >
-                <option value="free">Free Tier</option>
-                <option value="starter">Starter Tier ($3/month)</option>
-                <option value="premium">Premium Tier ($7/month)</option>
+                <option value="free">Free Tier (14-day trial, $0)</option>
+                <option value="starter">Starter Tier (Monthly - $5/month)</option>
+                <option value="premium">Premium Tier (Annual - $54/year)</option>
               </select>
+              <p className="text-xs text-och-steel mt-1">
+                Free: 14-day trial. Starter: Monthly billing at $5/month. Premium: Annual billing at $54/year (equivalent to $4.50/month).
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white mb-2">Monthly Price</label>
+              <label className="block text-sm font-medium text-white mb-2">
+                Monthly Price (USD)
+                {formData.tier === 'premium' && (
+                  <span className="text-xs text-och-mint ml-2">(Premium uses annual pricing: $54/year)</span>
+                )}
+              </label>
               <input
                 type="number"
                 step="0.01"
                 value={formData.price_monthly || ''}
                 onChange={(e) => setFormData({ ...formData, price_monthly: e.target.value ? parseFloat(e.target.value) : null })}
                 className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white"
-                placeholder="0.00"
+                placeholder={formData.tier === 'free' ? '0.00 (Free)' : formData.tier === 'starter' ? '5.00' : '4.50 (monthly equivalent)'}
+                disabled={formData.tier === 'free'}
               />
+              {formData.tier === 'free' && (
+                <p className="text-xs text-och-steel mt-1">Free tier is $0 - 14-day trial period</p>
+              )}
+              {formData.tier === 'starter' && (
+                <p className="text-xs text-och-steel mt-1">Starter tier: $5/month (monthly billing)</p>
+              )}
+              {formData.tier === 'premium' && (
+                <p className="text-xs text-och-mint mt-1">
+                  Premium tier: $54/year (annual billing). Monthly price shown ($4.50) is for display only. 
+                  Actual billing is $54/year (10% discount from $60/year = $5/month × 12).
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

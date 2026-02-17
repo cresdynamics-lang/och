@@ -99,6 +99,19 @@ class User(AbstractUser):
             message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
         )]
     )
+    GENDER_CHOICES = [
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('other', 'Other'),
+        ('prefer_not_to_say', 'Prefer not to say'),
+    ]
+    gender = models.CharField(
+        max_length=20,
+        choices=GENDER_CHOICES,
+        blank=True,
+        null=True,
+        help_text='User gender (optional)'
+    )
     
     # Student onboarding fields (for TalentScope baseline)
     LEARNING_STYLE_CHOICES = [
@@ -124,6 +137,20 @@ class User(AbstractUser):
     # Profile completion tracking
     profile_complete = models.BooleanField(default=False)
     onboarding_complete = models.BooleanField(default=False)
+    
+    # Onboarding email tracking
+    ONBOARDED_EMAIL_STATUS_CHOICES = [
+        ('sent', 'Sent'),
+        ('sent_and_seen', 'Sent & Seen'),
+    ]
+    onboarded_email_status = models.CharField(
+        max_length=20,
+        choices=ONBOARDED_EMAIL_STATUS_CHOICES,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Status of onboarding email: null (not sent), sent (sent but not opened), sent_and_seen (sent and opened)'
+    )
     
     # Profiling completion tracking (mandatory Tier 0 gateway)
     profiling_complete = models.BooleanField(default=False, db_index=True)
@@ -172,6 +199,7 @@ class User(AbstractUser):
             models.Index(fields=['account_status']),
             models.Index(fields=['email_verified']),
             models.Index(fields=['mfa_enabled']),
+            models.Index(fields=['onboarded_email_status']),
         ]
     
     def __str__(self):
@@ -422,6 +450,7 @@ class Permission(models.Model):
         ('invoice', 'Invoice'),
         ('api_key', 'API Key'),
         ('webhook', 'Webhook'),
+        ('subscription', 'Subscription'),
     ]
     
     ACTION_TYPES = [

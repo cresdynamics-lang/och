@@ -185,7 +185,12 @@ class Cohort(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='cohorts')
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name='cohorts', null=True, blank=True)
+    curriculum_tracks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of curriculum track slugs: ["defender", "offensive", "grc"]'
+    )
     name = models.CharField(max_length=200)
     start_date = models.DateField()
     end_date = models.DateField()
@@ -266,7 +271,6 @@ class Enrollment(models.Model):
     """Enrollment model - student enrollment in a cohort."""
     ENROLLMENT_TYPE_CHOICES = [
         ('self', 'Self-enroll'),
-        ('sponsor', 'Sponsor assign'),
         ('invite', 'Invite'),
         ('director', 'Director assign'),
     ]

@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from organizations.models import Organization, OrganizationMember
+from organizations.serializers import OrganizationSerializer
 from users.models import Role, UserRole, Permission
 from users.api_models import APIKey
 from users.permissions import CanManageRoles
@@ -227,16 +228,77 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     """
     POST /api/v1/orgs
     Organization management.
+    Supports both ID and slug lookups.
     """
     queryset = Organization.objects.all()
+    serializer_class = OrganizationSerializer
     permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'slug'
     
+    def get_object(self):
+        """
+        Override to support both ID and slug lookups.
+        If pk is numeric, use ID lookup; otherwise use slug lookup.
+        """
+        # Check if we have 'pk' in kwargs (ID-based lookup)
+        if 'pk' in self.kwargs:
+            lookup_value = self.kwargs['pk']
+            try:
+                # Try to parse as integer
+                org_id = int(lookup_value)
+                # Use ID lookup - check both filtered queryset and all orgs for better error message
+                queryset = self.get_queryset()
+                obj = queryset.filter(id=org_id).first()
+                
+                # If not found in filtered queryset, check if org exists at all (for better error message)
+                if not obj:
+                    org_exists = Organization.objects.filter(id=org_id).exists()
+                    if org_exists:
+                        # Org exists but user doesn't have permission
+                        from rest_framework.exceptions import PermissionDenied
+                        raise PermissionDenied('You do not have permission to access this organization')
+                    else:
+                        # Org doesn't exist
+                        from rest_framework.exceptions import NotFound
+                        raise NotFound('Organization not found')
+                
+                self.check_object_permissions(self.request, obj)
+                return obj
+            except (ValueError, TypeError):
+                # Not numeric, treat as slug
+                pass
+        
+        # Check if we have 'slug' in kwargs (slug-based lookup)
+        if 'slug' in self.kwargs:
+            # Temporarily set lookup_field to slug for super().get_object()
+            original_lookup_field = self.lookup_field
+            self.lookup_field = 'slug'
+            try:
+                return super().get_object()
+            finally:
+                self.lookup_field = original_lookup_field
+        
+        # If neither pk nor slug, raise error
+        from rest_framework.exceptions import NotFound
+        raise NotFound('Organization not found')
+    
     def get_queryset(self):
-        """Filter organizations by user membership."""
+        """Filter organizations by user membership or role."""
         user = self.request.user
-        if user.is_staff:
+        if user.is_staff or user.is_superuser:
             return Organization.objects.all()
+        
+        # Check if user is admin or program director
+        user_roles = getattr(user, 'user_roles', None)
+        if user_roles:
+            has_admin_or_director_role = user_roles.filter(
+                role__name__in=['admin', 'program_director'],
+                is_active=True
+            ).exists()
+            if has_admin_or_director_role:
+                return Organization.objects.all()
+        
+        # Otherwise, only return organizations where user is a member
         return Organization.objects.filter(members=user).distinct()
     
     def perform_create(self, serializer):

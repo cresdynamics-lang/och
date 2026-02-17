@@ -192,6 +192,15 @@ class SignupView(APIView):
                 career_goals=data.get('career_goals'),
                 cyber_exposure_level=data.get('cyber_exposure_level'),
             )
+            # Set organization if provided
+            if data.get('org_id'):
+                from organizations.models import Organization
+                try:
+                    org = Organization.objects.get(id=data['org_id'])
+                    user.org_id = org
+                    user.save(update_fields=['org_id'])
+                except Organization.DoesNotExist:
+                    logger.warning(f"Organization {data['org_id']} not found during signup for {data['email']}")
             user.set_unusable_password()
             user.account_status = 'pending_verification'
             user.save()
@@ -239,6 +248,15 @@ class SignupView(APIView):
                 career_goals=data.get('career_goals'),
                 cyber_exposure_level=data.get('cyber_exposure_level'),
             )
+            # Set organization if provided
+            if data.get('org_id'):
+                from organizations.models import Organization
+                try:
+                    org = Organization.objects.get(id=data['org_id'])
+                    user.org_id = org
+                    user.save(update_fields=['org_id'])
+                except Organization.DoesNotExist:
+                    logger.warning(f"Organization {data['org_id']} not found during signup for {data['email']}")
 
             # Assign role based on signup data (defaults to student)
             requested_role = data.get('role', 'student')
