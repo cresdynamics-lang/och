@@ -21,6 +21,7 @@ function VerifyEmailContent() {
   const token = searchParams.get('token')
   const code = searchParams.get('code')
   const email = searchParams.get('email')
+  const redirectTo = searchParams.get('redirect')
 
   useEffect(() => {
     // Auto-verify on mount if we have the required params
@@ -36,8 +37,12 @@ function VerifyEmailContent() {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
       return () => clearTimeout(timer)
     } else if (countdown === 0 && status === 'success') {
-      // Redirect to login after countdown
-      router.push('/login/student')
+      // Redirect to login or redirectTo if provided
+      if (redirectTo) {
+        router.push(redirectTo)
+      } else {
+        router.push('/login/student')
+      }
     }
   }, [countdown, status, router])
 
@@ -62,8 +67,15 @@ function VerifyEmailContent() {
 
       if (response.ok) {
         setStatus('success')
-        setMessage(data.message || 'Email verified successfully! You can now log in.')
-        setCountdown(5) // 5 second countdown before redirect
+        setMessage(data.message || 'Email verified successfully! Redirecting...')
+        setCountdown(3) // 3 second countdown before redirect
+        
+        // If redirect parameter exists, redirect there after verification
+        if (redirectTo) {
+          setTimeout(() => {
+            router.push(redirectTo)
+          }, 3000)
+        }
       } else {
         setStatus('error')
         setError(data.error || data.detail || 'Verification failed. Please try again.')
@@ -160,10 +172,16 @@ function VerifyEmailContent() {
               <Button
                 variant="defender"
                 className="w-full"
-                onClick={() => router.push('/login/student')}
+                onClick={() => {
+                  if (redirectTo) {
+                    router.push(redirectTo)
+                  } else {
+                    router.push('/login/student')
+                  }
+                }}
                 glow
               >
-                Go to Login
+                {redirectTo ? 'Continue' : 'Go to Login'}
               </Button>
             </div>
           </Card>

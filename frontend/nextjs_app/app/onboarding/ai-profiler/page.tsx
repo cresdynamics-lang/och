@@ -601,7 +601,7 @@ export default function AIProfilerPage() {
             sessionError?.message?.includes('fetch') || 
             sessionError?.message?.includes('ECONNREFUSED')) {
           console.warn('[AIProfiler] FastAPI unavailable for session start')
-          setError('Profiling service is currently unavailable. Please ensure FastAPI is running on port 8001 and try again.')
+          setError('Profiling service is currently unavailable. Please ensure FastAPI is running on port 8000 and try again.')
           setLoading(false)
           return
         }

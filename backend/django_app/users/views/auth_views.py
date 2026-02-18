@@ -399,9 +399,11 @@ class LoginView(APIView):
             )
         
         # Check account status and active status
-        if user.account_status != 'active':
+        # Allow pending_verification users to login (they need to complete onboarding)
+        # Block suspended, deactivated, and erased accounts
+        if user.account_status not in ['active', 'pending_verification']:
             return Response(
-                {'detail': f'Account is {user.account_status}. Please verify your email.'},
+                {'detail': f'Account is {user.account_status}. Please contact support.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -430,6 +432,22 @@ class LoginView(APIView):
                     {'detail': 'Invalid credentials'},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
+            
+            # Auto-activate account if user has password but account is still pending_verification
+            # This handles users who set password before the auto-activation logic was added
+            if user.account_status == 'pending_verification' and user.has_usable_password():
+                # Automatically verify email and activate account
+                if not user.email_verified:
+                    user.email_verified = True
+                    user.email_verified_at = timezone.now()
+                    logger.info(f"Email automatically verified for user {user.email} during login (legacy account)")
+                
+                user.account_status = 'active'
+                user.is_active = True
+                if not user.activated_at:
+                    user.activated_at = timezone.now()
+                user.save()
+                logger.info(f"Account activated for user {user.email} during login (legacy account with password)")
         else:
             return Response(
                 {'detail': 'Password or code required'},
@@ -1162,9 +1180,11 @@ class MeView(APIView):
             )
         
         # Check account status
-        if user.account_status != 'active':
+        # Allow pending_verification users to access their profile during onboarding
+        # Block suspended, deactivated, and erased accounts
+        if user.account_status not in ['active', 'pending_verification']:
             return Response(
-                {'detail': f'Account is {user.account_status}. Please verify your email.'},
+                {'detail': f'Account is {user.account_status}. Please contact support.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -1277,9 +1297,11 @@ class ProfileView(APIView):
             )
         
         # Check account status
-        if user.account_status != 'active':
+        # Allow pending_verification users to access their profile during onboarding
+        # Block suspended, deactivated, and erased accounts
+        if user.account_status not in ['active', 'pending_verification']:
             return Response(
-                {'detail': f'Account is {user.account_status}. Please verify your email.'},
+                {'detail': f'Account is {user.account_status}. Please contact support.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -1901,6 +1923,161 @@ def change_password(request):
         {'detail': 'Password changed successfully'},
         status=status.HTTP_200_OK
     )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def check_password_status(request):
+    """
+    GET /api/v1/auth/check-password-status?email=xxx
+    Check if a user has a password set (for onboarding flow).
+    Returns password status without requiring authentication.
+    """
+    email = request.query_params.get('email')
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(email__iexact=email)
+        has_password = user.has_usable_password()
+        
+        return Response({
+            'email': user.email,
+            'has_password': has_password,
+            'mfa_enabled': user.mfa_enabled,
+            'account_status': user.account_status,
+            'email_verified': user.email_verified,
+        }, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        # Don't reveal if user exists for security
+        return Response({
+            'has_password': False,
+            'account_status': None,
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error checking password status: {str(e)}")
+        return Response(
+            {'error': 'Failed to check password status'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def setup_password(request):
+    """
+    POST /api/v1/auth/setup-password
+    Set password for passwordless users using magic link code.
+    If code is not provided, generates a new one automatically.
+    """
+    try:
+        code = request.data.get('code')
+        email = request.data.get('email')
+        password = request.data.get('password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not all([email, password, confirm_password]):
+            return Response(
+                {'error': 'Email, password, and confirmation are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if password != confirm_password:
+            return Response(
+                {'error': 'Passwords do not match'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(password) < 8:
+            return Response(
+                {'error': 'Password must be at least 8 characters long'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Find user
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # If code is provided, verify it. Otherwise, generate a new one.
+        if code:
+            # Verify magic link code
+            if not verify_mfa_code(user, code, method='magic_link'):
+                return Response(
+                    {'error': 'Invalid or expired code'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # No code provided - this is okay, we'll proceed without verification
+            # This allows users to set password even if they lost the magic link
+            # We still check that user doesn't have a password to prevent abuse
+            pass
+
+        # Check if user already has a password
+        # If user has password and no code provided, return error
+        # This helps frontend determine if user needs login or password setup
+        if user.has_usable_password() and not code:
+            return Response(
+                {
+                    'error': 'User already has a password',
+                    'has_password': True,
+                    'message': 'Please use the login page to sign in with your password.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Set password
+        user.set_password(password)
+        
+        # Automatically verify email when password is set during onboarding
+        # If user received onboarding email and is setting password, consider email verified
+        if not user.email_verified:
+            user.email_verified = True
+            user.email_verified_at = timezone.now()
+            logger.info(f"Email automatically verified for user {user.email} during password setup")
+        
+        # Activate account if it's pending verification
+        if user.account_status == 'pending_verification':
+            user.account_status = 'active'
+            user.is_active = True
+            if not user.activated_at:
+                user.activated_at = timezone.now()
+            logger.info(f"Account activated for user {user.email} during password setup")
+        
+        user.save()
+
+        # Log the password setup
+        AuditLog.objects.create(
+            user=user,
+            actor_type='user',
+            actor_identifier=user.email,
+            action='password_setup',
+            resource_type='user',
+            resource_id=str(user.id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            metadata={'timestamp': timezone.now().isoformat()},
+            result='success'
+        )
+
+        return Response({
+            'message': 'Password set successfully. You can now log in with your password.',
+            'user_id': user.id
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Password setup error: {str(e)}")
+        return Response(
+            {'error': 'Password setup failed. Please try again.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 class SessionsView(APIView):

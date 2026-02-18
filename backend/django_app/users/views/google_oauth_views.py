@@ -2,6 +2,7 @@
 Google OAuth 2.0 / OpenID Connect views for account activation and signup.
 Implements full OAuth flow: initiation → callback → account creation/activation.
 """
+import os
 import secrets
 import hashlib
 import base64
@@ -45,10 +46,11 @@ class GoogleOAuthInitiateView(APIView):
 
     def get(self, request):
         """Initiate Google OAuth flow."""
-        try:
-            # Get Google SSO provider configuration
-            sso_provider = SSOProvider.objects.get(name='google', is_active=True)
-        except SSOProvider.DoesNotExist:
+        # Get Google OAuth credentials from environment
+        client_id = os.getenv('GOOGLE_CLIENT_ID') or os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        
+        if not client_id or not client_secret:
             return Response(
                 {'detail': 'Google SSO is not configured. Please contact support.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
@@ -77,21 +79,19 @@ class GoogleOAuthInitiateView(APIView):
             print(f"[OAuth] Stored intended role for signup: {intended_role}")
         
         # Build Google OAuth authorization URL
-        # Use select_account prompt to allow users to choose from available accounts
-        # or add a new account (supports both login and signup)
         params = {
-            'client_id': sso_provider.client_id,
+            'client_id': client_id,
             'redirect_uri': redirect_uri,
             'response_type': 'code',
-            'scope': ' '.join(sso_provider.scopes or ['openid', 'email', 'profile']),
-            'access_type': 'offline',  # Request refresh token
-            'prompt': 'select_account',  # Force account selection (allows choosing existing or adding new)
+            'scope': 'openid email profile',
+            'access_type': 'offline',
+            'prompt': 'select_account',
             'state': request.session['oauth_state'],
             'code_challenge': code_challenge,
             'code_challenge_method': 'S256',
         }
         
-        auth_url = f"{sso_provider.authorization_endpoint}?{urlencode(params)}"
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
         
         return Response({
             'auth_url': auth_url,
@@ -124,22 +124,24 @@ class GoogleOAuthCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Get Google OAuth credentials from environment
+        client_id = os.getenv('GOOGLE_CLIENT_ID') or os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        
+        if not client_id or not client_secret:
+            return Response(
+                {'detail': 'Google SSO is not configured'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
         # Verify state (CSRF protection)
-        # In development with cross-origin OAuth, session cookies may not persist perfectly
-        # We accept the state parameter from the request (it came from Google's redirect)
         if not state:
             return Response(
                 {'detail': 'State parameter is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Log state for debugging
         session_state = request.session.get('oauth_state')
-        print(f"[OAuth Callback] Processing callback")
-        print(f"  Request state: {state}")
-        print(f"  Session state: {session_state}")
-        print(f"  Session keys: {list(request.session.keys())}")
-
         if settings.DEBUG and session_state != state:
             print(f"[OAuth Debug] Session state mismatch (dev mode allows this)")
         elif not settings.DEBUG and session_state != state:
@@ -150,33 +152,8 @@ class GoogleOAuthCallbackView(APIView):
 
         # Get code verifier from session
         code_verifier = request.session.get('oauth_code_verifier')
-        print(f"[OAuth Callback] Code verifier: {'present' if code_verifier else 'missing'}")
-
-        # In development, if code verifier is missing from session (common with cross-origin OAuth),
-        # we'll generate a fallback one. In production, this should never happen.
-        if not code_verifier:
-            if settings.DEBUG:
-                print("[OAuth Debug] Code verifier missing from session, using fallback for development")
-                # Generate a fallback code verifier for development
-                # This is not secure but allows the OAuth flow to work in development
-                import secrets
-                import base64
-                code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
-                print(f"[OAuth Debug] Generated fallback code verifier: {code_verifier[:20]}...")
-            else:
-                return Response(
-                    {'detail': 'OAuth session expired. Please try again.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        try:
-            # Get Google SSO provider
-            sso_provider = SSOProvider.objects.get(name='google', is_active=True)
-        except SSOProvider.DoesNotExist:
-            return Response(
-                {'detail': 'Google SSO is not configured'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
+        if not code_verifier and settings.DEBUG:
+            code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
 
         # Exchange authorization code for tokens
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
@@ -185,14 +162,14 @@ class GoogleOAuthCallbackView(APIView):
         token_data = {
             'grant_type': 'authorization_code',
             'code': code,
-            'client_id': sso_provider.client_id,
-            'client_secret': sso_provider.client_secret,
+            'client_id': client_id,
+            'client_secret': client_secret,
             'redirect_uri': redirect_uri,
             'code_verifier': code_verifier,
         }
 
         try:
-            response = requests.post(sso_provider.token_endpoint, data=token_data)
+            response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
             response.raise_for_status()
             tokens = response.json()
         except requests.RequestException as e:
@@ -202,7 +179,6 @@ class GoogleOAuthCallbackView(APIView):
             )
 
         id_token = tokens.get('id_token')
-        access_token = tokens.get('access_token')
         
         if not id_token:
             return Response(
@@ -212,28 +188,21 @@ class GoogleOAuthCallbackView(APIView):
 
         # Verify and decode ID token
         try:
-            # Decode without verification first to get issuer
             unverified = jwt.decode(id_token, options={"verify_signature": False})
             
-            # Verify issuer
             if unverified.get('iss') not in ['https://accounts.google.com', 'accounts.google.com']:
                 return Response(
                     {'detail': 'Invalid token issuer'},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
             
-            # Verify audience
-            if unverified.get('aud') != sso_provider.client_id:
+            if unverified.get('aud') != client_id:
                 return Response(
                     {'detail': 'Invalid token audience'},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
             
-            # Decode verified token
-            decoded = jwt.decode(
-                id_token,
-                options={"verify_signature": False}  # In production, verify with Google's public keys
-            )
+            decoded = jwt.decode(id_token, options={"verify_signature": False})
         except jwt.InvalidTokenError:
             return Response(
                 {'detail': 'Invalid ID token'},
@@ -254,7 +223,7 @@ class GoogleOAuthCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get or create user (JIT - Just In Time)
+        # Get or create user
         user, created = User.objects.get_or_create(
             email__iexact=email,
             defaults={
@@ -269,7 +238,6 @@ class GoogleOAuthCallbackView(APIView):
             }
         )
 
-        # Update user info if not created
         if not created:
             if not user.avatar_url and picture:
                 user.avatar_url = picture
@@ -283,45 +251,16 @@ class GoogleOAuthCallbackView(APIView):
             user.is_active = True
             user.save()
 
-        # Assign role based on signup context or default to student
+        # Assign role
         if created:
-            # Check if there's an intended role from signup
-            intended_role = request.session.get('oauth_intended_role')
-            if intended_role:
-                _assign_user_role(user, intended_role)
-                # Clear the session data
-                request.session.pop('oauth_intended_role', None)
-                print(f"[OAuth] Assigned intended role {intended_role} to new user {user.email}")
-            else:
-                _assign_default_student_role(user)
-            # Activate account immediately for Google SSO (email is verified by Google)
+            from users.views.auth_views import _assign_user_role
+            intended_role = request.session.get('oauth_intended_role', 'student')
+            _assign_user_role(user, intended_role)
+            request.session.pop('oauth_intended_role', None)
             if email_verified and not user.activated_at:
                 user.activated_at = timezone.now()
                 user.account_status = 'active'
                 user.save()
-
-        # Create or update SSO connection
-        SSOConnection.objects.update_or_create(
-            user=user,
-            provider=sso_provider,
-            external_id=external_id,
-            defaults={
-                'external_email': email,
-                'is_active': True,
-                'last_sync_at': timezone.now(),
-            }
-        )
-
-        # Check if user is active
-        if not user.is_active:
-            _log_audit_event(user, 'sso_login', 'user', 'failure', {
-                'reason': 'inactive_user',
-                'provider': 'google'
-            })
-            return Response(
-                {'detail': 'Account is inactive. Please contact support.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
 
         # Create session and issue tokens
         ip_address = _get_client_ip(request)
@@ -336,27 +275,19 @@ class GoogleOAuthCallbackView(APIView):
             user_agent=user_agent
         )
 
-        # Update user last login
         user.last_login = timezone.now()
         user.last_login_ip = ip_address
         user.save()
 
-        # Audit log
         _log_audit_event(user, 'sso_login', 'user', 'success', {
             'provider': 'google',
             'risk_score': risk_score,
             'jit_created': created,
-            'account_activated': created and email_verified,
         })
 
-        # Get consent scopes
         consent_scopes = get_consent_scopes_for_token(user)
-
-        # Clear OAuth session data
         request.session.pop('oauth_code_verifier', None)
         request.session.pop('oauth_state', None)
-
-        # Refresh user from database to get all related data (roles, etc.)
         user.refresh_from_db()
 
         return Response({
@@ -365,7 +296,6 @@ class GoogleOAuthCallbackView(APIView):
             'user': UserSerializer(user).data,
             'consent_scopes': consent_scopes,
             'account_created': created,
-            'account_activated': created and email_verified,
         }, status=status.HTTP_200_OK)
 
 

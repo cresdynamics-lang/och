@@ -189,11 +189,15 @@ JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 
 # Log JWT configuration on startup (for debugging)
-if JWT_SECRET_KEY != SECRET_KEY:
-    print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
-    print(f"Using JWT_SECRET_KEY from environment (length: {len(JWT_SECRET_KEY)})")
-else:
-    print(f"JWT_SECRET_KEY not set, using SECRET_KEY (length: {len(SECRET_KEY)})")
+print("="*60)
+print("DJANGO JWT CONFIGURATION:")
+print(f"DJANGO_SECRET_KEY from env: {os.environ.get('DJANGO_SECRET_KEY', 'NOT SET')}")
+print(f"JWT_SECRET_KEY from env: {os.environ.get('JWT_SECRET_KEY', 'NOT SET')}")
+print(f"SECRET_KEY (Django): {SECRET_KEY}")
+print(f"JWT_SECRET_KEY (for JWT): {JWT_SECRET_KEY}")
+print(f"JWT_ALGORITHM: {JWT_ALGORITHM}")
+print(f"Keys match: {JWT_SECRET_KEY == SECRET_KEY}")
+print("="*60)
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -204,6 +208,10 @@ SIMPLE_JWT = {
     'ALGORITHM': JWT_ALGORITHM,
     'VERIFYING_KEY': None,  # Use SIGNING_KEY for verification too
 }
+
+print(f"Django SIMPLE_JWT SIGNING_KEY: {SIMPLE_JWT['SIGNING_KEY']}")
+print(f"Django SIMPLE_JWT ALGORITHM: {SIMPLE_JWT['ALGORITHM']}")
+print("="*60)
 
 # CORS Settings
 CORS_ALLOWED_ORIGINS = [

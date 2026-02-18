@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_API_URL || 'http://localhost:8001';
+const FASTAPI_URL = process.env.NEXT_PUBLIC_FASTAPI_API_URL || 'http://localhost:8000';
 
 /** Fallback tracks matching FastAPI OCH_TRACKS shape so the profiling page can render */
 const FALLBACK_TRACKS: Record<string, { key: string; name: string; description: string; focus_areas: string[]; career_paths: string[] }> = {

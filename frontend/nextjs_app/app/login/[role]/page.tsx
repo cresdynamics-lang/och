@@ -138,7 +138,7 @@ function LoginForm() {
 
     if (isAuthenticated && user) {
       const redirectTo = searchParams.get('redirect');
-      if (redirectTo && redirectTo.startsWith('/dashboard')) {
+      if (redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/onboarding/'))) {
         hasRedirectedRef.current = true;
         router.push(redirectTo);
       }
@@ -285,7 +285,7 @@ function LoginForm() {
         }
       }
 
-      // Check if user is a student/mentee and needs profiling
+      // Check if user is a student/mentee and needs onboarding
       const userRolesForProfiling = updatedUser?.roles || [];
       const isStudent = userRolesForProfiling.some((r: any) => {
         const roleName = typeof r === 'string' ? r : (r?.role || r?.name || '').toLowerCase();
@@ -293,17 +293,37 @@ function LoginForm() {
       });
 
       if (isStudent) {
-        console.log('[Login] User is student/mentee, checking profiling status');
+        console.log('[Login] User is student/mentee, checking onboarding status');
         
-        // CRITICAL: Check Django's profiling_complete as SOURCE OF TRUTH
+        // Check email verification status
+        const emailVerified = updatedUser?.email_verified || updatedUser?.account_status === 'active';
+        const mfaEnabled = updatedUser?.mfa_enabled || false;
         const profilingComplete = updatedUser?.profiling_complete ?? false;
-        console.log('[Login] Django profiling_complete:', profilingComplete);
         
+        console.log('[Login] Onboarding status:', { emailVerified, mfaEnabled, profilingComplete });
+        
+        // Step 1: Email verification
+        if (!emailVerified) {
+          console.log('[Login] Email not verified - redirecting to email verification');
+          setIsRedirecting(true);
+          hasRedirectedRef.current = true;
+          const verifyUrl = redirectTo 
+            ? `/auth/verify-email?email=${encodeURIComponent(updatedUser?.email || '')}&redirect=${encodeURIComponent(redirectTo)}`
+            : `/auth/verify-email?email=${encodeURIComponent(updatedUser?.email || '')}`;
+          window.location.href = verifyUrl;
+          return;
+        }
+        
+        // Step 2: MFA setup (optional but recommended)
+        // Note: We'll skip MFA requirement for now to not block onboarding
+        // Users can set it up later in settings
+        
+        // Step 3: Profiling
         if (!profilingComplete) {
           console.log('[Login] Profiling not complete - redirecting to AI profiler');
           setIsRedirecting(true);
           hasRedirectedRef.current = true;
-          window.location.href = '/onboarding/ai-profiler';
+          window.location.href = redirectTo || '/onboarding/ai-profiler';
           return;
         }
         
@@ -372,7 +392,7 @@ function LoginForm() {
           }
         }
 
-        if (redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/students/'))) {
+        if (redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/students/') || redirectTo.startsWith('/onboarding/'))) {
           route = redirectTo;
           console.log('[Login] Using redirectTo route:', route);
         } else {

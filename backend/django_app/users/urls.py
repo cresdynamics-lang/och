@@ -3,7 +3,7 @@ URL configuration for users app - Authentication endpoints.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password
+from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password, setup_password, check_password_status, setup_password
 from .views.auth_views import resend_verification_email, resend_verification_email
 from .views.auth_views import (
     SignupView,
@@ -104,6 +104,10 @@ urlpatterns = [
     path('auth/request-password-reset', request_password_reset, name='request_password_reset-no-slash'),
     path('auth/reset-password/', reset_password, name='reset_password'),
     path('auth/reset-password', reset_password, name='reset_password-no-slash'),
+    path('auth/setup-password/', setup_password, name='setup_password'),
+    path('auth/setup-password', setup_password, name='setup_password-no-slash'),
+    path('auth/check-password-status/', check_password_status, name='check_password_status'),
+    path('auth/check-password-status', check_password_status, name='check_password_status-no-slash'),
 
     # SSO endpoints (generic and specific)
     path('auth/sso/<str:provider>', SSOLoginView.as_view(), name='sso-generic'),

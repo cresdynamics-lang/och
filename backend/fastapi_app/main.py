@@ -16,6 +16,16 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
+@app.on_event("startup")
+async def startup_event():
+    """Print configuration on startup for debugging."""
+    print("="*50)
+    print("FastAPI JWT Configuration:")
+    print(f"JWT_SECRET_KEY length: {len(settings.JWT_SECRET_KEY)}")
+    print(f"JWT_SECRET_KEY starts with: {settings.JWT_SECRET_KEY[:20]}...")
+    print(f"JWT_ALGORITHM: {settings.JWT_ALGORITHM}")
+    print("="*50)
+
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,

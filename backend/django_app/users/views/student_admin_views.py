@@ -49,9 +49,30 @@ class SendOnboardingEmailView(APIView):
         user.metadata['onboarding_email_token'] = tracking_token
         user.save()
 
-        # Create tracking URL
+        # Create tracking URL - use backend URL directly for better reliability
+        # The tracking endpoint is included in api.urls which is mounted at /api/v1/
+        backend_url = getattr(settings, 'DJANGO_API_URL', 'http://localhost:8000')
+        if not backend_url:
+            backend_url = getattr(settings, 'API_URL', 'http://localhost:8000')
+        tracking_url = f"{backend_url}/api/v1/track-onboarding-email?token={tracking_token}&user_id={user_id}"
+        
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-        tracking_url = f"{frontend_url}/api/track-onboarding-email?token={tracking_token}&user_id={user_id}"
+        
+        # Generate onboarding URL - for students, always go to AI profiler onboarding
+        # ALL students receiving onboarding emails MUST set password first (they're passwordless by default)
+        # Generate magic link for password setup, then redirect to profiler
+        onboarding_url = None
+        from users.utils.auth_utils import create_mfa_code
+        try:
+            code, mfa_code = create_mfa_code(user, method='magic_link', expires_minutes=1440)  # 24 hours
+            # Always redirect to password setup page first, then profiler
+            # This ensures all students set up their password before proceeding
+            onboarding_url = f"{frontend_url}/auth/setup-password?code={code}&email={user.email}&redirect=/onboarding/ai-profiler"
+        except Exception as e:
+            logger.warning(f"Failed to generate magic link for onboarding: {str(e)}")
+            # Fallback: if magic link generation fails, still try to redirect to setup-password
+            # but user will need to request a new onboarding email
+            onboarding_url = f"{frontend_url}/auth/setup-password?email={user.email}&redirect=/onboarding/ai-profiler"
 
         # Create onboarding email content with tracking pixel
         email_service = EmailService()
@@ -73,21 +94,22 @@ class SendOnboardingEmailView(APIView):
                         <p>Hi {user.first_name or 'Explorer'},</p>
                         <p>Welcome to Ongoza CyberHub! We're excited to have you join our community of cybersecurity professionals.</p>
                         
-                        <p>To get started, please click the button below to access your dashboard:</p>
+                        <p>To get started, please click the button below to begin your onboarding:</p>
                         
                         <div style="text-align: center; margin-top: 32px;">
-                            <a href="{frontend_url}/dashboard" style="background-color: #1E3A8A; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 16px;">
-                                Access Your Dashboard
+                            <a href="{onboarding_url or f'{frontend_url}/onboarding/student?email={user.email}'}" style="background-color: #1E3A8A; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 16px;">
+                                Get Started
                             </a>
                         </div>
                         
                         <p style="margin-top: 24px;">If you have any questions, feel free to reach out to our support team.</p>
                         
                         <p style="background: #F8FAFC; padding: 12px; border-radius: 6px; font-size: 14px; color: #475569; margin-top: 24px;">
-                            <strong>Next Steps:</strong><br>
-                            1. Complete your profile<br>
-                            2. Take the TalentScope assessment<br>
-                            3. Explore available tracks and cohorts
+                            <strong>What's Next:</strong><br>
+                            1. Set up your password (if needed)<br>
+                            2. Complete your profile<br>
+                            3. Take the AI Profiler assessment to get matched with your ideal track<br>
+                            4. Explore available tracks and cohorts
                         </p>
                     </div>
                 </div>

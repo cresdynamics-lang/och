@@ -98,8 +98,12 @@ if not settings.JWT_SECRET_KEY or settings.JWT_SECRET_KEY == "":
 else:
     print(f" Using JWT_SECRET_KEY from environment (length: {len(settings.JWT_SECRET_KEY)})")
 
-# Debug: Print first 20 chars of key for verification (not full key for security)
-print(f" FastAPI JWT key starts with: {settings.JWT_SECRET_KEY[:20]}...")
-print(f" FastAPI JWT algorithm: {settings.JWT_ALGORITHM}")
+# Debug: Print full keys for verification
+print("="*60)
+print("FASTAPI JWT CONFIGURATION:")
+print(f"DJANGO_SECRET_KEY: {settings.DJANGO_SECRET_KEY}")
+print(f"JWT_SECRET_KEY: {settings.JWT_SECRET_KEY}")
+print(f"JWT_ALGORITHM: {settings.JWT_ALGORITHM}")
+print("="*60)
 
 

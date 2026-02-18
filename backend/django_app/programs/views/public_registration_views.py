@@ -56,14 +56,22 @@ def list_published_cohorts(request):
     data = []
     for c in cohorts:
         fields = c.registration_form_fields or {}
+        track_data = None
+        program_data = None
+        
+        if c.track:
+            track_data = {'id': str(c.track.id), 'name': c.track.name}
+            if c.track.program:
+                program_data = {'id': str(c.track.program.id), 'name': c.track.program.name}
+        
         data.append({
             'id': str(c.id),
             'name': c.name,
             'start_date': str(c.start_date),
             'end_date': str(c.end_date),
             'mode': c.mode,
-            'track': {'id': str(c.track.id), 'name': c.track.name},
-            'program': {'id': str(c.track.program.id), 'name': c.track.program.name} if c.track.program else None,
+            'track': track_data,
+            'program': program_data,
             'profile_image_url': _build_profile_image_url(c, request),
             'student_form_fields': fields.get('student') or DEFAULT_STUDENT_FIELDS,
             'sponsor_form_fields': fields.get('sponsor') or DEFAULT_SPONSOR_FIELDS,
