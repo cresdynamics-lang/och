@@ -89,41 +89,6 @@ export function getRedirectRoute(user: User | null): string {
 
   const route = getDashboardRoute(primaryRole)
 
-  // CRITICAL: Final validation - if route is student dashboard, check one more time for mentor role
-  // This is a safety net to ensure mentors NEVER get student dashboard
-  // Mentors should NEVER be associated with student routes
-  if (route === '/dashboard/student' && user.roles && Array.isArray(user.roles)) {
-    const hasMentorRole = user.roles.some((ur: any) => {
-      const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || ur?.role_display_name || '')
-      return roleName?.toLowerCase().trim() === 'mentor'
-    })
-    if (hasMentorRole) {
-      console.error('🚨 getRedirectRoute: CRITICAL ERROR - Mentor detected but route is student dashboard!')
-      console.error('🚨 getRedirectRoute: FORCING redirect to /dashboard/mentor')
-      console.log('🚫 getRedirectRoute: Mentors are NEVER associated with student routes')
-      return '/dashboard/mentor'
-    }
-  }
-
-  // Validate that the route exists and is accessible
-  // All routes should start with /dashboard/
-  if (!route || !route.startsWith('/dashboard/')) {
-    console.error('getRedirectRoute: Invalid route generated:', route, 'for role:', primaryRole)
-    // CRITICAL: Check for mentor role BEFORE falling back to student
-    if (user.roles && Array.isArray(user.roles)) {
-      const hasMentorRole = user.roles.some((ur: any) => {
-        const roleName = typeof ur === 'string' ? ur : (ur?.role || ur?.name || ur?.role_display_name || '')
-        return roleName?.toLowerCase().trim() === 'mentor'
-      })
-      if (hasMentorRole) {
-        console.log('✅ getRedirectRoute: Mentor role detected in route validation fallback - redirecting to /dashboard/mentor')
-        return '/dashboard/mentor'
-      }
-    }
-    // Only fallback to student if user is NOT a mentor
-    return '/dashboard/student'
-  }
-
   console.log('✅ getRedirectRoute: Final route determined', {
     primaryRole,
     route,
@@ -147,7 +112,7 @@ export const ROLE_DASHBOARD_MAP = {
   'sponsor_admin': '/dashboard/sponsor',
   'analyst': '/dashboard/analyst',
   'employer': '/dashboard/employer',
-  'finance': '/dashboard/finance',
+  'finance': '/finance/dashboard',
 } as const
 
 /**
@@ -155,11 +120,6 @@ export const ROLE_DASHBOARD_MAP = {
  */
 export function isValidDashboardRoute(route: string): boolean {
   if (!route || typeof route !== 'string') {
-    return false
-  }
-
-  // All routes should start with /dashboard/
-  if (!route.startsWith('/dashboard/')) {
     return false
   }
 
@@ -203,7 +163,7 @@ export function getFallbackRoute(user: User | null): string {
   if (roles.includes('sponsor_admin') || roles.includes('sponsor')) return '/dashboard/sponsor'
   if (roles.includes('analyst')) return '/dashboard/analyst'
   if (roles.includes('employer')) return '/dashboard/employer'
-  if (roles.includes('finance')) return '/dashboard/finance'
+  if (roles.includes('finance')) return '/finance/dashboard'
 
   // For students/mentees, fallback to student dashboard
   if (roles.some(r => ['student', 'mentee'].includes(r))) {

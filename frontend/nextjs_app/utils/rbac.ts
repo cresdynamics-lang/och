@@ -184,14 +184,21 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/analytics', roles: ['analyst', 'admin', 'program_director'] },
   
   // Finance routes
-  { path: '/dashboard/finance', roles: ['finance'] },
-  { path: '/dashboard/finance/catalog', roles: ['finance'] },
-  { path: '/dashboard/finance/analytics', roles: ['finance'] },
-  { path: '/dashboard/finance/billing', roles: ['finance'] },
-  { path: '/dashboard/finance/sponsorship', roles: ['finance'] },
-  { path: '/dashboard/finance/rewards', roles: ['finance'] },
-  { path: '/dashboard/finance/security', roles: ['finance'] },
-  { path: '/dashboard/finance/profile', roles: ['finance'] },
+  { path: '/finance', roles: ['finance'] },
+  { path: '/finance/dashboard', roles: ['finance'] },
+  { path: '/finance/catalog', roles: ['finance'] },
+  { path: '/finance/analytics', roles: ['finance'] },
+  { path: '/finance/billing', roles: ['finance'] },
+  { path: '/finance/sponsorship', roles: ['finance'] },
+  { path: '/finance/rewards', roles: ['finance'] },
+  { path: '/finance/security', roles: ['finance'] },
+  { path: '/finance/profile', roles: ['finance'] },
+  { path: '/finance/cashflow', roles: ['finance'] },
+  { path: '/finance/invoices', roles: ['finance'] },
+  { path: '/finance/placements', roles: ['finance'] },
+  { path: '/finance/revenue', roles: ['finance'] },
+  { path: '/finance/settings', roles: ['finance'] },
+  { path: '/finance/subscriptions', roles: ['finance'] },
 
   // Organizations routes (accessible by admins and program directors)
   { path: '/dashboard/organizations', roles: ['admin', 'program_director'] },
@@ -405,7 +412,7 @@ export function getDashboardRoute(role: Role | null): string {
     'sponsor_admin': '/dashboard/sponsor',     // Sponsor/Employer Admin → Sponsor Dashboard
     'analyst': '/dashboard/analyst',           // Analyst role → Analyst Dashboard
     'employer': '/dashboard/employer',         // Employer role → Employer Dashboard
-    'finance': '/dashboard/finance',           // Finance role → Finance Dashboard
+    'finance': '/finance/dashboard',           // Finance role → Finance Dashboard
   }
   
   const route = routeMap[role]

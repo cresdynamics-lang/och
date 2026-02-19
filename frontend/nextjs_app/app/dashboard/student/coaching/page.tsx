@@ -199,6 +199,15 @@ export default function AICoachPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950/30 to-slate-950 p-6">
+      {loadingProgress && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-white font-semibold">Loading your AI Coach...</p>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -470,13 +479,13 @@ export default function AICoachPage() {
         )}
 
         <Card className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border-emerald-500/30 p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <h3 className="text-xl font-bold text-white mb-2">Ready for Hands-On Practice?</h3>
               <p className="text-slate-400 text-sm">Explore our recipe library and start building real cybersecurity skills</p>
             </div>
             <Link href="/dashboard/student/coaching/recipes">
-              <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
+              <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 whitespace-nowrap">
                 <BookOpen className="w-4 h-4 mr-2" />
                 Continue to Recipes
               </Button>

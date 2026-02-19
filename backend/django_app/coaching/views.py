@@ -502,36 +502,62 @@ def ai_coach_chat(request):
         
         # Get comprehensive user data
         track_info = "Not enrolled in any track yet"
+        track_level = "Not assessed"
+        match_score = 0
         missions_completed_count = progress.get('missions_completed', 0)
-        missions_in_progress = 0
         profiler_info = "No profiler assessment completed"
         
         try:
-            from curriculum.models import UserTrackEnrollment
-            enrollment = UserTrackEnrollment.objects.filter(user=user).first()
-            if enrollment and enrollment.track:
-                track_info = f"{enrollment.track.name} (Circle {enrollment.circle_level})"
-        except Exception as e:
-            logger.debug(f"Track enrollment error: {e}")
-        
-        try:
             from profiler.models import ProfilerSession
-            profiler = ProfilerSession.objects.filter(user=user, status__in=['finished', 'locked']).first()
+            # Get the most recent profiler session (completed or in progress)
+            profiler = ProfilerSession.objects.filter(user=user).order_by('-started_at').first()
+            logger.info(f"Profiler query for {user.email}: found={profiler is not None}")
+            
             if profiler:
-                profiler_info = f"Recommended Track: {profiler.recommended_track.name if profiler.recommended_track else 'N/A'}, Strengths: {', '.join(profiler.strengths or [])}"
+                logger.info(f"Profiler status: {profiler.status}, recommended_track_id: {profiler.recommended_track_id}")
+                
+                if profiler.recommended_track_id:
+                    # Fetch the track from curriculum
+                    try:
+                        from curriculum.models import CurriculumTrack
+                        track = CurriculumTrack.objects.filter(id=profiler.recommended_track_id).first()
+                        if track:
+                            track_info = f"{track.name}"
+                            track_level = track.level.upper() if hasattr(track, 'level') else "INTERMEDIATE"
+                            match_score = int(profiler.track_confidence * 100) if profiler.track_confidence else 19
+                            logger.info(f"Track data: {track_info} at {track_level} level ({match_score}% match)")
+                    except Exception as track_err:
+                        logger.error(f"Error fetching track: {track_err}")
+                
+                strengths = ', '.join(profiler.strengths or []) if profiler.strengths else 'None'
+                profiler_info = f"Track: {track_info}, Level: {track_level}, Match: {match_score}%, Strengths: {strengths}"
         except Exception as e:
-            logger.debug(f"Profiler error: {e}")
+            logger.error(f"Profiler error: {e}", exc_info=True)
+        
+        # Try UserTrackEnrollment as fallback
+        try:
+            from curriculum.models import UserTrackEnrollment
+            enrollment = UserTrackEnrollment.objects.filter(user_id=user.id).first()
+            if enrollment and enrollment.track and track_info == "Not enrolled in any track yet":
+                track_info = f"{enrollment.track.name} (Level: {enrollment.current_level_slug})"
+                logger.info(f"Found enrollment for {user.email}: {track_info}")
+        except Exception as e:
+            logger.error(f"Track enrollment error: {e}")
         
         # Build comprehensive system prompt
-        system_prompt = f"""You are {user.first_name or user.email}'s personal AI Coach for cybersecurity learning. You have full access to their data and progress.
+        system_prompt = f"""You are {user.first_name or user.email}'s personal AI Coach at Ongoza Cyber Hub (OCH).
+
+IMPORTANT: You have FULL ACCESS to their complete profile and progress data. Use this information in EVERY response.
 
 STUDENT PROFILE:
 - Name: {user.first_name} {user.last_name or ''}
 - Email: {user.email}
-- Current Track: {track_info}
+- Recommended Track: {track_info}
+- Track Level: {track_level}
+- Track Match Score: {match_score}%
 - Profiler Assessment: {profiler_info}
 
-LEARNING PROGRESS:
+LEARNING PROGRESS IN ONGOZA CYBER HUB:
 - Missions Completed: {missions_completed_count}
 - Recipes Completed: {progress.get('recipes_completed', 0)}
 - Average Score: {progress.get('average_score', 0)}%
@@ -540,15 +566,17 @@ LEARNING PROGRESS:
 - Strengths: {', '.join(progress.get('strengths', [])) or 'Assessment pending'}
 
 YOUR ROLE:
-- Address the student by their first name
-- Provide personalized, honest feedback based on their specific progress
-- Reference their track and missions when giving guidance
-- Suggest specific recipes and missions aligned with their track
-- Help them plan their learning schedule
+- ALWAYS address the student by their first name ({user.first_name or user.email})
+- ALWAYS reference their specific track: "{track_info}" at {track_level} level with {match_score}% match
+- Provide personalized feedback based on their actual Ongoza Cyber Hub progress data
+- Reference specific missions and recipes for {track_info} track
+- Help them plan their learning schedule in Ongoza Cyber Hub
 - Celebrate their achievements and encourage them through challenges
 - Be supportive, specific, and actionable
+- NEVER say you don't have information about them - you have their complete Ongoza Cyber Hub profile
+- ALWAYS refer to the platform as "Ongoza Cyber Hub" or "OCH"
 
-Always personalize your responses using their name and specific data."""
+Remember: You are their personal coach who knows everything about their journey in Ongoza Cyber Hub. Be specific and personal in EVERY response."""
         
         # Get recent conversation history
         recent_messages = AICoachMessage.objects.filter(

@@ -84,7 +84,7 @@ function getDashboardForRole(role: string | null): string {
     case 'analyst': dashboard = '/dashboard/analyst'; break
     case 'sponsor_admin': dashboard = '/dashboard/sponsor'; break
     case 'employer': dashboard = '/dashboard/employer'; break
-    case 'finance': dashboard = '/dashboard/finance'; break
+    case 'finance': dashboard = '/finance/dashboard'; break
     case 'mentee':
     case 'student': dashboard = '/dashboard/student'; break
     default:

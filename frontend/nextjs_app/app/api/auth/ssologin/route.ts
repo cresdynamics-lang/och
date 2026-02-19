@@ -46,7 +46,7 @@ function getDashboardForRole(role: string | null): string {
     case 'analyst': return '/dashboard/analyst'
     case 'sponsor_admin': return '/dashboard/sponsor'
     case 'employer': return '/dashboard/employer'
-    case 'finance': return '/dashboard/finance'
+    case 'finance': return '/finance/dashboard'
     case 'mentee':
     case 'student':
     default:
