@@ -2,7 +2,6 @@
 URL configuration for users app - Authentication endpoints.
 """
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
 from .views import UserViewSet, register_user, verify_email, request_password_reset, reset_password, change_password, setup_password, check_password_status, setup_password
 from .views.auth_views import resend_verification_email, resend_verification_email
 from .views.auth_views import (
@@ -48,10 +47,10 @@ from .views.onboarding_views import (
 from .views.settings_views import user_settings
 from .views.create_och_users_view import create_och_users
 
-router = DefaultRouter()
-router.register(r'users', UserViewSet, basename='user')
-
 urlpatterns = [
+    # User management endpoints
+    # Note: UserViewSet is registered in api/urls.py router to create /api/v1/users endpoint
+    
     # Authentication endpoints (support both with and without trailing slash)
     path('auth/signup', SignupView.as_view(), name='signup'),
     path('auth/signup/', SignupView.as_view(), name='signup-slash'),
@@ -131,9 +130,6 @@ urlpatterns = [
     path('auth/onboarding/status/', check_onboarding_status, name='onboarding-status-slash'),
     path('auth/onboarding/complete-step', complete_onboarding_step, name='onboarding-complete-step'),
     path('auth/onboarding/complete-step/', complete_onboarding_step, name='onboarding-complete-step-slash'),
-
-    # User management endpoints
-    path('', include(router.urls)),
     
     # OCH users creation endpoint (for initial setup)
     path('users/create-och-users', create_och_users, name='create-och-users'),

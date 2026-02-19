@@ -37,8 +37,8 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
-# Disable APPEND_SLASH to avoid RuntimeError in CommonMiddleware.get_full_path_with_slash
-APPEND_SLASH = False
+# Enable APPEND_SLASH to support both with and without trailing slashes
+APPEND_SLASH = True
 
 # Application definition
 INSTALLED_APPS = [

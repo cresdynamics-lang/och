@@ -20,6 +20,12 @@ const generateBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
 
   // Get the dashboard context from the pathname
   const dashboardContext = getDashboardContextFromPath(pathname)
+  
+  // Handle finance dashboard separately
+  if (pathname.startsWith('/finance')) {
+    return [{ label: 'Finance', href: '/finance/dashboard' }]
+  }
+  
   const dashboardBase = dashboardContext || '/dashboard/student'
 
   // Determine dashboard label based on context
@@ -31,6 +37,7 @@ const generateBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
     '/dashboard/sponsor': 'Sponsor Dashboard',
     '/dashboard/analyst': 'Analyst Dashboard',
     '/dashboard/employer': 'Employer Dashboard',
+    '/finance/dashboard': 'Finance',
   }
 
   const dashboardLabel = dashboardLabelMap[dashboardBase] || 'Dashboard'

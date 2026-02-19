@@ -2,7 +2,9 @@
 URL configuration for API v1 endpoints.
 """
 from django.urls import path, re_path, include
+from rest_framework.routers import DefaultRouter
 from .views import health_check
+from users.views.user_views import UserViewSet
 from users.views.admin_views import (
     RoleViewSet,
     PermissionViewSet,
@@ -23,10 +25,17 @@ from .views import health_check, dashboard_metrics
 from programs.views.director_management_views import director_mentor_analytics_view
 from programs.views.public_registration_views import list_public_applications
 
+# Register UserViewSet in a router for /api/v1/users endpoint
+# Support both with and without trailing slashes
+router = DefaultRouter()
+router.register(r'users', UserViewSet, basename='user')
+
 urlpatterns = [
     path('health/', health_check, name='health-check'),
     path('metrics/dashboard', dashboard_metrics, name='dashboard-metrics'),
     
+    # User management endpoints (from router) - MUST BE FIRST
+    path('', include(router.urls)),
     # Director public applications - explicit route to avoid 404
     path('director/public-applications/', list_public_applications, name='director-public-applications'),
     # Director mentor analytics - must come before generic '' includes to avoid 404

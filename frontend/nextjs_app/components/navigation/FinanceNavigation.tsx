@@ -13,7 +13,8 @@ import {
   Gift, 
   Shield,
   Home,
-  User
+  User,
+  Settings
 } from 'lucide-react'
 
 interface NavItem {
@@ -24,14 +25,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard/finance', icon: Home },
-  { label: 'Catalog', href: '/dashboard/finance/catalog', icon: ShoppingCart },
-  { label: 'Analytics', href: '/dashboard/finance/analytics', icon: BarChart3 },
-  { label: 'Billing', href: '/dashboard/finance/billing', icon: FileText },
-  { label: 'Sponsorship', href: '/dashboard/finance/sponsorship', icon: Wallet },
-  { label: 'Rewards', href: '/dashboard/finance/rewards', icon: Gift },
-  { label: 'Security', href: '/dashboard/finance/security', icon: Shield },
-  { label: 'Profile', href: '/dashboard/finance/profile', icon: User },
+  { label: 'Dashboard', href: '/finance/dashboard', icon: Home },
+  { label: 'Revenue', href: '/finance/revenue', icon: DollarSign },
+  { label: 'Invoices', href: '/finance/invoices', icon: FileText },
+  { label: 'Placements', href: '/finance/placements', icon: BarChart3 },
+  { label: 'Subscriptions', href: '/finance/subscriptions', icon: Wallet },
+  { label: 'Cash Flow', href: '/finance/cashflow', icon: Shield },
+  { label: 'Settings', href: '/finance/settings', icon: Settings },
 ]
 
 export function FinanceNavigation() {
@@ -39,8 +39,8 @@ export function FinanceNavigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const isActive = (href: string) => {
-    if (href === '/dashboard/finance') {
-      return pathname === '/dashboard/finance'
+    if (href === '/finance/dashboard') {
+      return pathname === '/finance/dashboard'
     }
     return pathname.startsWith(href)
   }
@@ -83,7 +83,7 @@ export function FinanceNavigation() {
         <div className="flex flex-col h-full">
           {/* Logo/Brand */}
           <div className="p-6 border-b border-och-steel/20">
-            <Link href="/dashboard/finance" className="flex items-center gap-2">
+            <Link href="/finance/dashboard" className="flex items-center gap-2">
               <DollarSign className="h-8 w-8 text-och-defender" />
               <span className="text-xl font-bold text-white">Finance</span>
             </Link>
