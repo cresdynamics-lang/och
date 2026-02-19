@@ -37,9 +37,6 @@ export default function AICoachPage() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
   const [showChat, setShowChat] = useState(false);
-  const [showRecommendation, setShowRecommendation] = useState(false);
-  const [recommendation, setRecommendation] = useState('');
-  const [loadingRecommendation, setLoadingRecommendation] = useState(false);
   const [dailyLimit, setDailyLimit] = useState<number | null>(null);
   const [usageToday, setUsageToday] = useState(0);
   const [initialMessage, setInitialMessage] = useState('');
@@ -80,6 +77,7 @@ export default function AICoachPage() {
       setDailyLimit(subData.ai_coach_daily_limit);
       setUsageToday(usageData.usage_today || 0);
 
+      // Generate AI welcome message
       try {
         const welcomeRes = await apiGateway.post('/coaching/ai-coach/welcome', {
           progress: progressData
@@ -89,6 +87,7 @@ export default function AICoachPage() {
         setInitialMessage(getMotivationalMessage(progressData));
       }
 
+      // Load chat history
       try {
         const historyData = await apiGateway.get('/coaching/ai-coach/history?limit=20');
         if (historyData && historyData.length > 0) {
@@ -128,26 +127,6 @@ export default function AICoachPage() {
   const canSendMessage = () => {
     const remaining = getRemainingMessages();
     return remaining > 0 || remaining === Infinity;
-  };
-
-  const getRecommendation = async () => {
-    if (!canSendMessage()) return;
-    
-    setLoadingRecommendation(true);
-    setShowRecommendation(true);
-    
-    try {
-      const response = await apiGateway.post('/coaching/ai-coach/recommendation', {
-        progress: progress,
-      });
-      
-      setRecommendation(response.recommendation);
-      setUsageToday(prev => prev + 1);
-    } catch (err: any) {
-      setRecommendation('Unable to generate recommendation. Please try again later.');
-    } finally {
-      setLoadingRecommendation(false);
-    }
   };
 
   const sendMessage = async () => {
@@ -264,15 +243,13 @@ export default function AICoachPage() {
                 <div className="mt-4 flex gap-3">
                   <Button
                     onClick={() => setShowChat(true)}
-                    disabled={!canSendMessage()}
                     className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
                   >
                     <MessageCircle className="w-4 h-4 mr-2" />
                     Chat with AI Coach
                   </Button>
                   <Button
-                    onClick={getRecommendation}
-                    disabled={!canSendMessage()}
+                    onClick={() => setShowChat(true)}
                     variant="outline"
                     className="border-purple-500/50 hover:bg-purple-500/10"
                   >
@@ -319,59 +296,6 @@ export default function AICoachPage() {
                 </ul>
               </Card>
             )}
-          </div>
-        )}
-
-        {/* Recommendation Modal */}
-        {showRecommendation && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <Card className="max-w-2xl w-full bg-slate-900 border-purple-500/30">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <Sparkles className="w-6 h-6 text-yellow-400" />
-                    Your Personalized Recommendation
-                  </h2>
-                  <button
-                    onClick={() => setShowRecommendation(false)}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                {loadingRecommendation ? (
-                  <div className="py-12 text-center">
-                    <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-slate-400">Analyzing your progress...</p>
-                  </div>
-                ) : (
-                  <div className="bg-gradient-to-br from-purple-900/20 to-indigo-900/20 border border-purple-500/30 rounded-lg p-6">
-                    <p className="text-white whitespace-pre-wrap leading-relaxed">{recommendation}</p>
-                  </div>
-                )}
-                
-                <div className="mt-6 flex gap-3">
-                  <Button
-                    onClick={() => {
-                      setShowRecommendation(false);
-                      setShowChat(true);
-                    }}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Chat with AI Coach
-                  </Button>
-                  <Button
-                    onClick={() => setShowRecommendation(false)}
-                    variant="outline"
-                    className="border-slate-700"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </div>
-            </Card>
           </div>
         )}
 
@@ -468,21 +392,6 @@ export default function AICoachPage() {
             </div>
           </Card>
         )}
-
-        <Card className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border-emerald-500/30 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-white mb-2">Ready for Hands-On Practice?</h3>
-              <p className="text-slate-400 text-sm">Explore our recipe library and start building real cybersecurity skills</p>
-            </div>
-            <Link href="/dashboard/student/coaching/recipes">
-              <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Continue to Recipes
-              </Button>
-            </Link>
-          </div>
-        </Card>
       </div>
     </div>
   );

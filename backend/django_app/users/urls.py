@@ -41,6 +41,10 @@ from .views.google_oauth_views import (
     google_oauth_initiate,
     google_oauth_callback,
 )
+from .views.onboarding_views import (
+    check_onboarding_status,
+    complete_onboarding_step,
+)
 from .views.settings_views import user_settings
 from .views.create_och_users_view import create_och_users
 
@@ -121,6 +125,12 @@ urlpatterns = [
     path('auth/google/initiate/', google_oauth_initiate, name='google-oauth-initiate-slash'),
     path('auth/google/callback', google_oauth_callback, name='google-oauth-callback'),
     path('auth/google/callback/', google_oauth_callback, name='google-oauth-callback-slash'),
+
+    # Onboarding flow endpoints
+    path('auth/onboarding/status', check_onboarding_status, name='onboarding-status'),
+    path('auth/onboarding/status/', check_onboarding_status, name='onboarding-status-slash'),
+    path('auth/onboarding/complete-step', complete_onboarding_step, name='onboarding-complete-step'),
+    path('auth/onboarding/complete-step/', complete_onboarding_step, name='onboarding-complete-step-slash'),
 
     # User management endpoints
     path('', include(router.urls)),

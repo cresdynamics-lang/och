@@ -151,6 +151,13 @@ def director_students_list(request):
                     sponsor_name = sponsor.email
                 sponsor_id = str(sponsor.uuid_id)
             
+            # Get organization from user's org_id field
+            organization_name = None
+            organization_id = None
+            if student.org_id:
+                organization_name = student.org_id.name
+                organization_id = str(student.org_id.id)
+            
             track_key = (getattr(student, 'track_key', None) or '').strip() or None
             track_display = TRACK_KEY_DISPLAY.get((track_key or '').lower()) if track_key else None
             if not track_display and track_key:
@@ -166,6 +173,8 @@ def director_students_list(request):
                 'last_name': student.last_name or '',
                 'sponsor_id': sponsor_id,
                 'sponsor_name': sponsor_name,
+                'organization_id': organization_id,
+                'organization_name': organization_name,
                 'track_key': track_key,
                 'track_display': track_display,
                 'direct_mentors': direct_mentors,

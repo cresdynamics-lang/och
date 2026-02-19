@@ -20,6 +20,7 @@ interface EnrolledStudent extends Omit<Enrollment, 'enrollment_type'> {
   user_name?: string
   user_email?: string
   subscription_tier?: string
+  subscription_plan_name?: string
   onboarded_email_status?: 'sent' | 'sent_and_seen' | null
   organization_name?: string | null
   organization_id?: string | null
@@ -228,7 +229,21 @@ export default function EnrollmentPage() {
         orgMap.set(String(org.id), { id: String(org.id), name: org.name })
       }
 
-      // Fetch all enrollments from all cohorts in parallel
+      // Fetch all students using the director students endpoint
+      const studentsResponse = await apiGateway.get('/director/students/').catch((err) => {
+        console.error('Failed to fetch students from director endpoint:', err)
+        return null
+      }) as any
+      
+      if (!studentsResponse || !studentsResponse.students) {
+        console.error('Failed to load students from director endpoint')
+        setEnrolledStudents([])
+        return
+      }
+      
+      const allStudents = studentsResponse.students || []
+      
+      // Fetch cohort enrollments for each student to get cohort details
       const enrollmentPromises = cohortsList.map((cohort: any) =>
         programsClient.getCohortEnrollments(cohort.id)
           .then((enrollments: Enrollment[]) => ({
@@ -243,47 +258,42 @@ export default function EnrollmentPage() {
       
       const cohortEnrollments = await Promise.all(enrollmentPromises)
       
-      // Collect unique user IDs and organization IDs for batch fetching
-      const userIds = new Set<string>()
-      const orgIdsToFetch = new Set<string>()
-      
-      for (const { enrollments } of cohortEnrollments) {
+      // Build a map of user ID to their cohort enrollments
+      const userCohortsMap = new Map<string, Array<{ cohort: any; enrollment: Enrollment }>>()
+      for (const { cohort, enrollments } of cohortEnrollments) {
         for (const e of enrollments) {
-          userIds.add(String(e.user))
-          if (e.org && !orgMap.has(String(e.org))) {
-            orgIdsToFetch.add(String(e.org))
+          const userId = String(e.user)
+          if (!userCohortsMap.has(userId)) {
+            userCohortsMap.set(userId, [])
           }
+          userCohortsMap.get(userId)!.push({ cohort, enrollment: e })
         }
       }
       
-      // Batch fetch user data (only onboarded_email_status needed)
-      // Optimize: Only fetch if we have enrollments, and batch in parallel
+      // Batch fetch user details for onboarded_email_status
       const userDataMap = new Map<string, { onboarded_email_status: any }>()
-      if (userIds.size > 0) {
-        // Fetch users in parallel batches (50 at a time to avoid overwhelming the server)
-        const userIdArray = Array.from(userIds)
+      if (allStudents.length > 0) {
         const batchSize = 50
-        const userBatches = []
-        
-        for (let i = 0; i < userIdArray.length; i += batchSize) {
-          userBatches.push(userIdArray.slice(i, i + batchSize))
-        }
-        
-        // Process batches in parallel but limit concurrent requests
         const maxConcurrentBatches = 3
-        for (let i = 0; i < userBatches.length; i += maxConcurrentBatches) {
-          const batchGroup = userBatches.slice(i, i + maxConcurrentBatches)
-          const userPromises = batchGroup.map(batch =>
-            Promise.all(
-              batch.map(userId =>
-                apiGateway.get(`/users/${userId}/`)
-                  .then((user: any) => ({ userId, onboarded_email_status: user.onboarded_email_status || null }))
-                  .catch(() => ({ userId, onboarded_email_status: null }))
+        
+        for (let i = 0; i < allStudents.length; i += batchSize * maxConcurrentBatches) {
+          const batchGroup = []
+          for (let j = 0; j < maxConcurrentBatches && i + j * batchSize < allStudents.length; j++) {
+            const batch = allStudents.slice(i + j * batchSize, i + (j + 1) * batchSize)
+            if (batch.length > 0) {
+              batchGroup.push(
+                Promise.all(
+                  batch.map((student: any) =>
+                    apiGateway.get(`/users/${student.id}/`)
+                      .then((user: any) => ({ userId: String(student.id), onboarded_email_status: user.onboarded_email_status || null }))
+                      .catch(() => ({ userId: String(student.id), onboarded_email_status: null }))
+                  )
+                )
               )
-            )
-          )
+            }
+          }
           
-          const userResults = await Promise.all(userPromises)
+          const userResults = await Promise.all(batchGroup)
           for (const batch of userResults) {
             for (const { userId, onboarded_email_status } of batch) {
               userDataMap.set(userId, { onboarded_email_status })
@@ -292,173 +302,81 @@ export default function EnrollmentPage() {
         }
       }
       
-      // Batch fetch missing organizations
-      if (orgIdsToFetch.size > 0) {
-        const orgPromises = Array.from(orgIdsToFetch).map(orgId =>
-          apiGateway.get(`/orgs/${orgId}/`)
-            .then((org: any) => ({ id: String(orgId), name: org.name || null }))
-            .catch(() => ({ id: String(orgId), name: null }))
-        )
-        const fetchedOrgs = await Promise.all(orgPromises)
-        for (const org of fetchedOrgs) {
-          orgMap.set(org.id, org)
-        }
-      }
-
-      // Group enrollments by user
-      const enrollmentsByUser = new Map<string, EnrolledStudent[]>()
+      // Fetch subscription data for tier information
+      const subscriptionsResponse = await apiGateway.get('/admin/subscriptions/', {
+        params: { page_size: 1000 }
+      }).catch(() => null) as any
       
-      for (const { cohort, enrollments } of cohortEnrollments) {
-        for (const e of enrollments) {
-          const userId = String(e.user)
-          const userData = userDataMap.get(userId) || { onboarded_email_status: null }
-          const orgData = e.org ? orgMap.get(String(e.org)) : null
-          
-          const enrollmentData: EnrolledStudent = {
-            ...e,
-            cohort_name: cohort.name,
-            track_name: cohort.track?.name || cohort.track_name || cohort.track_slug,
-            onboarded_email_status: userData.onboarded_email_status,
-            organization_name: orgData?.name || null,
-            organization_id: orgData?.id || e.org || null,
+      const subscriptionsMap = new Map<string, any>()
+      if (subscriptionsResponse) {
+        const subscriptions = subscriptionsResponse?.results || subscriptionsResponse?.data || subscriptionsResponse || []
+        for (const sub of subscriptions) {
+          const userId = String(sub.user?.id || sub.user_id || sub.user)
+          if (userId) {
+            subscriptionsMap.set(userId, sub)
           }
-          
-          if (!enrollmentsByUser.has(userId)) {
-            enrollmentsByUser.set(userId, [])
-          }
-          enrollmentsByUser.get(userId)!.push(enrollmentData)
         }
       }
       
-      // Convert map to array, grouping cohorts for each user
-      const allEnrolled: EnrolledStudent[] = []
-      const enrolledUserIds = new Set<string>()
+      console.log('Subscriptions loaded:', subscriptionsMap.size)
       
-      for (const [userId, userEnrollments] of enrollmentsByUser.entries()) {
-        enrolledUserIds.add(userId)
-        const primaryEnrollment = userEnrollments[0]
-        const cohorts = userEnrollments.map(e => ({
-          id: e.cohort || '',
-          name: e.cohort_name || '',
-          track_name: e.track_name || '',
-          status: e.status,
-          joined_at: e.joined_at,
+      // Build enrolled students list from all students
+      const allEnrolled: EnrolledStudent[] = allStudents.map((student: any) => {
+        const userId = String(student.id)
+        const userCohorts = userCohortsMap.get(userId) || []
+        const userData = userDataMap.get(userId) || { onboarded_email_status: null }
+        const subscription = subscriptionsMap.get(userId)
+        
+        // Debug log for first few students
+        if (allStudents.indexOf(student) < 3) {
+          console.log(`Student ${student.email}:`, {
+            userId,
+            hasSubscription: !!subscription,
+            planName: subscription?.plan?.name,
+            subscription
+          })
+        }
+        
+        // Get organization data from backend response
+        const orgName = student.organization_name || null
+        const orgId = student.organization_id || null
+        
+        // Build cohorts array
+        const cohorts = userCohorts.map(({ cohort, enrollment }) => ({
+          id: cohort.id || '',
+          name: cohort.name || '',
+          track_name: cohort.track?.name || cohort.track_name || cohort.track_slug || '',
+          status: enrollment.status,
+          joined_at: enrollment.joined_at,
         }))
         
-        allEnrolled.push({
-          ...primaryEnrollment,
-          cohorts,
-        })
-      }
-
-      // Fetch students without enrollments (director-enrolled via enrollment form)
-      // These are students who have subscriptions but no cohort enrollments
-      // Optimize: Use subscription data which already includes user info
-      try {
-        // Fetch all subscriptions to find director-enrolled students
-        const subscriptionsResponse = await apiGateway.get('/admin/subscriptions/', {
-          params: { page_size: 1000 } // Get all subscriptions
-        }).catch(() => null) as any
+        // Determine enrollment type and status
+        const hasEnrollments = userCohorts.length > 0
+        const primaryEnrollment = hasEnrollments ? userCohorts[0].enrollment : null
         
-        if (subscriptionsResponse) {
-          const subscriptions = subscriptionsResponse?.results || subscriptionsResponse?.data || subscriptionsResponse || []
-          
-          // Filter subscriptions for users without enrollments
-          const subscriptionsWithoutEnrollments = subscriptions.filter((sub: any) => {
-            const userId = String(sub.user?.id || sub.user_id)
-            return userId && !enrolledUserIds.has(userId)
-          })
-          
-          if (subscriptionsWithoutEnrollments.length > 0) {
-            // Get user IDs that need additional data (org_id, onboarded_email_status)
-            const userIdsNeedingData = subscriptionsWithoutEnrollments
-              .map((sub: any) => String(sub.user?.id || sub.user_id))
-              .filter(Boolean)
-            
-            // Batch fetch user details for org_id and onboarded_email_status
-            const userDetailsMap = new Map<string, any>()
-            if (userIdsNeedingData.length > 0) {
-              const batchSize = 50
-              const maxConcurrentBatches = 3
-              
-              for (let i = 0; i < userIdsNeedingData.length; i += batchSize * maxConcurrentBatches) {
-                const batchGroup = []
-                for (let j = 0; j < maxConcurrentBatches && i + j * batchSize < userIdsNeedingData.length; j++) {
-                  const batch = userIdsNeedingData.slice(i + j * batchSize, i + (j + 1) * batchSize)
-                  if (batch.length > 0) {
-                    batchGroup.push(
-                      Promise.all(
-                        batch.map(userId =>
-                          apiGateway.get(`/users/${userId}/`)
-                            .then((user: any) => ({ userId, user }))
-                            .catch(() => ({ userId, user: null }))
-                        )
-                      )
-                    )
-                  }
-                }
-                
-                const userResults = await Promise.all(batchGroup)
-                for (const batch of userResults) {
-                  for (const { userId, user } of batch) {
-                    if (user) {
-                      userDetailsMap.set(userId, user)
-                    }
-                  }
-                }
-              }
-            }
-            
-            // Build student list from subscription data
-            const studentsWithoutEnrollments: EnrolledStudent[] = subscriptionsWithoutEnrollments.map((sub: any) => {
-              const userId = String(sub.user?.id || sub.user_id)
-              const userFromSub = sub.user || {}
-              const userDetails = userDetailsMap.get(userId) || {}
-              
-              // Merge subscription user data with fetched user details
-              const student = {
-                id: userId,
-                email: userFromSub.email || userDetails.email || '',
-                first_name: userFromSub.first_name || userDetails.first_name || '',
-                last_name: userFromSub.last_name || userDetails.last_name || '',
-                org_id: userDetails.org_id || (userDetails as any).org_id_id || null,
-                onboarded_email_status: userDetails.onboarded_email_status || null,
-                date_joined: userDetails.date_joined || userDetails.created_at || sub.created_at || new Date().toISOString(),
-              }
-              
-              const orgData = student.org_id ? orgMap.get(String(student.org_id)) : null
-              
-              return {
-                id: `director-${student.id}`,
-                cohort: '',
-                cohort_name: null,
-                track_name: null,
-                user: student.id,
-                user_email: student.email,
-                user_name: `${student.first_name || ''} ${student.last_name || ''}`.trim() || student.email,
-                org: student.org_id || null,
-                enrollment_type: 'director' as const,
-                seat_type: 'paid' as const,
-                payment_status: 'paid' as const,
-                status: 'active' as const,
-                joined_at: student.date_joined,
-                completed_at: null,
-                subscription_tier: sub.plan?.tier || 'free',
-                onboarded_email_status: student.onboarded_email_status,
-                organization_name: orgData?.name || null,
-                organization_id: orgData?.id || student.org_id || null,
-                cohorts: [],
-              }
-            })
-            
-            // Add students without enrollments to the list
-            allEnrolled.push(...studentsWithoutEnrollments)
-          }
+        return {
+          id: hasEnrollments ? primaryEnrollment!.id : `director-${userId}`,
+          cohort: hasEnrollments ? primaryEnrollment!.cohort : '',
+          cohort_name: hasEnrollments ? userCohorts[0].cohort.name : null,
+          track_name: hasEnrollments ? (userCohorts[0].cohort.track?.name || userCohorts[0].cohort.track_name || userCohorts[0].cohort.track_slug) : student.track_display,
+          user: userId,
+          user_email: student.email,
+          user_name: `${student.first_name || ''} ${student.last_name || ''}`.trim() || student.email,
+          org: orgId,
+          enrollment_type: (hasEnrollments ? primaryEnrollment!.enrollment_type : 'director') as 'self' | 'invite' | 'director',
+          seat_type: (hasEnrollments ? primaryEnrollment!.seat_type : 'paid') as 'paid' | 'scholarship' | 'sponsored',
+          payment_status: (hasEnrollments ? primaryEnrollment!.payment_status : 'paid') as 'paid' | 'pending' | 'failed',
+          status: (hasEnrollments ? primaryEnrollment!.status : 'active') as 'active' | 'pending' | 'withdrawn',
+          joined_at: hasEnrollments ? primaryEnrollment!.joined_at : student.created_at,
+          completed_at: hasEnrollments ? primaryEnrollment!.completed_at : null,
+          subscription_tier: subscription?.plan?.tier || 'free',
+          subscription_plan_name: subscription?.plan?.name || null,
+          onboarded_email_status: userData.onboarded_email_status,
+          organization_name: orgName,
+          organization_id: orgId,
+          cohorts,
         }
-      } catch (err) {
-        console.error('Failed to load students without enrollments:', err)
-        // Don't fail the entire load if this fails
-      }
+      })
       
       setEnrolledStudents(allEnrolled)
     } catch (err: any) {
@@ -1343,7 +1261,7 @@ export default function EnrollmentPage() {
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Organization</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Enrollment Type</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Status</th>
-                          <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Seat Type</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Subscription</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Joined At</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Onboarded</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Actions</th>
@@ -1419,7 +1337,11 @@ export default function EnrollmentPage() {
                                 </Badge>
                               </td>
                               <td className="py-3 px-4">
-                                <Badge variant="outline">{student.seat_type || 'paid'}</Badge>
+                                {student.subscription_plan_name ? (
+                                  <Badge variant="mint">{student.subscription_plan_name}</Badge>
+                                ) : (
+                                  <Badge variant="outline">Not Set</Badge>
+                                )}
                               </td>
                               <td className="py-3 px-4 text-och-steel text-sm">
                                 {joinedDate ? (

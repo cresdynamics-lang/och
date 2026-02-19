@@ -62,15 +62,9 @@ class GoogleOAuthInitiateView(APIView):
         frontend_url = frontend_url.rstrip('/')
         redirect_uri = f"{frontend_url}/auth/google/callback"
         
-        # Generate PKCE code verifier and challenge (RFC 7636)
-        code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode('utf-8')).digest()
-        ).decode('utf-8').rstrip('=')
-
-        # Store code_verifier and intended role in session for later verification
-        request.session['oauth_code_verifier'] = code_verifier
-        request.session['oauth_state'] = secrets.token_urlsafe(32)
+        # Generate state for CSRF protection
+        oauth_state = secrets.token_urlsafe(32)
+        request.session['oauth_state'] = oauth_state
 
         # Store intended role for signup (if provided)
         intended_role = request.GET.get('role')
@@ -78,7 +72,8 @@ class GoogleOAuthInitiateView(APIView):
             request.session['oauth_intended_role'] = intended_role
             print(f"[OAuth] Stored intended role for signup: {intended_role}")
         
-        # Build Google OAuth authorization URL
+        # Build Google OAuth authorization URL WITHOUT PKCE in development
+        # PKCE doesn't work well with session-based storage in stateless APIs
         params = {
             'client_id': client_id,
             'redirect_uri': redirect_uri,
@@ -86,16 +81,24 @@ class GoogleOAuthInitiateView(APIView):
             'scope': 'openid email profile',
             'access_type': 'offline',
             'prompt': 'select_account',
-            'state': request.session['oauth_state'],
-            'code_challenge': code_challenge,
-            'code_challenge_method': 'S256',
+            'state': oauth_state,
         }
+        
+        # Only use PKCE in production with proper session management
+        if not settings.DEBUG:
+            code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+            code_challenge = base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode('utf-8')).digest()
+            ).decode('utf-8').rstrip('=')
+            request.session['oauth_code_verifier'] = code_verifier
+            params['code_challenge'] = code_challenge
+            params['code_challenge_method'] = 'S256'
         
         auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
         
         return Response({
             'auth_url': auth_url,
-            'state': request.session['oauth_state'],
+            'state': oauth_state,
         }, status=status.HTTP_200_OK)
 
 
@@ -150,14 +153,26 @@ class GoogleOAuthCallbackView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get code verifier from session
+        # Get code verifier from session (only used in production with PKCE)
         code_verifier = request.session.get('oauth_code_verifier')
-        if not code_verifier and settings.DEBUG:
-            code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+        if not code_verifier and not settings.DEBUG:
+            return Response(
+                {'detail': 'Session expired. Please try again.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if settings.DEBUG:
+            print(f"[OAuth Debug] PKCE disabled in development mode")
+            code_verifier = None  # Don't use PKCE in development
 
         # Exchange authorization code for tokens
         frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-        redirect_uri = f"{frontend_url}/auth/google/callback"
+        redirect_uri = f"{frontend_url.rstrip('/')}/auth/google/callback"
+        
+        print(f"[OAuth Debug] Token exchange parameters:")
+        print(f"  - redirect_uri: {redirect_uri}")
+        print(f"  - code: {code[:20]}...")
+        print(f"  - has code_verifier: {bool(code_verifier)}")
         
         token_data = {
             'grant_type': 'authorization_code',
@@ -165,16 +180,34 @@ class GoogleOAuthCallbackView(APIView):
             'client_id': client_id,
             'client_secret': client_secret,
             'redirect_uri': redirect_uri,
-            'code_verifier': code_verifier,
         }
+        
+        # Only add code_verifier if we have it (PKCE - production only)
+        if code_verifier:
+            token_data['code_verifier'] = code_verifier
+            print(f"[OAuth Debug] Using PKCE with code_verifier")
+        else:
+            print(f"[OAuth Debug] Not using PKCE (development mode)")
 
         try:
+            print(f"[OAuth Debug] Sending token request to Google...")
             response = requests.post('https://oauth2.googleapis.com/token', data=token_data)
+            print(f"[OAuth Debug] Google response status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"[OAuth Debug] Google error response: {response.text}")
             response.raise_for_status()
             tokens = response.json()
         except requests.RequestException as e:
+            error_detail = f'Failed to exchange authorization code: {str(e)}'
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_json = e.response.json()
+                    error_detail += f" - {error_json}"
+                except:
+                    error_detail += f" - {e.response.text}"
+            print(f"[OAuth Error] {error_detail}")
             return Response(
-                {'detail': f'Failed to exchange authorization code: {str(e)}'},
+                {'detail': error_detail},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

@@ -1136,6 +1136,26 @@ export default function AIProfilerPage() {
   }
 
   const handleComplete = async () => {
+    try {
+      // Mark onboarding as complete
+      const response = await fetch('http://localhost:8000/api/v1/auth/onboarding/complete-step', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+        },
+        body: JSON.stringify({ step: 'ai_profiling' }),
+      })
+
+      if (!response.ok) {
+        console.warn('Failed to mark onboarding complete:', await response.text())
+      } else {
+        console.log('✅ Onboarding marked as complete')
+      }
+    } catch (error) {
+      console.error('Error marking onboarding complete:', error)
+    }
+
     // Ensure user state is refreshed before redirecting
     if (reloadUser) {
       await reloadUser()

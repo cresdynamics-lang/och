@@ -359,6 +359,11 @@ class StudentAnalytics(models.Model):
     replies_count = models.IntegerField(default=0)
     helpful_votes_received = models.IntegerField(default=0)
 
+    # Coaching metrics
+    current_streak = models.IntegerField(default=0)
+    weak_areas = models.JSONField(default=list, blank=True)
+    next_goals = models.JSONField(default=list, blank=True)
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

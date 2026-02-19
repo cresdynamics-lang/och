@@ -6,12 +6,15 @@ from .views import (
     habits_list, habit_detail, log_habit, habit_logs,
     goals_list, goal_detail,
     reflections_list, reflection_detail,
-    ai_coach_message, ai_coach_history,
+    ai_coach_message, ai_coach_history, ai_coach_chat,
     coaching_metrics,
     student_analytics, user_recipe_progress, user_track_progress,
     user_mission_progress, community_activity, mentorship_sessions,
     coaching_sessions_api,
 )
+from .usage_views import ai_coach_usage
+from .welcome_views import generate_welcome_message
+from .recommendation_views import generate_recommendation
 
 urlpatterns = [
     # Habits
@@ -30,7 +33,11 @@ urlpatterns = [
     
     # AI Coach
     path('ai-coach/message', ai_coach_message, name='coaching-ai-coach-message'),
+    path('ai-coach/chat', ai_coach_chat, name='coaching-ai-coach-chat'),
     path('ai-coach/history', ai_coach_history, name='coaching-ai-coach-history'),
+    path('ai-coach/usage', ai_coach_usage, name='coaching-ai-coach-usage'),
+    path('ai-coach/welcome', generate_welcome_message, name='coaching-ai-coach-welcome'),
+    path('ai-coach/recommendation', generate_recommendation, name='coaching-ai-coach-recommendation'),
     
     # Metrics
     path('metrics', coaching_metrics, name='coaching-metrics'),

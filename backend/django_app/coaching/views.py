@@ -445,6 +445,167 @@ def ai_coach_message(request):
     }, status=status.HTTP_202_ACCEPTED)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def ai_coach_chat(request):
+    """
+    POST /api/v1/coaching/ai-coach/chat
+    Chat with AI Coach using ChatGPT API with student progress context.
+    """
+    user = request.user
+    
+    message = request.data.get('message')
+    context = request.data.get('context', 'general')
+    progress = request.data.get('progress', {})
+    
+    if not message:
+        return Response(
+            {'error': 'message is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get or create session
+    session, _ = AICoachSession.objects.get_or_create(
+        user=user,
+        session_type=context,
+        defaults={'prompt_count': 0}
+    )
+    
+    # Check rate limiting
+    from .services import check_ai_coach_rate_limit
+    if not check_ai_coach_rate_limit(user, session):
+        return Response(
+            {'error': 'Rate limit exceeded. Please upgrade for unlimited access.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    
+    # Create user message
+    user_msg = AICoachMessage.objects.create(
+        session=session,
+        role='user',
+        content=message,
+        context=context,
+        metadata={'progress': progress}
+    )
+    
+    # Generate AI response using ChatGPT
+    try:
+        import os
+        from openai import OpenAI
+        
+        api_key = os.environ.get('CHAT_GPT_API_KEY') or os.environ.get('OPENAI_API_KEY') or os.environ.get('CHATGPT_API_KEY')
+        
+        if not api_key:
+            raise Exception('OpenAI API key not configured')
+        
+        client = OpenAI(api_key=api_key)
+        
+        # Get comprehensive user data
+        track_info = "Not enrolled in any track yet"
+        missions_completed_count = progress.get('missions_completed', 0)
+        missions_in_progress = 0
+        profiler_info = "No profiler assessment completed"
+        
+        try:
+            from curriculum.models import UserTrackEnrollment
+            enrollment = UserTrackEnrollment.objects.filter(user=user).first()
+            if enrollment and enrollment.track:
+                track_info = f"{enrollment.track.name} (Circle {enrollment.circle_level})"
+        except Exception as e:
+            logger.debug(f"Track enrollment error: {e}")
+        
+        try:
+            from profiler.models import ProfilerSession
+            profiler = ProfilerSession.objects.filter(user=user, status__in=['finished', 'locked']).first()
+            if profiler:
+                profiler_info = f"Recommended Track: {profiler.recommended_track.name if profiler.recommended_track else 'N/A'}, Strengths: {', '.join(profiler.strengths or [])}"
+        except Exception as e:
+            logger.debug(f"Profiler error: {e}")
+        
+        # Build comprehensive system prompt
+        system_prompt = f"""You are {user.first_name or user.email}'s personal AI Coach for cybersecurity learning. You have full access to their data and progress.
+
+STUDENT PROFILE:
+- Name: {user.first_name} {user.last_name or ''}
+- Email: {user.email}
+- Current Track: {track_info}
+- Profiler Assessment: {profiler_info}
+
+LEARNING PROGRESS:
+- Missions Completed: {missions_completed_count}
+- Recipes Completed: {progress.get('recipes_completed', 0)}
+- Average Score: {progress.get('average_score', 0)}%
+- Current Learning Streak: {progress.get('current_streak', 0)} days
+- Weak Areas: {', '.join(progress.get('weak_areas', [])) or 'None identified yet'}
+- Strengths: {', '.join(progress.get('strengths', [])) or 'Assessment pending'}
+
+YOUR ROLE:
+- Address the student by their first name
+- Provide personalized, honest feedback based on their specific progress
+- Reference their track and missions when giving guidance
+- Suggest specific recipes and missions aligned with their track
+- Help them plan their learning schedule
+- Celebrate their achievements and encourage them through challenges
+- Be supportive, specific, and actionable
+
+Always personalize your responses using their name and specific data."""
+        
+        # Get recent conversation history
+        recent_messages = AICoachMessage.objects.filter(
+            session=session
+        ).order_by('-created_at')[:10]
+        
+        conversation = [{'role': 'system', 'content': system_prompt}]
+        
+        for msg in reversed(list(recent_messages)):
+            if msg.role in ['user', 'assistant']:
+                conversation.append({
+                    'role': msg.role,
+                    'content': msg.content
+                })
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model='gpt-3.5-turbo',
+            messages=conversation,
+            max_tokens=500,
+            temperature=0.7,
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Save AI response
+        AICoachMessage.objects.create(
+            session=session,
+            role='assistant',
+            content=ai_response,
+            context=context,
+        )
+        
+        # Increment prompt count
+        session.prompt_count += 1
+        session.save()
+        
+        # Emit event
+        emit_coaching_event('ai_coach.chat', {
+            'user_id': str(user.id),
+            'session_id': str(session.id),
+            'context': context,
+        })
+        
+        return Response({
+            'response': ai_response,
+            'session_id': str(session.id),
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f'AI Coach error: {e}')
+        return Response(
+            {'error': f'Failed to generate response: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def ai_coach_history(request):
@@ -486,54 +647,63 @@ def student_analytics(request):
     user = request.user
 
     if request.method == 'GET':
+        # Get or create analytics
+        analytics, created = StudentAnalytics.objects.get_or_create(
+            user=user,
+            defaults={
+                'total_missions_completed': 0,
+                'average_score': 0,
+                'recipes_completed': 0,
+                'current_streak': 0,
+                'weak_areas': [],
+                'next_goals': [],
+            }
+        )
+        
+        serializer = StudentAnalyticsSerializer(analytics)
+        data = serializer.data
+        
+        # Add profiler results for coaching OS
         try:
-            analytics = StudentAnalytics.objects.get(user=user)
-            serializer = StudentAnalyticsSerializer(analytics)
-            data = serializer.data
+            from profiler.models import ProfilerSession, ProfilerResult
+            profiler_session = ProfilerSession.objects.filter(
+                user=user,
+                status__in=['finished', 'locked']
+            ).order_by('-completed_at').first()
             
-            # Add profiler results for coaching OS
-            try:
-                from profiler.models import ProfilerSession, ProfilerResult
-                profiler_session = ProfilerSession.objects.filter(
-                    user=user,
-                    status__in=['finished', 'locked']
-                ).order_by('-completed_at').first()
+            if profiler_session:
+                profiler_result = None
+                try:
+                    profiler_result = profiler_session.result
+                except ProfilerResult.DoesNotExist:
+                    pass
                 
-                if profiler_session:
-                    profiler_result = None
-                    try:
-                        profiler_result = profiler_session.result
-                    except ProfilerResult.DoesNotExist:
-                        pass
-                    
-                    data['profiler'] = {
-                        'completed': True,
-                        'session_id': str(profiler_session.id),
-                        'completed_at': profiler_session.completed_at.isoformat() if profiler_session.completed_at else None,
-                        'scores': {
-                            'aptitude': float(profiler_session.aptitude_score) if profiler_session.aptitude_score else None,
-                            'overall': float(profiler_result.overall_score) if profiler_result else None,
-                            'behavioral': float(profiler_result.behavioral_score) if profiler_result else None,
-                        },
-                        'recommended_track_id': str(profiler_session.recommended_track_id) if profiler_session.recommended_track_id else None,
-                        'track_confidence': float(profiler_session.track_confidence) if profiler_session.track_confidence else None,
-                        'strengths': profiler_session.strengths if profiler_session.strengths else (profiler_result.strengths if profiler_result else []),
-                        'areas_for_growth': profiler_result.areas_for_growth if profiler_result else [],
-                        'behavioral_profile': profiler_session.behavioral_profile if profiler_session.behavioral_profile else (profiler_result.behavioral_traits if profiler_result else {}),
-                        'future_you_persona': profiler_session.futureyou_persona if profiler_session.futureyou_persona else {},
-                    }
-                else:
-                    data['profiler'] = {
-                        'completed': False,
-                        'message': 'Profiler not completed yet'
-                    }
-            except Exception as e:
-                logger.warning(f"Could not fetch profiler data for coaching OS: {e}")
-                data['profiler'] = None
-            
-            return Response(data, status=status.HTTP_200_OK)
-        except StudentAnalytics.DoesNotExist:
-            return Response({'message': 'Student analytics not found'}, status=status.HTTP_404_NOT_FOUND)
+                data['profiler'] = {
+                    'completed': True,
+                    'session_id': str(profiler_session.id),
+                    'completed_at': profiler_session.completed_at.isoformat() if profiler_session.completed_at else None,
+                    'scores': {
+                        'aptitude': float(profiler_session.aptitude_score) if profiler_session.aptitude_score else None,
+                        'overall': float(profiler_result.overall_score) if profiler_result else None,
+                        'behavioral': float(profiler_result.behavioral_score) if profiler_result else None,
+                    },
+                    'recommended_track_id': str(profiler_session.recommended_track_id) if profiler_session.recommended_track_id else None,
+                    'track_confidence': float(profiler_session.track_confidence) if profiler_session.track_confidence else None,
+                    'strengths': profiler_session.strengths if profiler_session.strengths else (profiler_result.strengths if profiler_result else []),
+                    'areas_for_growth': profiler_result.areas_for_growth if profiler_result else [],
+                    'behavioral_profile': profiler_session.behavioral_profile if profiler_session.behavioral_profile else (profiler_result.behavioral_traits if profiler_result else {}),
+                    'future_you_persona': profiler_session.futureyou_persona if profiler_session.futureyou_persona else {},
+                }
+            else:
+                data['profiler'] = {
+                    'completed': False,
+                    'message': 'Profiler not completed yet'
+                }
+        except Exception as e:
+            logger.warning(f"Could not fetch profiler data for coaching OS: {e}")
+            data['profiler'] = None
+        
+        return Response(data, status=status.HTTP_200_OK)
 
     elif request.method in ['POST', 'PUT']:
         analytics, created = StudentAnalytics.objects.get_or_create(user=user)

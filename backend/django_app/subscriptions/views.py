@@ -43,6 +43,7 @@ def subscription_status(request):
             'features': [],
             'next_payment': None,
             'status': 'active',
+            'ai_coach_daily_limit': 0,
         })
     
     # Map DB tier to frontend tier name
@@ -66,6 +67,7 @@ def subscription_status(request):
         'status': subscription.status,
         'current_period_start': subscription.current_period_start,
         'current_period_end': subscription.current_period_end,
+        'ai_coach_daily_limit': plan.ai_coach_daily_limit,
     }, status=status.HTTP_200_OK)
 
 

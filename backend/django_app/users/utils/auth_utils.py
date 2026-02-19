@@ -50,10 +50,22 @@ def decrypt_totp_secret(ciphertext):
         return ''
     try:
         f = _get_fernet()
-        return f.decrypt(ciphertext.encode() if isinstance(ciphertext, str) else ciphertext).decode()
+        decrypted = f.decrypt(ciphertext.encode() if isinstance(ciphertext, str) else ciphertext).decode()
+        # Validate that the decrypted secret is valid base32
+        import base64
+        base64.b32decode(decrypted, casefold=True)
+        return decrypted
     except Exception:
-        # Legacy: stored as plaintext
-        return ciphertext if isinstance(ciphertext, str) else ciphertext.decode()
+        # Legacy: stored as plaintext, validate it's valid base32
+        try:
+            plaintext = ciphertext if isinstance(ciphertext, str) else ciphertext.decode()
+            import base64
+            base64.b32decode(plaintext, casefold=True)
+            return plaintext
+        except Exception:
+            # Invalid base32 secret
+            logger.warning(f"Invalid base32 TOTP secret detected: {ciphertext[:10]}...")
+            raise ValueError("Invalid base32 TOTP secret")
 
 
 def generate_magic_link_code():
@@ -301,14 +313,33 @@ def verify_mfa_challenge(user, code, method):
             return False
         if method == 'backup_codes':
             return verify_totp_backup_code(user, code)
-        import pyotp
-        secret = decrypt_totp_secret(mfa_method.secret_encrypted)
-        totp = pyotp.TOTP(secret)
-        if totp.verify(code, valid_window=1):
-            mfa_method.last_used_at = timezone.now()
+        
+        try:
+            import pyotp
+            import binascii
+            secret = decrypt_totp_secret(mfa_method.secret_encrypted)
+            totp = pyotp.TOTP(secret)
+            if totp.verify(code, valid_window=1):
+                mfa_method.last_used_at = timezone.now()
+                mfa_method.save()
+                return True
+            return verify_totp_backup_code(user, code)
+        except (binascii.Error, ValueError) as e:
+            # Handle invalid base32 secret gracefully
+            logger.error(f"Invalid TOTP secret for user {user.email}: {str(e)}")
+            # Disable the problematic MFA method
+            mfa_method.enabled = False
             mfa_method.save()
-            return True
-        return verify_totp_backup_code(user, code)
+            # If this was the user's only MFA method, disable MFA entirely
+            if not MFAMethod.objects.filter(user=user, enabled=True).exists():
+                user.mfa_enabled = False
+                user.mfa_method = None
+                user.save()
+                logger.info(f"Disabled MFA for user {user.email} due to invalid TOTP secret")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error verifying TOTP for user {user.email}: {str(e)}")
+            return False
     return verify_mfa_code(user, code, method)
 
 

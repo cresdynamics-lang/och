@@ -1151,8 +1151,17 @@ function LoginForm() {
                 type="button"
                 variant="outline"
                 className="w-full py-3 text-base rounded-lg border-slate-600 text-slate-300 hover:border-slate-500 hover:text-slate-200 transition-all flex items-center justify-center gap-3"
-                onClick={() => {
-                  window.location.href = `http://localhost:8000/api/v1/auth/google/initiate?role=${currentRole}`;
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`http://localhost:8000/api/v1/auth/google/initiate?role=${currentRole}`);
+                    const data = await response.json();
+                    if (data.auth_url) {
+                      window.location.replace(data.auth_url);
+                    }
+                  } catch (err) {
+                    console.error('Google OAuth error:', err);
+                    setError('Failed to initiate Google sign-in');
+                  }
                 }}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">

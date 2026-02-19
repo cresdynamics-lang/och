@@ -31,7 +31,8 @@ export function GoogleSignInButton({ role = 'student' }: GoogleSignInButtonProps
 
       // Redirect user to Google authorization page
       if (response.auth_url) {
-        window.location.href = response.auth_url
+        // Use window.location.replace to ensure proper redirect
+        window.location.replace(response.auth_url)
       } else {
         throw new Error('No authorization URL received')
       }

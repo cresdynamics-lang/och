@@ -471,10 +471,14 @@ class LoginView(APIView):
             device_trusted = True
         
         # Check MFA requirement (mandatory for Finance/Finance Admin/Admin when MFA enabled)
-        user_roles = UserRole.objects.filter(user=user, is_active=True)
+        user_roles = UserRole.objects.filter(user=user, is_active=True).select_related('role')
         user_role_names = [ur.role.name for ur in user_roles]
+        
+        # Determine primary role (priority: admin > program_director > mentor > student)
+        role_priority = ['admin', 'program_director', 'mentor', 'student']
+        primary_role = next((r for r in role_priority if r in user_role_names), user_role_names[0] if user_role_names else 'student')
+        
         high_risk_roles = ['finance', 'finance_admin', 'admin']
-        primary_role = next((r for r in user_role_names if r in high_risk_roles), user_role_names[0] if user_role_names else None)
 
         # Only require MFA when at least one MFA method is configured and enabled.
         # This avoids blocking login with \"MFA required\" for users who have MFA toggled on
@@ -493,13 +497,12 @@ class LoginView(APIView):
                 user_agent=user_agent
             )
             # User's enabled MFA method types (priority order: TOTP, email, SMS)
-            enabled_types = list(
+            enabled_types = set(
                 MFAMethod.objects.filter(user=user, enabled=True)
                 .values_list('method_type', flat=True)
-                .distinct()
             )
             mfa_priority = ['totp', 'email', 'sms']
-            preferred = next((m for m in mfa_priority if m in enabled_types), (enabled_types[0] if enabled_types else 'totp'))
+            preferred = next((m for m in mfa_priority if m in enabled_types), 'totp')
             return Response(
                 {
                     'detail': 'MFA required',
@@ -508,6 +511,7 @@ class LoginView(APIView):
                     'refresh_token': refresh_token,
                     'mfa_method': preferred,
                     'mfa_methods_available': [m for m in mfa_priority if m in enabled_types],
+                    'primary_role': primary_role,
                 },
                 status=status.HTTP_200_OK
             )
@@ -556,6 +560,7 @@ class LoginView(APIView):
             'user': UserSerializer(user).data,
             'consent_scopes': consent_scopes,
             'profiling_required': profiling_required,
+            'primary_role': primary_role,
         }, status=status.HTTP_200_OK)
         
         # Set refresh token as httpOnly cookie
@@ -632,11 +637,14 @@ class MFAEnrollView(APIView):
             secret = pyotp.random_base32()
             secret_stored = encrypt_totp_secret(secret)
 
-            mfa_method = MFAMethod.objects.create(
+            mfa_method, created = MFAMethod.objects.update_or_create(
                 user=user,
                 method_type='totp',
-                secret_encrypted=secret_stored,
-                enabled=False,
+                defaults={
+                    'secret_encrypted': secret_stored,
+                    'enabled': False,
+                    'totp_backup_codes': [],
+                }
             )
 
             totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(

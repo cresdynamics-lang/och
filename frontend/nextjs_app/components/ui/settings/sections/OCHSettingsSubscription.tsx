@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { apiGateway } from '@/services/apiGateway';
+import { formatCurrencyWithSymbol, convertUSDToLocal } from '@/lib/currency';
 
 interface SubscriptionData {
   tier: 'free' | 'starter' | 'professional';
@@ -44,6 +45,7 @@ export function OCHSettingsSubscription() {
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [upgrading, setUpgrading] = useState(false);
+  const selectedCountry = user?.country?.toUpperCase() || 'KE';
 
   useEffect(() => {
     loadSubscription();
@@ -338,102 +340,134 @@ export function OCHSettingsSubscription() {
           </Card>
         )}
 
-        {/* Subscription Tiers Info */}
+        {/* Subscription History */}
         <Card className="bg-och-midnight/60 border border-och-steel/10 rounded-[2.5rem] p-8">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 rounded-2xl bg-och-mint/10 flex items-center justify-center border border-och-mint/20">
-              <Target className="w-6 h-6 text-och-mint" />
+              <Calendar className="w-6 h-6 text-och-mint" />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Available Tiers</h2>
-              <p className="text-[10px] text-och-steel font-black uppercase tracking-widest mt-1">Choose the plan that fits your needs</p>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Subscription History</h2>
+              <p className="text-[10px] text-och-steel font-black uppercase tracking-widest mt-1">Your billing and payment history</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {plans.map(plan => {
-              const isCurrent = plan.tier === subscription?.tier ||
-                (plan.tier === 'premium' && subscription?.tier === 'professional')
-
-              // Determine if this is an upgrade or downgrade
-              const TIER_LEVEL: Record<string, number> = { free: 0, starter: 1, premium: 2, professional: 2 }
-              const currentTierLevel = TIER_LEVEL[subscription?.tier || 'free'] ?? 0
-              const planTierLevel = TIER_LEVEL[plan.tier] ?? 0
-              const isUpgrade = planTierLevel > currentTierLevel
-              const isDowngrade = planTierLevel < currentTierLevel
-
-              const tierColors = {
-                free: { bg: 'bg-white/5', border: 'border-white/5', badge: 'steel' as const },
-                starter: { bg: 'bg-och-mint/5', border: 'border-och-mint/20', badge: 'mint' as const },
-                premium: { bg: 'bg-och-gold/5', border: 'border-och-gold/20', badge: 'gold' as const },
-              }
-              const colors = tierColors[plan.tier as keyof typeof tierColors] || tierColors.free
-
-              return (
-                <div key={plan.id} className={`p-6 ${colors.bg} border ${colors.border} rounded-xl`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-white capitalize">{plan.name}</h3>
-                    {isCurrent && <Badge variant={colors.badge}>Current</Badge>}
-                  </div>
-
-                  <div className="mb-4">
-                    <span className="text-2xl font-bold text-white">${plan.price_monthly.toFixed(0)}</span>
-                    <span className="text-sm text-och-steel">/month</span>
-                  </div>
-
-                  {plan.mode_note && (
-                    <p className="text-sm text-och-steel mb-4">{plan.mode_note}</p>
-                  )}
-
-                  <ul className="space-y-2 mb-6 min-h-[120px]">
-                    {plan.features.slice(0, 4).map((feature, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-sm text-white">
-                        <CheckCircle2 className={`w-4 h-4 ${plan.tier === 'premium' ? 'text-och-gold' : 'text-och-mint'}`} />
-                        {feature.replace(/_/g, ' ')}
-                      </li>
-                    ))}
-                    {plan.mentorship_access && (
-                      <li className="flex items-center gap-2 text-sm text-white">
-                        <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                        Human mentorship
-                      </li>
-                    )}
-                    {plan.enhanced_access_days && (
-                      <li className="flex items-center gap-2 text-sm text-och-gold">
-                        <CheckCircle2 className="w-4 h-4 text-och-gold" />
-                        {Math.round(plan.enhanced_access_days / 30)}mo Enhanced Access
-                      </li>
-                    )}
-                  </ul>
-
-                  {isCurrent ? (
-                    <Button variant="outline" className="w-full" disabled>
-                      Current Plan
-                    </Button>
-                  ) : isUpgrade ? (
-                    <Button
-                      variant={plan.tier === 'premium' ? 'gold' : 'mint'}
-                      className="w-full"
-                      disabled={upgrading}
-                      onClick={() => handleUpgradeOrDowngrade(plan.name, 'upgrade')}
-                    >
-                      {upgrading ? 'Processing...' : `Upgrade — $${plan.price_monthly.toFixed(0)}/mo`}
-                    </Button>
-                  ) : isDowngrade ? (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      disabled={upgrading}
-                      onClick={() => handleUpgradeOrDowngrade(plan.name, 'downgrade')}
-                    >
-                      {upgrading ? 'Processing...' : 'Downgrade'}
-                    </Button>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
+          <SubscriptionHistory />
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function SubscriptionHistory() {
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+  const [currentSub, setCurrentSub] = useState<any>(null);
+  const { user } = useAuth();
+  const selectedCountry = user?.country?.toUpperCase() || 'KE';
+
+  useEffect(() => {
+    loadSubscriptions();
+    loadCurrentSubscription();
+  }, []);
+
+  const loadCurrentSubscription = async () => {
+    try {
+      const data = await apiGateway.get('/subscription/status');
+      setCurrentSub(data);
+    } catch (err) {
+      console.error('Failed to load current subscription:', err);
+    }
+  };
+
+  const loadSubscriptions = async () => {
+    try {
+      const data = await apiGateway.get('/subscription/billing-history');
+      setSubscriptions(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load subscription history:', err);
+      setSubscriptions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!confirm('Cancel subscription? Access continues until end of billing period.')) return;
+    try {
+      setCancelling(true);
+      await apiGateway.post('/subscription/cancel', {});
+      await loadSubscriptions();
+      await loadCurrentSubscription();
+      alert('Subscription cancelled successfully');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to cancel subscription');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-8 h-8 border-4 border-och-mint border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-och-steel text-sm">Loading history...</p>
+      </div>
+    );
+  }
+
+  if (subscriptions.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <CreditCard className="w-12 h-12 text-och-steel mx-auto mb-4" />
+        <p className="text-och-steel">No subscription history yet</p>
+        <p className="text-och-steel text-sm mt-2">Upgrade to a paid plan to see your history</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {currentSub && currentSub.status !== 'canceled' && currentSub.tier !== 'free' && (
+        <div className="flex justify-end mb-4">
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={cancelling}>
+            {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+          </Button>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-och-steel/20">
+              <th className="text-left py-3 px-4 text-och-steel font-semibold">Date</th>
+              <th className="text-left py-3 px-4 text-och-steel font-semibold">Plan</th>
+              <th className="text-left py-3 px-4 text-och-steel font-semibold">Amount</th>
+              <th className="text-left py-3 px-4 text-och-steel font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {subscriptions.map((s, i) => (
+              <tr key={i} className="border-b border-och-steel/10 hover:bg-white/5">
+                <td className="py-3 px-4 text-och-steel">
+                  {new Date(s.date).toLocaleDateString()}
+                </td>
+                <td className="py-3 px-4 text-white">{s.plan_name || s.description}</td>
+                <td className="py-3 px-4 text-white">
+                  {formatCurrencyWithSymbol(
+                    convertUSDToLocal(s.amount, selectedCountry),
+                    selectedCountry
+                  )}
+                </td>
+                <td className="py-3 px-4">
+                  <Badge variant={s.status === 'completed' ? 'mint' : s.status === 'active' ? 'defender' : 'steel'} className="text-xs">
+                    {s.status}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
