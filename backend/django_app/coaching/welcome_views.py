@@ -30,15 +30,11 @@ def generate_welcome_message(request):
         
         client = OpenAI(api_key=api_key)
         
-        # Get track info
-        track_info = "Not enrolled yet"
-        try:
-            from curriculum.models import UserTrackEnrollment
-            enrollment = UserTrackEnrollment.objects.filter(user=user).first()
-            if enrollment and enrollment.track:
-                track_info = f"{enrollment.track.name}"
-        except:
-            pass
+        # Get track info (UserTrackEnrollment, user.track_key, programs.Enrollment, ProfilerSession)
+        from .services import get_user_track_info
+        track_info, _, _ = get_user_track_info(user)
+        if track_info == "Not enrolled in any track yet":
+            track_info = "Not enrolled yet"
         
         prompt = f"""Generate a welcoming, encouraging message for {user.first_name or 'this student'} from their AI Coach.
 

@@ -500,49 +500,34 @@ def ai_coach_chat(request):
         
         client = OpenAI(api_key=api_key)
         
-        # Get comprehensive user data
-        track_info = "Not enrolled in any track yet"
-        track_level = "Not assessed"
-        match_score = 0
+        # Get comprehensive user data (uses UserTrackEnrollment, user.track_key, programs.Enrollment, ProfilerSession)
+        from .services import get_user_track_info
+        track_info, track_level, match_score = get_user_track_info(user)
         missions_completed_count = progress.get('missions_completed', 0)
-        profiler_info = "No profiler assessment completed"
+
+        # Default: profiler not completed (but track may still be assigned via enrollment/director)
+        profiler_info = (
+            "Profiler not completed yet – this track may have been assigned directly "
+            "based on enrollment or director review."
+        )
         
+        # If we have a completed profiler session, override with detailed profiler-based info
         try:
             from profiler.models import ProfilerSession
-            # Get the most recent profiler session (completed or in progress)
-            profiler = ProfilerSession.objects.filter(user=user).order_by('-started_at').first()
-            logger.info(f"Profiler query for {user.email}: found={profiler is not None}")
-            
+            profiler = (
+                ProfilerSession.objects
+                .filter(user=user, status__in=['finished', 'locked'])
+                .order_by('-completed_at')
+                .first()
+            )
             if profiler:
-                logger.info(f"Profiler status: {profiler.status}, recommended_track_id: {profiler.recommended_track_id}")
-                
-                if profiler.recommended_track_id:
-                    # Fetch the track from curriculum
-                    try:
-                        from curriculum.models import CurriculumTrack
-                        track = CurriculumTrack.objects.filter(id=profiler.recommended_track_id).first()
-                        if track:
-                            track_info = f"{track.name}"
-                            track_level = track.level.upper() if hasattr(track, 'level') else "INTERMEDIATE"
-                            match_score = int(profiler.track_confidence * 100) if profiler.track_confidence else 19
-                            logger.info(f"Track data: {track_info} at {track_level} level ({match_score}% match)")
-                    except Exception as track_err:
-                        logger.error(f"Error fetching track: {track_err}")
-                
                 strengths = ', '.join(profiler.strengths or []) if profiler.strengths else 'None'
-                profiler_info = f"Track: {track_info}, Level: {track_level}, Match: {match_score}%, Strengths: {strengths}"
+                profiler_info = (
+                    f"Profiler completed. Track: {track_info}, Level: {track_level}, "
+                    f"Match: {match_score}%, Strengths: {strengths}"
+                )
         except Exception as e:
-            logger.error(f"Profiler error: {e}", exc_info=True)
-        
-        # Try UserTrackEnrollment as fallback
-        try:
-            from curriculum.models import UserTrackEnrollment
-            enrollment = UserTrackEnrollment.objects.filter(user_id=user.id).first()
-            if enrollment and enrollment.track and track_info == "Not enrolled in any track yet":
-                track_info = f"{enrollment.track.name} (Level: {enrollment.current_level_slug})"
-                logger.info(f"Found enrollment for {user.email}: {track_info}")
-        except Exception as e:
-            logger.error(f"Track enrollment error: {e}")
+            logger.debug(f"Profiler info enrichment: {e}")
         
         # Build comprehensive system prompt
         system_prompt = f"""You are {user.first_name or user.email}'s personal AI Coach at Ongoza Cyber Hub (OCH).

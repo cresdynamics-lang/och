@@ -11,6 +11,7 @@ import { formatCurrencyWithSymbol, convertUSDToLocal } from '@/lib/currency'
 
 interface SubscriptionStatus {
   tier: string
+  plan_tier?: string
   plan_name: string
   status: string
   days_enhanced_left: number | null
@@ -44,6 +45,8 @@ export default function SubscriptionClient() {
   const [error, setError] = useState<string | null>(null)
   const selectedCountry = user?.country?.toUpperCase() || 'KE'
 
+  const paystackPublicKey = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '') : ''
+
   useEffect(() => {
     if (user?.id) loadAll()
   }, [user?.id])
@@ -55,11 +58,12 @@ export default function SubscriptionClient() {
       const [statusRes, plansRes, billingRes] = await Promise.all([
         apiGateway.get('/subscription/status'),
         apiGateway.get('/subscription/plans'),
-        apiGateway.get('/subscription/billing-history').catch(() => []),
+        apiGateway.get('/subscription/billing-history').catch(() => ({ billing_history: [] })),
       ])
-      setSubStatus(statusRes as any)
+      setSubStatus(statusRes as SubscriptionStatus)
       setPlans(Array.isArray(plansRes) ? plansRes : [])
-      setBilling(Array.isArray(billingRes) ? billingRes : [])
+      const billingList = Array.isArray(billingRes) ? billingRes : (billingRes as { billing_history?: unknown[] })?.billing_history ?? []
+      setBilling(billingList)
     } catch (err: any) {
       setError(err?.message || 'Failed to load subscription data')
     } finally {
@@ -67,16 +71,66 @@ export default function SubscriptionClient() {
     }
   }
 
-  const handleUpgrade = async (planName: string) => {
+  const handleUpgrade = async (planName: string, interval?: 'yearly') => {
+    setActionLoading(true)
+    setError(null)
+    let paystackOpened = false
     try {
-      setActionLoading(true)
-      setError(null)
-      await apiGateway.post('/subscription/simulate-payment', { plan: planName })
-      await loadAll()
-    } catch (err: any) {
-      setError(err?.message || 'Payment failed')
+      const plan = plans.find(p => p.name === planName)
+      const isPaidPlan = plan && Number(plan.price_monthly) > 0
+      const usePaystack = Boolean(paystackPublicKey && isPaidPlan && user?.email)
+
+      if (usePaystack) {
+        const body: { plan: string; callback_url: string; interval?: string } = {
+          plan: planName,
+          callback_url:
+            typeof window !== 'undefined'
+              ? `${window.location.origin}/dashboard/student/subscription/return`
+              : '',
+        }
+        if (interval === 'yearly') body.interval = 'yearly'
+
+        const initRes = await apiGateway.post<{ authorization_url: string; reference: string }>(
+          '/subscription/paystack/initialize',
+          body
+        )
+        if (!initRes?.authorization_url) {
+          const errMsg = (initRes as { error?: string })?.error ?? 'Could not start payment'
+          setError(errMsg)
+          return
+        }
+        const authUrl = initRes.authorization_url
+        const reference = initRes.reference
+        const popup = window.open(authUrl, 'paystack_checkout', 'width=600,height=700,scrollbars=yes')
+        paystackOpened = true
+
+        const handleMessage = (event: MessageEvent) => {
+          if (event.data?.type === 'paystack_success' && event.data?.reference === reference) {
+            window.removeEventListener('message', handleMessage)
+            apiGateway
+              .post('/subscription/paystack/verify', { reference: event.data.reference })
+              .then(() => loadAll())
+              .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Verification failed'))
+              .finally(() => setActionLoading(false))
+          }
+        }
+        window.addEventListener('message', handleMessage)
+
+        const checkClosed = setInterval(() => {
+          if (popup?.closed) {
+            clearInterval(checkClosed)
+            window.removeEventListener('message', handleMessage)
+            setActionLoading(false)
+          }
+        }, 500)
+      } else {
+        await apiGateway.post('/subscription/simulate-payment', { plan: planName })
+        await loadAll()
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Payment failed')
     } finally {
-      setActionLoading(false)
+      if (!paystackOpened) setActionLoading(false)
     }
   }
 
@@ -152,14 +206,16 @@ export default function SubscriptionClient() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {plans.map(plan => {
           const planLevel = TIER_LEVEL[plan.tier] ?? 0
-          const isCurrent = plan.tier === subStatus?.tier
+          const isCurrent =
+            plan.name === subStatus?.plan_name ||
+            plan.tier === (subStatus?.plan_tier ?? subStatus?.tier)
           const isUpgrade = planLevel > currentTierLevel
           const isStarter = plan.tier === 'starter'
           const isPremium = plan.tier === 'premium'
           
           let monthlyPriceUSD = plan.price_monthly || 0
-          let annualPriceUSD = null
-          
+          let annualPriceUSD: number | null = null
+
           if (isStarter) {
             monthlyPriceUSD = plan.price_monthly || 5
             annualPriceUSD = monthlyPriceUSD * 12
@@ -167,7 +223,7 @@ export default function SubscriptionClient() {
             annualPriceUSD = 54
             monthlyPriceUSD = annualPriceUSD / 12
           }
-          
+
           const monthlyLocal = monthlyPriceUSD > 0 ? convertUSDToLocal(monthlyPriceUSD, selectedCountry) : 0
           const annualLocal = annualPriceUSD ? convertUSDToLocal(annualPriceUSD, selectedCountry) : null
 
@@ -274,7 +330,7 @@ export default function SubscriptionClient() {
                   variant={isCurrent ? 'outline' : isUpgrade ? (isPremium ? 'gold' : 'mint') : 'outline'}
                   className="w-full"
                   disabled={isCurrent || actionLoading}
-                  onClick={() => !isCurrent && handleUpgrade(plan.name)}
+                  onClick={() => !isCurrent && handleUpgrade(plan.name, isPremium ? 'yearly' : undefined)}
                 >
                   {isCurrent ? 'Current Plan' : isUpgrade ? 'Upgrade' : 'Downgrade'}
                 </Button>

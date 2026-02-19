@@ -141,7 +141,8 @@ export function StudentDashboardHub() {
   const [badges, setBadges] = useState(0);
   const [rank, setRank] = useState('Bronze');
   const [level, setLevel] = useState('1');
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'professional'>('free');
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'professional' | 'premium'>('free');
+  const [subscriptionPlanName, setSubscriptionPlanName] = useState<string>('free');
   const [subscriptionDaysLeft, setSubscriptionDaysLeft] = useState<number | null>(null);
   
   // Missions data
@@ -202,6 +203,22 @@ export function StudentDashboardHub() {
     return colorMap[type]?.[trackKey] || colorMap[type]?.defender || '';
   };
 
+  // Fetch subscription status (authoritative source for plan/tier)
+  useEffect(() => {
+    if (!user?.id) return;
+    apiGateway.get<{ tier: string; plan_name: string; current_period_end?: string }>('/subscription/status').then((status) => {
+      const tier = status.tier === 'professional' || status.tier === 'premium' ? 'professional' : (status.tier || 'free');
+      setSubscriptionTier(tier);
+      setSubscriptionPlanName(status.plan_name || 'free');
+      if (status.current_period_end) {
+        const end = new Date(status.current_period_end);
+        const now = new Date();
+        const days = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+        setSubscriptionDaysLeft(days);
+      }
+    }).catch(() => { /* keep defaults */ });
+  }, [user?.id]);
+
   // Fetch all dashboard data in parallel for better performance
   useEffect(() => {
     const fetchAllData = async () => {
@@ -255,8 +272,10 @@ export function StudentDashboardHub() {
             setLevel(gamificationData.level || '1');
           }
           if (dashboardData?.subscription) {
-            setSubscriptionTier(dashboardData.subscription.tier || 'free');
-            setSubscriptionDaysLeft(dashboardData.subscription.days_left || null);
+            const tier = dashboardData.subscription.tier || 'free';
+            setSubscriptionTier(tier === 'premium' ? 'professional' : tier);
+            setSubscriptionPlanName(dashboardData.subscription.plan_name || 'free');
+            setSubscriptionDaysLeft(dashboardData.subscription.days_left ?? null);
           }
         }
 
@@ -656,22 +675,27 @@ export function StudentDashboardHub() {
             </Card>
           )}
 
-          {/* Subscription Upgrade */}
+          {/* Subscription — dynamic from API */}
           <Card className={`p-4 bg-gradient-to-br ${subscriptionTier === 'free' ? 'from-och-gold/10 to-transparent border-och-gold/20' : getTrackColorClasses('gradient')} border ${subscriptionTier === 'free' ? 'border-och-gold/20' : getTrackColorClasses('border')}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Crown className={`w-4 h-4 ${subscriptionTier === 'free' ? 'text-och-gold' : getTrackColorClasses('text')}`} />
                 <div>
                   <h3 className="text-sm font-black text-white">
-                    {subscriptionTier === 'free' ? 'Free Tier' : subscriptionTier === 'starter' ? 'Starter Tier' : 'Professional Tier'}
+                    {subscriptionTier === 'free'
+                      ? 'Free Plan'
+                      : subscriptionPlanName === 'professional_7' || subscriptionTier === 'professional'
+                        ? 'Yearly Plan'
+                        : subscriptionTier === 'starter'
+                          ? 'Monthly Plan'
+                          : subscriptionPlanName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </h3>
                   <p className="text-xs text-och-steel">
-                    {subscriptionTier === 'free' 
+                    {subscriptionTier === 'free'
                       ? 'Upgrade to unlock more features'
-                      : subscriptionDaysLeft !== null 
+                      : subscriptionDaysLeft !== null
                         ? `${subscriptionDaysLeft} days remaining`
-                        : 'Active subscription'
-                    }
+                        : 'Active subscription'}
                   </p>
                 </div>
               </div>

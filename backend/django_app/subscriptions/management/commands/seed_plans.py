@@ -31,7 +31,6 @@ class Command(BaseCommand):
 
             # ── $3 STARTER ─────────────────────────────────────────────────────
             # First 6 months = Enhanced Access; after that = Normal Mode
-            # Backend tracks which mode via enhanced_access_expires_at on UserSubscription
             {
                 'name': 'starter_3',
                 'tier': 'starter',
@@ -75,8 +74,8 @@ class Command(BaseCommand):
                     'mentor_influence_index',
                     'lab_integrations',
                 ],
-                'ai_coach_daily_limit': None,        # unlimited
-                'portfolio_item_limit': None,        # unlimited
+                'ai_coach_daily_limit': None,
+                'portfolio_item_limit': None,
                 'missions_access_type': 'full',
                 'mentorship_access': True,
                 'talentscope_access': 'full',

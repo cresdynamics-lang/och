@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/useAuth';
 import { curriculumClient } from '@/services/curriculumClient';
 
 interface Lesson {
@@ -19,6 +20,8 @@ interface Lesson {
   trackName?: string;
   trackSlug?: string;
   moduleName?: string;
+  /** True if this lesson is from a track other than the student's; view-only, no progress saved */
+  isLocked?: boolean;
 }
 
 const DJANGO_BASE = process.env.NEXT_PUBLIC_DJANGO_API_URL || 'http://localhost:8000';
@@ -70,7 +73,17 @@ function trackInfoFromKey(trackKey: string): { slug: string; name: string } {
 
 const TRACK_ORDER = ['defender', 'offensive', 'grc', 'innovation', 'leadership'];
 
+/** Derive curriculum track slug from user.track_key (e.g. defender, offensive). */
+function myTrackSlugFromUser(trackKey: string | null | undefined): string | null {
+  if (!trackKey || !trackKey.trim()) return null;
+  const info = trackInfoFromKey(trackKey);
+  return info.slug || null;
+}
+
 export default function CurriculumLearnPage() {
+  const { user } = useAuth();
+  const myTrackSlug = myTrackSlugFromUser(user?.track_key ?? undefined);
+
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [currentLevel, setCurrentLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner');
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -97,7 +110,7 @@ export default function CurriculumLearnPage() {
 
   useEffect(() => {
     loadLessons();
-  }, [currentLevel]);
+  }, [currentLevel, myTrackSlug]);
 
   // Reset iframe-watched flag whenever the current video changes
   useEffect(() => {
@@ -161,17 +174,26 @@ export default function CurriculumLearnPage() {
       const allLessonsArrays = await Promise.all(allLessonsPromises);
       const allLessons = allLessonsArrays.flat();
 
-      // Video lessons only (with a non-empty URL), sorted by track order then order_index
-      const videoLessons = allLessons
+      // Video lessons only (with a non-empty URL)
+      let videoLessons = allLessons
         .filter((l: any) => l.lesson_type === 'video' && l.content_url)
-        .sort((a: any, b: any) => {
-          const ia = TRACK_ORDER.indexOf(a.trackSlug);
-          const ib = TRACK_ORDER.indexOf(b.trackSlug);
-          const rankA = ia === -1 ? 99 : ia;
-          const rankB = ib === -1 ? 99 : ib;
-          if (rankA !== rankB) return rankA - rankB;
-          return (a.order_index || 0) - (b.order_index || 0);
-        });
+        .map((l: any) => ({
+          ...l,
+          isLocked: myTrackSlug != null && l.trackSlug !== myTrackSlug,
+        }));
+
+      // Sort: student's track first, then by TRACK_ORDER, then order_index
+      videoLessons = videoLessons.sort((a: any, b: any) => {
+        const aMy = myTrackSlug != null && a.trackSlug === myTrackSlug ? 0 : 1;
+        const bMy = myTrackSlug != null && b.trackSlug === myTrackSlug ? 0 : 1;
+        if (aMy !== bMy) return aMy - bMy;
+        const ia = TRACK_ORDER.indexOf(a.trackSlug);
+        const ib = TRACK_ORDER.indexOf(b.trackSlug);
+        const rankA = ia === -1 ? 99 : ia;
+        const rankB = ib === -1 ? 99 : ib;
+        if (rankA !== rankB) return rankA - rankB;
+        return (a.order_index || 0) - (b.order_index || 0);
+      });
 
       setLessons(videoLessons);
 
@@ -191,6 +213,11 @@ export default function CurriculumLearnPage() {
   const handleVideoComplete = async () => {
     const lesson = lessons[currentVideoIndex];
     if (!lesson) return;
+    // Do not save progress for other tracks (view-only)
+    if (lesson.isLocked) {
+      setIframeWatched(true);
+      return;
+    }
 
     setLessons(prev =>
       prev.map((l, i) => i === currentVideoIndex ? { ...l, status: 'completed' as const } : l)
@@ -210,8 +237,12 @@ export default function CurriculumLearnPage() {
     localStorage.setItem(`all_tracks_${currentLevel}_index`, currentVideoIndex.toString());
   };
 
+  /** Allow selecting a lesson: my track by progression, or any locked lesson for view-only */
   const goToVideo = (index: number) => {
-    if (index === 0 || lessons[index - 1]?.status === 'completed') {
+    const lesson = lessons[index];
+    const canSelectMyTrack = index === 0 || lessons[index - 1]?.status === 'completed';
+    const canSelectLocked = lesson?.isLocked === true;
+    if (canSelectLocked || canSelectMyTrack) {
       setCurrentVideoIndex(index);
       localStorage.setItem(`all_tracks_${currentLevel}_index`, index.toString());
     }
@@ -220,11 +251,12 @@ export default function CurriculumLearnPage() {
   const goToNextVideo = async () => {
     const next = currentVideoIndex + 1;
     if (next >= lessons.length) return;
-    const prevCompleted = next === 0 || lessons[next - 1]?.status === 'completed';
-    if (!prevCompleted) return;
+    const nextLesson = lessons[next];
+    const canGoToNext = nextLesson?.isLocked || next === 0 || lessons[next - 1]?.status === 'completed';
+    if (!canGoToNext) return;
 
     const currentLesson = lessons[currentVideoIndex];
-    if (currentLesson && currentLesson.status !== 'completed') {
+    if (currentLesson && !currentLesson.isLocked && currentLesson.status !== 'completed') {
       setLessons(prev =>
         prev.map((l, i) => i === currentVideoIndex ? { ...l, status: 'completed' as const } : l)
       );
@@ -245,10 +277,16 @@ export default function CurriculumLearnPage() {
 
   const isNextUnlocked = () => {
     const next = currentVideoIndex + 1;
-    return next < lessons.length && (next === 0 || lessons[next - 1]?.status === 'completed');
+    if (next >= lessons.length) return false;
+    const nextLesson = lessons[next];
+    return nextLesson?.isLocked || next === 0 || lessons[next - 1]?.status === 'completed';
   };
 
-  const allCompleted = () => lessons.length > 0 && lessons.every(l => l.status === 'completed');
+  const myTrackLessons = () => lessons.filter(l => !l.isLocked);
+  const allCompleted = () => {
+    const my = myTrackLessons();
+    return my.length > 0 && my.every(l => l.status === 'completed');
+  };
 
   // Check if a specific track's videos are all completed
   const isTrackCompleted = (trackSlug: string) => {
@@ -272,6 +310,8 @@ export default function CurriculumLearnPage() {
 
   // Unique track slugs present in current lesson list
   const activeTrackSlugs = [...new Set(lessons.map(l => l.trackSlug).filter(Boolean))];
+  const hasMyTrackContent = myTrackSlug != null && lessons.some(l => l.trackSlug === myTrackSlug);
+  const myTrackDisplayName = myTrackSlug ? (trackInfoFromKey(myTrackSlug).name || myTrackSlug) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 p-4 md:p-8">
@@ -288,8 +328,15 @@ export default function CurriculumLearnPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white">All Tracks</h1>
-              <p className="text-slate-400">{levelNames[currentLevel]}</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">
+                {myTrackSlug ? 'Curriculum' : 'All Tracks'}
+              </h1>
+              <p className="text-slate-400">
+                {levelNames[currentLevel]}
+                {myTrackDisplayName && (
+                  <span className="ml-2 text-slate-500">· Your track: <span className="text-indigo-400 font-medium">{myTrackDisplayName}</span></span>
+                )}
+              </p>
             </div>
             {!loading && (
               <Badge variant="outline" className="text-slate-300 border-slate-600">
@@ -321,6 +368,13 @@ export default function CurriculumLearnPage() {
             ))}
           </div>
 
+          {!loading && myTrackSlug && !hasMyTrackContent && lessons.length > 0 && (
+            <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <p className="text-amber-200 text-sm font-medium">No content for your track yet</p>
+              <p className="text-amber-200/80 text-xs mt-1">Your track ({myTrackDisplayName}) has no video lessons at this level. Below you can view other tracks as locked (view only).</p>
+            </div>
+          )}
+
           {/* Track pills — show which tracks have content at this level */}
           <div className="mt-4">
             <p className="text-slate-400 text-sm mb-2">Tracks with content</p>
@@ -332,6 +386,7 @@ export default function CurriculumLearnPage() {
                 };
                 const hasContent = activeTrackSlugs.includes(slug);
                 const isCurrent = currentVideo?.trackSlug === slug;
+                const isMyTrack = slug === myTrackSlug;
                 const completionPct = hasContent ? getTrackCompletionPercentage(slug) : 0;
                 return (
                   <div
@@ -340,16 +395,22 @@ export default function CurriculumLearnPage() {
                       isCurrent
                         ? 'bg-och-orange border-och-orange text-white'
                         : hasContent
-                        ? 'bg-slate-700 border-slate-500 text-slate-300'
+                        ? isMyTrack
+                          ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                          : 'bg-slate-700 border-slate-500 text-slate-300'
                         : 'bg-slate-900 border-slate-700 text-slate-600'
                     }`}
                   >
                     {displayNames[slug] || slug}
+                    {isMyTrack && <span className="ml-1.5 text-xs opacity-90">(your track)</span>}
                     {!hasContent && !loading && (
                       <span className="ml-1 text-xs opacity-60">— no content</span>
                     )}
-                    {hasContent && completionPct > 0 && (
+                    {hasContent && isMyTrack && completionPct > 0 && (
                       <span className="ml-2 text-xs opacity-75">({completionPct}%)</span>
+                    )}
+                    {hasContent && !isMyTrack && (
+                      <Lock className="w-3.5 h-3.5 ml-1.5 inline-block text-slate-400" aria-hidden />
                     )}
                   </div>
                 );
@@ -470,33 +531,45 @@ export default function CurriculumLearnPage() {
                   {lessons.map((lesson, index) => {
                     const isCompleted = lesson.status === 'completed';
                     const isCurrent = index === currentVideoIndex;
-                    const isUnlocked = index === 0 || lessons[index - 1]?.status === 'completed';
+                    const isUnlockedMyTrack = index === 0 || lessons[index - 1]?.status === 'completed';
+                    const canSelect = lesson.isLocked || isUnlockedMyTrack;
 
                     return (
                       <button
                         key={lesson.id}
                         onClick={() => goToVideo(index)}
-                        disabled={!isUnlocked}
+                        disabled={!canSelect}
                         className={`w-full text-left p-3 rounded-lg transition-all ${
-                          isCurrent
+                          lesson.isLocked
+                            ? isCurrent
+                              ? 'bg-slate-700 border border-slate-600'
+                              : 'bg-slate-900 border border-slate-700 hover:bg-slate-800'
+                            : isCurrent
                             ? 'bg-blue-500/20 border border-blue-500/30'
                             : isCompleted
                             ? 'bg-green-500/10 border border-green-500/20 hover:bg-green-500/20'
-                            : isUnlocked
+                            : isUnlockedMyTrack
                             ? 'bg-slate-800 border border-slate-600 hover:bg-slate-700'
                             : 'bg-slate-900 border border-slate-700 cursor-not-allowed opacity-50'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 ${
-                            isCompleted ? 'bg-green-500 text-white'
-                            : isCurrent ? 'bg-blue-500 text-white'
-                            : isUnlocked ? 'bg-slate-600 text-slate-300'
-                            : 'bg-slate-700 text-slate-500'
+                            lesson.isLocked
+                              ? 'bg-slate-600 text-slate-400'
+                              : isCompleted
+                              ? 'bg-green-500 text-white'
+                              : isCurrent
+                              ? 'bg-blue-500 text-white'
+                              : isUnlockedMyTrack
+                              ? 'bg-slate-600 text-slate-300'
+                              : 'bg-slate-700 text-slate-500'
                           }`}>
-                            {isCompleted ? (
+                            {lesson.isLocked ? (
+                              <Lock className="w-3 h-3" />
+                            ) : isCompleted ? (
                               <CheckCircle className="w-3 h-3" />
-                            ) : isUnlocked ? (
+                            ) : isUnlockedMyTrack ? (
                               index + 1
                             ) : (
                               <Lock className="w-3 h-3" />
@@ -504,15 +577,23 @@ export default function CurriculumLearnPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm font-medium truncate ${
-                              isCurrent ? 'text-blue-400'
-                              : isCompleted ? 'text-green-400'
-                              : isUnlocked ? 'text-white'
-                              : 'text-slate-500'
+                              lesson.isLocked
+                                ? 'text-slate-400'
+                                : isCurrent
+                                ? 'text-blue-400'
+                                : isCompleted
+                                ? 'text-green-400'
+                                : isUnlockedMyTrack
+                                ? 'text-white'
+                                : 'text-slate-500'
                             }`}>
                               {lesson.title}
                             </p>
                             {lesson.trackName && (
-                              <p className="text-xs text-slate-500 truncate">{lesson.trackName}</p>
+                              <p className="text-xs text-slate-500 truncate">
+                                {lesson.trackName}
+                                {lesson.isLocked && ' · View only'}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -551,36 +632,60 @@ export default function CurriculumLearnPage() {
               </Card>
             ) : (
               <Card className="p-6 bg-slate-900/50 border-slate-700">
+                {currentVideo.isLocked && (
+                  <div className="mb-4 p-3 rounded-lg bg-slate-700/50 border border-slate-600 flex items-center gap-2">
+                    <Lock className="w-5 h-5 text-slate-400 shrink-0" aria-hidden />
+                    <p className="text-slate-300 text-sm">
+                      View only — this content is from another track. Your progress is not saved. Your track: <span className="font-medium text-indigo-300">{myTrackDisplayName ?? '—'}</span>
+                    </p>
+                  </div>
+                )}
                 <div className="mb-4">
                   <h2 className="text-xl font-semibold text-white mb-1">{currentVideo.title}</h2>
                   {currentVideo.trackName && (
                     <p className="text-sm text-slate-400 mb-3">
                       {currentVideo.trackName} Track
                       {currentVideo.moduleName ? ` • ${currentVideo.moduleName}` : ''}
+                      {currentVideo.isLocked && ' (view only)'}
                     </p>
                   )}
-                  <div className="bg-slate-800 rounded-lg overflow-hidden">
+                  <div className="bg-slate-800 rounded-lg overflow-hidden relative">
                     {(() => {
                       const embedUrl = getEmbedUrl(currentVideo.content_url);
                       const resolvedUrl = resolveVideoUrl(currentVideo.content_url);
                       if (embedUrl) {
-                        // YouTube / Vimeo → iframe + "Mark as Watched" button
+                        // YouTube / Vimeo → iframe + "Mark as Watched" (only for my track)
                         const isWatched = iframeWatched || lessons[currentVideoIndex]?.status === 'completed';
                         return (
                           <>
-                            <div className="aspect-video w-full">
+                            <div className="aspect-video w-full relative">
                               <iframe
                                 key={currentVideo.id}
                                 src={embedUrl}
-                                className="w-full h-full"
+                                className={`w-full h-full ${currentVideo.isLocked ? 'blur-md' : ''}`}
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                 allowFullScreen
                                 title={currentVideo.title}
                               />
+                              {currentVideo.isLocked && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+                                  <div className="text-center p-6">
+                                    <Lock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                                    <p className="text-white font-semibold text-lg mb-1">Content Locked</p>
+                                    <p className="text-slate-400 text-sm">This content is from the {currentVideo.trackName} track</p>
+                                    <p className="text-slate-500 text-xs mt-2">View only - progress not saved</p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            {/* Manual completion bar — iframes don't fire onEnded */}
+                            {/* Manual completion bar — only for student's track */}
                             <div className="flex justify-end items-center px-4 py-2 bg-slate-900/80 border-t border-slate-700">
-                              {isWatched ? (
+                              {currentVideo.isLocked ? (
+                                <span className="flex items-center gap-1.5 text-slate-500 text-sm">
+                                  <Lock className="w-4 h-4" />
+                                  View only — progress not saved
+                                </span>
+                              ) : isWatched ? (
                                 <span className="flex items-center gap-1.5 text-green-400 text-sm font-medium">
                                   <CheckCircle className="w-4 h-4" />
                                   Marked as Watched
@@ -607,14 +712,24 @@ export default function CurriculumLearnPage() {
                       }
                       // Direct video file (mp4, webm, etc.)
                       return (
-                        <div className="aspect-video">
+                        <div className="aspect-video relative">
                           <video
                             key={currentVideo.id}
                             src={resolvedUrl}
-                            controls
-                            className="w-full h-full"
+                            controls={!currentVideo.isLocked}
+                            className={`w-full h-full ${currentVideo.isLocked ? 'blur-md' : ''}`}
                             onEnded={handleVideoComplete}
                           />
+                          {currentVideo.isLocked && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+                              <div className="text-center p-6">
+                                <Lock className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                                <p className="text-white font-semibold text-lg mb-1">Content Locked</p>
+                                <p className="text-slate-400 text-sm">This content is from the {currentVideo.trackName} track</p>
+                                <p className="text-slate-500 text-xs mt-2">View only - progress not saved</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}

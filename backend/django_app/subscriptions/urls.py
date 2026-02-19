@@ -6,6 +6,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     subscription_status, upgrade_subscription, stripe_webhook, billing_history,
     list_plans, simulate_payment, cancel_subscription, list_user_subscriptions,
+    paystack_config, paystack_initialize, paystack_verify,
 )
 from .admin_views import (
     SubscriptionPlanViewSet, UserSubscriptionAdminViewSet,
@@ -34,6 +35,9 @@ urlpatterns = [
     path('subscription/cancel', cancel_subscription, name='cancel'),
     path('subscription/billing-history', billing_history, name='billing-history'),
     path('subscription/webhooks/stripe', stripe_webhook, name='stripe-webhook'),
+    path('subscription/paystack/config', paystack_config, name='paystack-config'),
+    path('subscription/paystack/initialize', paystack_initialize, name='paystack-initialize'),
+    path('subscription/paystack/verify', paystack_verify, name='paystack-verify'),
     # ── Admin endpoints ──────────────────────────────────────────────────────
     path('', include(admin_router.urls)),
 ]

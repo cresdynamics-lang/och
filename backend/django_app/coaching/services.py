@@ -14,6 +14,109 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_user_track_info(user):
+    """
+    Get user's track name, level, and match score from all available sources.
+    Returns: (track_name, level_slug, match_score)
+    - track_name: str, e.g. "Cyber Defense" or "Not enrolled in any track yet"
+    - level_slug: str, e.g. "BEGINNER"
+    - match_score: int 0-100
+    """
+    track_name = "Not enrolled in any track yet"
+    level_slug = "Not assessed"
+    match_score = 0
+
+    # 1. UserTrackEnrollment (curriculum) - uses user.uuid_id (UUID), NOT user.id (integer)
+    try:
+        from curriculum.models import UserTrackEnrollment, CurriculumTrack
+        enrollment = UserTrackEnrollment.objects.filter(user_id=user.uuid_id).select_related('track').first()
+        if enrollment and enrollment.track:
+            track_name = getattr(enrollment.track, 'name', None) or getattr(enrollment.track, 'title', '') or str(enrollment.track)
+            level_slug = (enrollment.current_level_slug or 'beginner').upper()
+            match_score = 85
+            logger.info(f"Found UserTrackEnrollment for {user.email}: {track_name} at {level_slug}")
+            return (track_name, level_slug, match_score)
+    except Exception as e:
+        logger.warning(f"UserTrackEnrollment lookup failed: {e}")
+
+    # 2. User.track_key (from profiler) - resolve to CurriculumTrack by slug
+    user_track_key = (getattr(user, 'track_key', None) or '').strip().lower()
+    if user_track_key:
+        try:
+            from curriculum.models import CurriculumTrack
+            # Slug aliases: defensive-security, cyber_defense -> defender
+            TRACK_SLUG_ALIASES = {
+                'defender': ('defender', 'cyberdef', 'defensive-security', 'socdefense', 'cyber_defense'),
+                'offensive': ('offensive',),
+                'grc': ('grc',),
+                'innovation': ('innovation',),
+                'leadership': ('leadership',),
+            }
+            track = CurriculumTrack.objects.filter(slug=user_track_key, is_active=True).first()
+            if not track:
+                for slug, aliases in TRACK_SLUG_ALIASES.items():
+                    if user_track_key in aliases:
+                        track = CurriculumTrack.objects.filter(slug=slug, is_active=True).first()
+                        break
+            if track:
+                track_name = getattr(track, 'name', None) or getattr(track, 'title', '') or str(track)
+                level_slug = "BEGINNER"
+                match_score = 80
+                logger.info(f"Found track from user.track_key '{user_track_key}' for {user.email}: {track_name}")
+                return (track_name, level_slug, match_score)
+        except Exception as e:
+            logger.warning(f"track_key lookup failed: {e}")
+
+    # 3. programs.Enrollment (cohort -> track) - map to curriculum track
+    try:
+        from programs.models import Enrollment
+        from curriculum.models import CurriculumTrack
+        enrollment = Enrollment.objects.filter(
+            user=user,
+            status__in=['active', 'completed']
+        ).select_related('cohort', 'cohort__track').first()
+        if enrollment and enrollment.cohort and enrollment.cohort.track:
+            prog_track = enrollment.cohort.track
+            ct = CurriculumTrack.objects.filter(
+                program_track_id=prog_track.id,
+                is_active=True
+            ).first()
+            if not ct and prog_track.key:
+                ct = CurriculumTrack.objects.filter(
+                    Q(slug=prog_track.key) | Q(code__iexact=prog_track.key),
+                    is_active=True
+                ).first()
+            if ct:
+                track_name = getattr(ct, 'name', None) or getattr(ct, 'title', '') or str(ct)
+                level_slug = "BEGINNER"
+                match_score = 85
+                logger.info(f"Found track from programs.Enrollment for {user.email}: {track_name}")
+                return (track_name, level_slug, match_score)
+    except Exception as e:
+        logger.warning(f"programs.Enrollment lookup failed: {e}")
+
+    # 4. ProfilerSession recommended_track_id
+    try:
+        from profiler.models import ProfilerSession
+        from curriculum.models import CurriculumTrack
+        profiler = ProfilerSession.objects.filter(
+            user=user,
+            status__in=['finished', 'locked']
+        ).order_by('-completed_at').first()
+        if profiler and profiler.recommended_track_id:
+            track = CurriculumTrack.objects.filter(id=profiler.recommended_track_id).first()
+            if track:
+                track_name = getattr(track, 'name', None) or getattr(track, 'title', '') or str(track)
+                level_slug = getattr(track, 'level', 'beginner').upper()
+                match_score = int(profiler.track_confidence * 100) if profiler.track_confidence else 80
+                logger.info(f"Found track from ProfilerSession for {user.email}: {track_name}")
+                return (track_name, level_slug, match_score)
+    except Exception as e:
+        logger.warning(f"ProfilerSession lookup failed: {e}")
+
+    return (track_name, level_slug, match_score)
+
+
 def update_habit_streak(habit_id):
     """
     Recalculate habit streak from logs.

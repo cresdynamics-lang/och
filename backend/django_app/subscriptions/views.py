@@ -2,13 +2,16 @@
 API views for Subscription Engine.
 """
 import os
+import random
+import string
+import requests
 from django.utils import timezone
 from django.db import transaction
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import SubscriptionPlan, UserSubscription, PaymentTransaction
+from .models import SubscriptionPlan, UserSubscription, PaymentTransaction, PaymentGateway
 from .serializers import (
     SubscriptionPlanSerializer,
     UserSubscriptionSerializer,
@@ -20,6 +23,9 @@ from student_dashboard.services import DashboardAggregationService
 import logging
 
 logger = logging.getLogger(__name__)
+
+PAYSTACK_VERIFY_URL = "https://api.paystack.co/transaction/verify/{}"
+PAYSTACK_INITIALIZE_URL = "https://api.paystack.co/transaction/initialize"
 
 
 @api_view(['GET'])
@@ -338,6 +344,7 @@ def billing_history(request):
             'amount': float(transaction.amount),
             'currency': transaction.currency,
             'status': transaction.status,
+            'plan_name': plan_name,
             'description': f'{plan_name} - {transaction.created_at.strftime("%B %Y")}',
             'gateway_transaction_id': transaction.gateway_transaction_id,
         })
@@ -354,6 +361,7 @@ def billing_history(request):
                     'amount': float(subscription.plan.price_monthly or 0),
                     'currency': 'USD',
                     'status': subscription.status,
+                    'plan_name': subscription.plan.name.replace('_', ' ').title(),
                     'description': f'{subscription.plan.name.replace("_", " ").title()} - {subscription.current_period_start.strftime("%B %Y") if subscription.current_period_start else timezone.now().strftime("%B %Y")}',
                     'gateway_transaction_id': subscription.stripe_subscription_id or 'subscription',
                 })
@@ -417,16 +425,10 @@ def list_plans(request):
     plans = SubscriptionPlan.objects.all().order_by('price_monthly')
     data = []
     for p in plans:
-        # Count active users on this plan
-        user_count = UserSubscription.objects.filter(
-            plan=p,
-            status='active'
-        ).count()
-        
+        user_count = UserSubscription.objects.filter(plan=p, status='active').count()
         mode_note = ''
         if p.tier == 'starter':
             mode_note = 'First 6 months: Enhanced Access (full features). After: Normal Mode (limited).'
-        
         data.append({
             'id': str(p.id),
             'name': p.name,
@@ -441,8 +443,8 @@ def list_plans(request):
             'marketplace_contact': p.marketplace_contact,
             'enhanced_access_days': p.enhanced_access_days,
             'mode_note': mode_note,
-            'users': user_count,  # Add user count
-            'revenue': float(p.price_monthly or 0) * user_count,  # Calculate revenue
+            'users': user_count,
+            'revenue': float(p.price_monthly or 0) * user_count,
         })
     return Response(data, status=status.HTTP_200_OK)
 
@@ -469,7 +471,6 @@ def simulate_payment(request):
     try:
         plan = SubscriptionPlan.objects.get(name=plan_identifier)
     except SubscriptionPlan.DoesNotExist:
-        # Map old tier names or use tier directly
         tier_map = {'starter_3': 'starter', 'professional_7': 'premium', 'free': 'free'}
         tier = tier_map.get(plan_identifier, plan_identifier)
         plan = SubscriptionPlan.objects.filter(tier=tier).first()
@@ -584,3 +585,303 @@ def cancel_subscription(request):
         'message': 'Subscription canceled. You retain access until the end of your billing period.',
         'access_until': subscription.current_period_end,
     }, status=status.HTTP_200_OK)
+
+
+# ── Paystack ─────────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def paystack_config(request):
+    """
+    GET /api/v1/subscription/paystack/config?plan=starter_3
+    Returns Paystack popup config: amount_in_kobo, currency, plan name.
+    Public key should be set in frontend env (NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY).
+    """
+    plan_identifier = request.query_params.get('plan')
+    if not plan_identifier:
+        return Response({'error': 'plan is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        plan = SubscriptionPlan.objects.get(name=plan_identifier)
+    except SubscriptionPlan.DoesNotExist:
+        tier_map = {'starter_3': 'starter', 'professional_7': 'premium', 'free': 'free'}
+        tier = tier_map.get(plan_identifier, plan_identifier)
+        plan = SubscriptionPlan.objects.filter(tier=tier).first()
+        if not plan:
+            return Response(
+                {'error': f'Plan "{plan_identifier}" not found'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    if not plan.price_monthly or float(plan.price_monthly) <= 0:
+        return Response({
+            'amount_in_kobo': 0,
+            'currency': 'KES',
+            'plan': plan.name,
+            'tier': plan.tier,
+            'message': 'Free plan — no payment required',
+        }, status=status.HTTP_200_OK)
+
+    # KES: amount in cents (smallest unit; 100 KES = 10000 cents). Merchant uses KES.
+    usd_per_month = float(plan.price_monthly)
+    kes_per_month = usd_per_month * 130  # rough USD to KES
+    amount_in_cents = int(round(kes_per_month * 100))
+    if amount_in_cents < 10000:
+        amount_in_cents = 10000  # Paystack min e.g. 100 KES
+    return Response({
+        'amount_in_kobo': amount_in_cents,
+        'currency': 'KES',
+        'plan': plan.name,
+        'tier': plan.tier,
+    }, status=status.HTTP_200_OK)
+
+
+def _paystack_plan_and_amount(plan_identifier, interval=None):
+    """Resolve plan and return (plan, amount_in_cents) for KES. amount_in_cents 0 if free.
+    If interval=='yearly', charge full year in KES (premium: 54 USD = 7020 KES, starter: 36 USD).
+    """
+    try:
+        plan = SubscriptionPlan.objects.get(name=plan_identifier)
+    except SubscriptionPlan.DoesNotExist:
+        tier_map = {'starter_3': 'starter', 'professional_7': 'premium', 'free': 'free'}
+        tier = tier_map.get(plan_identifier, plan_identifier)
+        plan = SubscriptionPlan.objects.filter(tier=tier).first()
+        if not plan:
+            return None, 0
+    if not plan.price_monthly or float(plan.price_monthly) <= 0:
+        return plan, 0
+    usd_to_kes = 130
+    if interval == 'yearly':
+        # Full year at once: premium 54 USD (10% off 60), starter 36 USD (10% off 40)
+        if plan.tier == 'premium':
+            usd_amount = 54.0
+        elif plan.tier == 'starter':
+            usd_amount = 36.0  # 3*12 with discount
+        else:
+            usd_amount = float(plan.price_monthly) * 12
+        kes_amount = usd_amount * usd_to_kes
+    else:
+        usd_amount = float(plan.price_monthly)
+        kes_amount = usd_amount * usd_to_kes
+    amount_in_cents = int(round(kes_amount * 100))
+    if amount_in_cents < 10000:
+        amount_in_cents = 10000
+    return plan, amount_in_cents
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def paystack_initialize(request):
+    """
+    POST /api/v1/subscription/paystack/initialize
+    Body: { "plan": "starter_3", "callback_url": "https://..." } (callback_url optional)
+    Initializes transaction on Paystack with KES from backend so currency is supported.
+    Returns { authorization_url, reference }.
+    """
+    plan_identifier = (request.data.get('plan') or '').strip()
+    interval = (request.data.get('interval') or '').strip().lower()
+    if interval != 'yearly':
+        interval = None
+
+    plan, amount_in_cents = _paystack_plan_and_amount(plan_identifier, interval=interval)
+    if not plan:
+        return Response({'error': f'Plan "{plan_identifier}" not found'}, status=status.HTTP_400_BAD_REQUEST)
+    if amount_in_cents <= 0:
+        return Response({'error': 'Free plan — use simulate-payment'}, status=status.HTTP_400_BAD_REQUEST)
+
+    secret_key = os.environ.get('PAYSTACK_SECRET_KEY') or os.environ.get('PAYSTACK_SECRET')
+    if not secret_key:
+        logger.error('PAYSTACK_SECRET_KEY not configured')
+        return Response({'error': 'Payment provider not configured'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    email = getattr(request.user, 'email', None) or ''
+    if not email:
+        return Response({'error': 'User email required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    reference = f"och_{int(timezone.now().timestamp())}_{request.user.id}_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
+    callback_url = (request.data.get('callback_url') or '').strip()
+    if callback_url:
+        callback_url = f"{callback_url.rstrip('/')}?reference={reference}"
+
+    metadata = {'plan': plan.name}
+    if interval == 'yearly':
+        metadata['interval'] = 'yearly'
+    payload = {
+        'email': email,
+        'amount': amount_in_cents,
+        'currency': 'KES',
+        'reference': reference,
+        'metadata': metadata,
+    }
+    if callback_url:
+        payload['callback_url'] = callback_url
+
+    try:
+        resp = requests.post(
+            PAYSTACK_INITIALIZE_URL,
+            headers={
+                'Authorization': f'Bearer {secret_key}',
+                'Content-Type': 'application/json',
+            },
+            json=payload,
+            timeout=10,
+        )
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.exception('Paystack initialize request failed')
+        return Response({'error': 'Could not start payment'}, status=status.HTTP_502_BAD_GATEWAY)
+
+    if not data.get('status'):
+        msg = data.get('message', 'Currency not supported by merchant or invalid request')
+        return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    inner = data.get('data') or {}
+    authorization_url = inner.get('authorization_url')
+    if not authorization_url:
+        return Response({'error': 'No authorization URL from Paystack'}, status=status.HTTP_502_BAD_GATEWAY)
+
+    return Response({
+        'authorization_url': authorization_url,
+        'reference': reference,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def paystack_verify(request):
+    """
+    POST /api/v1/subscription/paystack/verify
+    Body: { "reference": "paystack_ref_from_popup" }
+    Verifies the transaction with Paystack, then creates/updates subscription and payment record.
+    """
+    reference = (request.data.get('reference') or '').strip()
+    if not reference:
+        return Response({'error': 'reference is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    secret_key = os.environ.get('PAYSTACK_SECRET_KEY') or os.environ.get('PAYSTACK_SECRET')
+    if not secret_key:
+        logger.error('PAYSTACK_SECRET_KEY not configured')
+        return Response({'error': 'Payment provider not configured'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    try:
+        resp = requests.get(
+            PAYSTACK_VERIFY_URL.format(reference),
+            headers={'Authorization': f'Bearer {secret_key}'},
+            timeout=10,
+        )
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.exception('Paystack verify request failed')
+        return Response({'error': 'Verification request failed'}, status=status.HTTP_502_BAD_GATEWAY)
+
+    if not data.get('status'):
+        return Response(
+            {'error': data.get('message', 'Verification failed')},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    payload = data.get('data') or {}
+    tx_status = payload.get('status')
+    if tx_status != 'success':
+        return Response(
+            {'error': f'Transaction not successful: {tx_status}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Idempotency: already processed this reference
+    if PaymentTransaction.objects.filter(gateway_transaction_id=reference, status='completed').exists():
+        return Response({
+            'success': True,
+            'message': 'Payment already applied',
+            'reference': reference,
+        }, status=status.HTTP_200_OK)
+
+    # Resolve plan from metadata (frontend sends metadata.plan or custom_fields)
+    metadata = payload.get('metadata') or {}
+    custom_fields = metadata.get('custom_fields') or []
+    plan_name = metadata.get('plan')
+    if not plan_name:
+        for cf in custom_fields:
+            if cf.get('display_name') == 'Plan' or cf.get('variable_name') == 'plan':
+                plan_name = cf.get('value')
+                break
+
+    if not plan_name:
+        return Response({'error': 'Plan not found in payment metadata'}, status=status.HTTP_400_BAD_REQUEST)
+
+    is_yearly = (metadata.get('interval') or '').lower() == 'yearly'
+
+    try:
+        plan = SubscriptionPlan.objects.get(name=plan_name)
+    except SubscriptionPlan.DoesNotExist:
+        tier_map = {'starter_3': 'starter', 'professional_7': 'premium', 'free': 'free'}
+        plan = SubscriptionPlan.objects.filter(tier=tier_map.get(plan_name, plan_name)).first()
+        if not plan:
+            return Response({'error': f'Plan "{plan_name}" not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+    amount = float(payload.get('amount', 0)) / 100.0  # subunit to main unit (cents→KES)
+    currency = payload.get('currency', 'KES')
+    period_days = 365 if is_yearly else 30
+    if is_yearly and plan.tier == 'premium':
+        stored_usd = 54.0
+    elif is_yearly and plan.tier == 'starter':
+        stored_usd = 36.0
+    else:
+        stored_usd = plan.price_monthly or (amount / 130.0 if currency == 'KES' else amount / 1500.0)
+
+    try:
+        with transaction.atomic():
+            existing = UserSubscription.objects.filter(user=user).first()
+            enhanced_until = None
+            if plan.tier == 'starter':
+                if existing and existing.enhanced_access_expires_at:
+                    enhanced_until = existing.enhanced_access_expires_at
+                else:
+                    enhanced_until = timezone.now() + timezone.timedelta(days=180)
+
+            subscription, _ = UserSubscription.objects.update_or_create(
+                user=user,
+                defaults={
+                    'plan': plan,
+                    'status': 'active',
+                    'current_period_start': timezone.now(),
+                    'current_period_end': timezone.now() + timezone.timedelta(days=period_days),
+                    'enhanced_access_expires_at': enhanced_until,
+                }
+            )
+
+            gateway = PaymentGateway.objects.filter(name='paystack').first()
+            PaymentTransaction.objects.create(
+                user=user,
+                gateway=gateway,
+                subscription=subscription,
+                amount=stored_usd,
+                currency='USD',
+                status='completed',
+                gateway_transaction_id=reference,
+                gateway_response=payload,
+                processed_at=timezone.now(),
+            )
+
+            mp_map = {'free': 'free', 'starter': 'starter', 'premium': 'professional'}
+            mp_tier = mp_map.get(plan.tier, 'free')
+            try:
+                mp = user.marketplace_profile
+                mp.tier = mp_tier
+                mp.last_updated_at = timezone.now()
+                mp.save(update_fields=['tier', 'last_updated_at'])
+            except Exception:
+                pass
+
+            logger.info(f'[paystack_verify] {user.email} → {plan.name} ref={reference}')
+            return Response({
+                'success': True,
+                'message': 'Payment verified and subscription activated',
+                'plan': plan.name,
+                'tier': plan.tier,
+                'reference': reference,
+            }, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.exception('Paystack verify DB error')
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

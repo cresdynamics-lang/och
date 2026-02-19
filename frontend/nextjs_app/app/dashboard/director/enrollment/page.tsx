@@ -93,6 +93,7 @@ export default function EnrollmentPage() {
   const [cohorts, setCohorts] = useState<any[]>([])
   const [organizations, setOrganizations] = useState<any[]>([])
   const [selectedOrganization, setSelectedOrganization] = useState<string>('all')
+  const [selectedTrack, setSelectedTrack] = useState<string>('all')
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -592,6 +593,7 @@ export default function EnrollmentPage() {
   const filteredEnrolled = useMemo(() => {
     const filtered = enrolledStudents.filter((student) => {
       if (selectedOrganization !== 'all' && student.organization_id !== selectedOrganization) return false
+      if (selectedTrack !== 'all' && student.track_name !== selectedTrack) return false
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         return (
@@ -610,7 +612,7 @@ export default function EnrollmentPage() {
       const dateB = b.joined_at ? new Date(b.joined_at).getTime() : 0
       return dateB - dateA // Descending order
     })
-  }, [enrolledStudents, selectedOrganization, searchQuery])
+  }, [enrolledStudents, selectedOrganization, selectedTrack, searchQuery])
 
   // Paginated data
   const paginatedEnrolled = useMemo(() => {
@@ -624,7 +626,7 @@ export default function EnrollmentPage() {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchQuery, selectedOrganization])
+  }, [searchQuery, selectedOrganization, selectedTrack])
 
   // Get or create "Director Enrollments" cohort (only used for display purposes)
   const getDirectorEnrollmentsCohort = async (): Promise<string | null> => {
@@ -1152,10 +1154,30 @@ export default function EnrollmentPage() {
                       }}
                       className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
                     >
-                      <option value="all">All Students</option>
+                      <option value="all">All Organizations</option>
                       {organizations.map((org) => (
                         <option key={org.id} value={org.id}>
                           {org.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Track Selection */}
+                  <div className="flex-1 w-full sm:w-auto min-w-[200px]">
+                    <label className="block text-sm font-medium text-white mb-2">Filter by Track</label>
+                    <select
+                      value={selectedTrack}
+                      onChange={(e) => {
+                        setSelectedTrack(e.target.value)
+                        setCurrentPage(1)
+                      }}
+                      className="w-full px-4 py-2 bg-och-midnight/50 border border-och-steel/20 rounded-lg text-white focus:outline-none focus:border-och-defender"
+                    >
+                      <option value="all">All Tracks</option>
+                      {[...new Set(enrolledStudents.map(s => s.track_name).filter(Boolean))].sort().map((track) => (
+                        <option key={track} value={track}>
+                          {track}
                         </option>
                       ))}
                     </select>
@@ -1258,6 +1280,7 @@ export default function EnrollmentPage() {
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel w-12">#</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Name</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Email</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Track</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Organization</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Enrollment Type</th>
                           <th className="text-left py-3 px-4 text-sm font-medium text-och-steel">Status</th>
@@ -1316,6 +1339,13 @@ export default function EnrollmentPage() {
                               </td>
                               <td className="py-3 px-4 text-och-steel">
                                 {student.user_email || student.user}
+                              </td>
+                              <td className="py-3 px-4">
+                                {student.track_name ? (
+                                  <Badge variant="outline">{student.track_name}</Badge>
+                                ) : (
+                                  <span className="text-och-steel/50">No track</span>
+                                )}
                               </td>
                               <td className="py-3 px-4 text-och-steel">
                                 {student.organization_name || 'N/A'}

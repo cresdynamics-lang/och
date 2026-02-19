@@ -1,29 +1,82 @@
 'use client'
 
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useDashboardStore } from '../lib/store/dashboardStore'
-import { useDismissAICoachNudge, useLogHabit } from '../lib/hooks/useDashboard'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { useRouter } from 'next/navigation'
+import { apiGateway } from '@/services/apiGateway'
 import '../styles/dashboard.css'
 
+interface SubStatus {
+  tier: string
+  plan_name?: string
+  current_period_end?: string
+}
+interface HabitItem {
+  id: string
+  name: string
+  category?: string
+  completed?: boolean
+  streak?: number
+}
+interface LeaderboardEntry {
+  rank: number
+  user_id: string
+  userId?: string
+  user_name: string
+  userName?: string
+  points: number
+  is_current_user?: boolean
+  isCurrentUser?: boolean
+}
+interface AICoachNudge {
+  message?: string
+  recommendation?: string
+  action_url?: string
+  action_label?: string
+}
+
 export function RightPanel() {
-  const { aiCoachNudge, subscription, subscriptionDaysLeft, habits, leaderboard } = useDashboardStore()
-  const [isVisible, setIsVisible] = useState(true)
-  const dismissNudge = useDismissAICoachNudge()
-  const logHabit = useLogHabit()
   const router = useRouter()
+  const [isVisible, setIsVisible] = useState(true)
+  const [subscription, setSubscription] = useState<SubStatus | null>(null)
+  const [habits, setHabits] = useState<HabitItem[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [aiCoachNudge, setAICoachNudge] = useState<AICoachNudge | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const handleDismissNudge = async () => {
-    await dismissNudge.mutateAsync()
-  }
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [subRes, habitsRes, leaderRes, nudgeRes] = await Promise.allSettled([
+          apiGateway.get<SubStatus>('/subscription/status'),
+          apiGateway.get<HabitItem[]>('/student/dashboard/habits').catch(() => []),
+          apiGateway.get<LeaderboardEntry[]>('/student/dashboard/leaderboard').catch(() => []),
+          apiGateway.post<AICoachNudge>('/student/dashboard/ai-coach-nudge').catch(() => null),
+        ])
+        if (subRes.status === 'fulfilled' && subRes.value) setSubscription(subRes.value)
+        if (habitsRes.status === 'fulfilled' && Array.isArray(habitsRes.value)) setHabits(habitsRes.value)
+        if (leaderRes.status === 'fulfilled' && Array.isArray(leaderRes.value)) {
+          setLeaderboard(leaderRes.value.map((e) => ({
+            ...e,
+            userId: e.user_id ?? (e as any).userId,
+            userName: e.user_name ?? (e as any).userName,
+            isCurrentUser: e.is_current_user ?? (e as any).isCurrentUser,
+          })))
+        }
+        if (nudgeRes.status === 'fulfilled' && nudgeRes.value) setAICoachNudge(nudgeRes.value)
+      } catch {
+        // keep defaults
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
-  const handleLogHabit = async (habitId: string, completed: boolean) => {
-    await logHabit.mutateAsync({ habitId, completed })
-  }
+  const isPremium = subscription?.tier === 'professional' || subscription?.tier === 'premium'
+  const planLabel = subscription?.plan_name?.replace(/_/g, ' ')?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? subscription?.tier ?? 'Free'
 
   if (!isVisible) {
     return (
@@ -54,48 +107,51 @@ export function RightPanel() {
         </button>
       </div>
 
-      {aiCoachNudge && (
+      {!loading && aiCoachNudge && (
         <Card className="glass-card p-4">
           <div className="flex items-start justify-between mb-2">
             <h3 className="text-sm font-semibold text-white">AI Coach</h3>
-            <button
-              onClick={handleDismissNudge}
-              className="text-och-steel hover:text-white text-xs"
-              aria-label="Dismiss AI coach nudge"
-            >
-              ×
-            </button>
           </div>
           <p className="text-xs text-och-steel mb-2">{aiCoachNudge.message}</p>
           <p className="text-sm text-white mb-3">{aiCoachNudge.recommendation}</p>
-          {aiCoachNudge.actionUrl && (
+          {aiCoachNudge.action_url && (
             <Button
               variant="mint"
               size="sm"
               className="w-full text-xs"
-              onClick={() => router.push(aiCoachNudge.actionUrl!)}
+              onClick={() => router.push(aiCoachNudge.action_url!)}
             >
-              {aiCoachNudge.actionLabel || 'Start Lab'}
+              {aiCoachNudge.action_label || 'Start Lab'}
             </Button>
           )}
         </Card>
       )}
 
-      {subscription !== '$7-premium' && (
+      {!loading && (
         <Card className="glass-card p-4 border-dashboard-warning/50">
-          <h3 className="text-sm font-semibold text-white mb-2">Unlock Premium</h3>
-          <p className="text-xs text-och-steel mb-3">
-            Unlock Mentor Reviews + Capstones
-          </p>
-          <div className="text-sm font-bold text-dashboard-warning mb-3">$7/mo (Save 20%)</div>
-          <Button
-            variant="orange"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => router.push('/dashboard/student/subscription')}
-          >
-            Upgrade Now
-          </Button>
+          <h3 className="text-sm font-semibold text-white mb-2">
+            {isPremium ? 'Current Plan' : 'Unlock Premium'}
+          </h3>
+          {isPremium ? (
+            <p className="text-xs text-och-steel">
+              {planLabel} · Active
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-och-steel mb-3">
+                Unlock Mentor Reviews + Capstones
+              </p>
+              <div className="text-sm font-bold text-dashboard-warning mb-3">KSh 7,020/year (Save 10%)</div>
+              <Button
+                variant="orange"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => router.push('/dashboard/student/subscription')}
+              >
+                Upgrade Now
+              </Button>
+            </>
+          )}
         </Card>
       )}
 
@@ -103,7 +159,9 @@ export function RightPanel() {
         <h3 className="text-sm font-semibold text-och-steel mb-3">Habit Tracker</h3>
         <Card className="glass-card p-3">
           <div className="space-y-2">
-            {(!habits || habits.length === 0) ? (
+            {loading ? (
+              <p className="text-xs text-och-steel py-2">Loading...</p>
+            ) : habits.length === 0 ? (
               <div className="text-center py-4">
                 <p className="text-xs text-och-steel mb-2">No habits configured</p>
                 <Button
@@ -116,7 +174,7 @@ export function RightPanel() {
                 </Button>
               </div>
             ) : (
-              (habits || []).map((habit) => (
+              habits.map((habit) => (
                 <div key={habit.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm">
@@ -124,20 +182,7 @@ export function RightPanel() {
                     </span>
                     <span className="text-sm text-white">{habit.name}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-och-steel">{habit.streak} 🔥</span>
-                    <button
-                      onClick={() => handleLogHabit(habit.id, !habit.completed)}
-                      className={`w-6 h-6 rounded border-2 flex items-center justify-center ${
-                        habit.completed
-                          ? 'bg-dashboard-success border-dashboard-success'
-                          : 'border-och-steel'
-                      }`}
-                      aria-label={`${habit.completed ? 'Unmark' : 'Mark'} ${habit.name} as complete`}
-                    >
-                      {habit.completed && <span className="text-white text-xs">✓</span>}
-                    </button>
-                  </div>
+                  <span className="text-xs text-och-steel">{(habit.streak ?? 0)} 🔥</span>
                 </div>
               ))
             )}
@@ -157,7 +202,9 @@ export function RightPanel() {
         <h3 className="text-sm font-semibold text-och-steel mb-3">Leaderboard</h3>
         <Card className="glass-card p-3">
           <div className="space-y-2">
-            {(!leaderboard || leaderboard.length === 0) ? (
+            {loading ? (
+              <p className="text-xs text-och-steel py-2">Loading...</p>
+            ) : leaderboard.length === 0 ? (
               <div className="text-center py-4">
                 <p className="text-xs text-och-steel mb-2">No leaderboard data</p>
                 <Button
@@ -170,9 +217,9 @@ export function RightPanel() {
                 </Button>
               </div>
             ) : (
-              (leaderboard || []).map((entry) => (
+              leaderboard.map((entry) => (
                 <div
-                  key={entry.userId}
+                  key={entry.user_id ?? (entry as any).userId ?? entry.rank}
                   className={`flex items-center justify-between p-2 rounded ${
                     entry.isCurrentUser ? 'bg-dashboard-accent/20' : ''
                   }`}
@@ -182,7 +229,7 @@ export function RightPanel() {
                       {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'}
                     </span>
                     <span className={`text-sm ${entry.isCurrentUser ? 'font-bold text-white' : 'text-och-steel'}`}>
-                      {entry.userName}
+                      {entry.userName ?? entry.user_name}
                     </span>
                   </div>
                   <span className="text-sm text-white font-semibold">{entry.points}</span>

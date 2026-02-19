@@ -13,6 +13,11 @@ from coaching.models import Habit, HabitLog
 from curriculum.models import CurriculumModule, UserModuleProgress
 import json
 
+try:
+    from subscriptions.models import UserSubscription
+except ImportError:
+    UserSubscription = None
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -54,13 +59,24 @@ def dashboard_overview(request):
             level=''
         )
     
-    subscription_tier = getattr(user, 'subscription_tier', 'free')
-    subscription_expiry = getattr(user, 'subscription_expiry', None)
+    # Subscription from subscriptions app (single source of truth)
+    subscription_tier = 'free'
+    subscription_plan_name = 'free'
+    subscription_expiry = None
     subscription_days_left = None
-    if subscription_expiry:
-        days = (subscription_expiry - timezone.now().date()).days
-        subscription_days_left = max(0, days)
-    
+    if UserSubscription is not None:
+        try:
+            sub = UserSubscription.objects.filter(user=user).select_related('plan').first()
+            if sub and sub.plan:
+                subscription_plan_name = sub.plan.name
+                subscription_tier = sub.plan.tier  # 'free' | 'starter' | 'premium'
+                if sub.current_period_end:
+                    subscription_expiry = sub.current_period_end.date() if hasattr(sub.current_period_end, 'date') else sub.current_period_end
+                    delta = sub.current_period_end - timezone.now()
+                    subscription_days_left = max(0, delta.days)
+        except Exception:
+            pass
+
     return Response({
         'readiness': {
             'score': readiness.score,
@@ -80,6 +96,7 @@ def dashboard_overview(request):
         },
         'subscription': {
             'tier': subscription_tier,
+            'plan_name': subscription_plan_name,
             'expiry': subscription_expiry.isoformat() if subscription_expiry else None,
             'days_left': subscription_days_left,
         },

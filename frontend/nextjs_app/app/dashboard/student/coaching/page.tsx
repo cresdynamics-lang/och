@@ -6,8 +6,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
-  MessageCircle, Send, Target, Award, BookOpen,
-  Zap, CheckCircle2, AlertCircle, Sparkles, Brain, Trophy
+  MessageCircle, Send, Target, BookOpen,
+  CheckCircle2, AlertCircle, Sparkles, Brain
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { apiGateway } from '@/services/apiGateway';
@@ -36,7 +36,6 @@ export default function AICoachPage() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(true);
-  const [showChat, setShowChat] = useState(false);
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [recommendation, setRecommendation] = useState('');
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
@@ -198,135 +197,68 @@ export default function AICoachPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950/30 to-slate-950 p-6">
+    <div className="h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       {loadingProgress && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-slate-950/90 z-50 flex items-center justify-center">
           <div className="text-center">
-            <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-white font-semibold">Loading your AI Coach...</p>
+            <div className="w-12 h-12 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-slate-300 font-medium">Loading your AI Coach...</p>
           </div>
         </div>
       )}
-      
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+
+      <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-4 flex flex-col flex-1 min-h-0">
+        <header className="flex items-center justify-between gap-4 shrink-0">
           <div>
-            <h1 className="text-4xl font-black text-white flex items-center gap-3">
-              <Brain className="w-10 h-10 text-indigo-400" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+              <Brain className="w-8 h-8 text-indigo-400 shrink-0" aria-hidden />
               AI Coach
             </h1>
-            <p className="text-slate-400 mt-2">Your personal cybersecurity learning companion</p>
+            <p className="text-slate-400 text-sm mt-1">Your personal cybersecurity learning companion</p>
           </div>
-          <Badge variant="gold" className="text-sm">
-            <Sparkles className="w-4 h-4 mr-2" />
-            Powered by AI
-          </Badge>
-        </div>
-
-        {!loadingProgress && progress && (
-          <Card className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border-indigo-500/30 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Trophy className="w-6 h-6 text-yellow-400" />
-              <h2 className="text-xl font-bold text-white">Your Progress</h2>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="w-4 h-4 text-blue-400" />
-                  <p className="text-xs text-slate-400">Missions</p>
-                </div>
-                <p className="text-2xl font-bold text-white">{progress.missions_completed}</p>
-              </div>
-              
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <BookOpen className="w-4 h-4 text-green-400" />
-                  <p className="text-xs text-slate-400">Recipes</p>
-                </div>
-                <p className="text-2xl font-bold text-white">{progress.recipes_completed}</p>
-              </div>
-              
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Award className="w-4 h-4 text-yellow-400" />
-                  <p className="text-xs text-slate-400">Avg Score</p>
-                </div>
-                <p className="text-2xl font-bold text-white">{Number(progress.average_score).toFixed(0)}%</p>
-              </div>
-              
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Zap className="w-4 h-4 text-orange-400" />
-                  <p className="text-xs text-slate-400">Streak</p>
-                </div>
-                <p className="text-2xl font-bold text-white">{progress.current_streak} days</p>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-lg p-4 border border-indigo-500/20">
-              <p className="text-white font-semibold flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-yellow-400" />
-                {initialMessage}
-              </p>
-              {!showChat && (
-                <div className="mt-4 flex gap-3">
-                  <Button
-                    onClick={() => setShowChat(true)}
-                    disabled={!canSendMessage()}
-                    className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Chat with AI Coach
-                  </Button>
-                  <Button
-                    onClick={getRecommendation}
-                    disabled={!canSendMessage()}
-                    variant="outline"
-                    className="border-purple-500/50 hover:bg-purple-500/10"
-                  >
-                    Get My Recommendation
-                  </Button>
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
+          <div className="flex items-center gap-2 shrink-0">
+            {dailyLimit !== null && !loadingProgress && (
+              <span className="text-xs text-slate-500 tabular-nums">
+                {getRemainingMessages() === Infinity ? 'Unlimited' : `${getRemainingMessages()}/${dailyLimit} messages`}
+              </span>
+            )}
+            <Badge variant="gold" className="text-xs">
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" aria-hidden />
+              AI
+            </Badge>
+          </div>
+        </header>
 
         {progress && (progress.weak_areas.length > 0 || progress.next_goals.length > 0) && (
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 shrink-0 max-h-28 overflow-hidden">
             {progress.weak_areas.length > 0 && (
-              <Card className="bg-slate-900/50 border-slate-700/50 p-6">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-orange-400" />
-                  Areas to Improve
+              <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 min-w-0">
+                <h3 className="text-xs font-semibold text-orange-400 flex items-center gap-1.5 mb-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  Areas to improve
                 </h3>
-                <ul className="space-y-2">
+                <ul className="space-y-0.5 overflow-y-auto max-h-14">
                   {progress.weak_areas.slice(0, 3).map((area, i) => (
-                    <li key={i} className="text-slate-300 text-sm flex items-start gap-2">
-                      <span className="text-orange-400 mt-1">•</span>
-                      {area}
-                    </li>
+                    <li key={i} className="text-slate-400 text-xs truncate">• {area}</li>
                   ))}
                 </ul>
-              </Card>
+              </div>
             )}
-            
             {progress.next_goals.length > 0 && (
-              <Card className="bg-slate-900/50 border-slate-700/50 p-6">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-green-400" />
-                  Recommended Next Steps
+              <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 min-w-0">
+                <h3 className="text-xs font-semibold text-green-400 flex items-center gap-1.5 mb-1.5">
+                  <Target className="w-3.5 h-3.5 shrink-0" />
+                  Next steps
                 </h3>
-                <ul className="space-y-2">
+                <ul className="space-y-0.5 overflow-y-auto max-h-14">
                   {progress.next_goals.slice(0, 3).map((goal, i) => (
-                    <li key={i} className="text-slate-300 text-sm flex items-start gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      {goal}
+                    <li key={i} className="text-slate-400 text-xs flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-green-400 mt-0.5 shrink-0" />
+                      <span className="truncate">{goal}</span>
                     </li>
                   ))}
                 </ul>
-              </Card>
+              </div>
             )}
           </div>
         )}
@@ -362,19 +294,9 @@ export default function AICoachPage() {
                 
                 <div className="mt-6 flex gap-3">
                   <Button
-                    onClick={() => {
-                      setShowRecommendation(false);
-                      setShowChat(true);
-                    }}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Chat with AI Coach
-                  </Button>
-                  <Button
                     onClick={() => setShowRecommendation(false)}
                     variant="outline"
-                    className="border-slate-700"
+                    className="border-slate-600 text-slate-200 hover:bg-slate-800"
                   >
                     Close
                   </Button>
@@ -384,114 +306,116 @@ export default function AICoachPage() {
           </div>
         )}
 
-        {showChat && (
-          <Card className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
-            <div className="p-6 border-b border-slate-700/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-indigo-400" />
-                    Chat with Your AI Coach
-                  </h2>
-                  <p className="text-slate-400 text-sm mt-1">Get personalized guidance and honest feedback</p>
-                </div>
-                {dailyLimit !== null && (
-                  <Badge variant={getRemainingMessages() > 0 ? 'mint' : 'orange'} className="text-sm">
-                    {getRemainingMessages() === Infinity ? 'Unlimited' : `${getRemainingMessages()}/${dailyLimit} left`}
-                  </Badge>
-                )}
-              </div>
+        <section className="flex-1 min-h-0 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden" aria-label="Chat with AI Coach">
+          <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-slate-800 bg-slate-900/80 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageCircle className="w-5 h-5 text-indigo-400 shrink-0" aria-hidden />
+              <span className="font-semibold text-white truncate">Chat with your AI Coach</span>
             </div>
-
-            <div className="h-[500px] overflow-y-auto p-6 space-y-4">
-              {messages.length === 0 && (
-                <div className="text-center py-12">
-                  <Brain className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                  <p className="text-slate-400">Start a conversation with your AI Coach!</p>
-                  <p className="text-slate-500 text-sm mt-2">Ask about your progress, get study tips, or discuss your goals</p>
-                </div>
-              )}
-              
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            <div className="flex items-center gap-2 shrink-0">
+              {!loadingProgress && progress && canSendMessage() && (
+                <Button
+                  onClick={getRecommendation}
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-800 text-xs"
                 >
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                      msg.role === 'user'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-800 text-slate-100 border border-slate-700'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    <p className="text-xs opacity-60 mt-1">
-                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-800 border border-slate-700 rounded-2xl px-4 py-3">
-                    <div className="flex gap-2">
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                </div>
+                  Get recommendation
+                </Button>
               )}
-              
-              <div ref={messagesEndRef} />
             </div>
+          </div>
 
-            <div className="p-4 border-t border-slate-700/50 bg-slate-900/50">
-              {!canSendMessage() && (
-                <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                  <p className="text-orange-300 text-sm font-semibold">Daily limit reached</p>
-                  <p className="text-orange-400 text-xs mt-1">
-                    Come back tomorrow or <Link href="/dashboard/student/subscription" className="underline">upgrade</Link> for more messages
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Brain className="w-12 h-12 text-slate-600 mb-3" aria-hidden />
+                <p className="text-slate-400 text-sm">Start a conversation with your AI Coach.</p>
+                <p className="text-slate-500 text-xs mt-1">Ask about your progress, study tips, or goals.</p>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-xl px-4 py-2.5 ${
+                    msg.role === 'user'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 text-slate-100 border border-slate-700/50'
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <p className="text-xs opacity-60 mt-1.5">
+                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
-              )}
-              <div className="flex gap-2">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={canSendMessage() ? "Ask your AI Coach anything..." : "Daily limit reached"}
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  rows={2}
-                  disabled={loading || !canSendMessage()}
-                />
-                <Button
-                  onClick={sendMessage}
-                  disabled={!input.trim() || loading || !canSendMessage()}
-                  className="bg-indigo-600 hover:bg-indigo-700 px-6"
-                >
-                  <Send className="w-5 h-5" />
-                </Button>
               </div>
-            </div>
-          </Card>
-        )}
+            ))}
 
-        <Card className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border-emerald-500/30 p-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-bold text-white mb-2">Ready for Hands-On Practice?</h3>
-              <p className="text-slate-400 text-sm">Explore our recipe library and start building real cybersecurity skills</p>
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-slate-800 border border-slate-700/50 rounded-xl px-4 py-2.5">
+                  <div className="flex gap-1.5">
+                    <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/80 shrink-0">
+            {!canSendMessage() && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-amber-200 text-xs font-medium">Daily limit reached.</p>
+                <p className="text-amber-300/80 text-xs mt-0.5">
+                  <Link href="/dashboard/student/subscription" className="underline hover:no-underline">Upgrade</Link> or come back tomorrow.
+                </p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={canSendMessage() ? 'Ask your AI Coach anything...' : 'Daily limit reached'}
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                rows={2}
+                disabled={loading || !canSendMessage()}
+                aria-label="Message input"
+              />
+              <Button
+                onClick={sendMessage}
+                disabled={!input.trim() || loading || !canSendMessage()}
+                className="bg-indigo-600 hover:bg-indigo-700 px-4 shrink-0"
+                aria-label="Send message"
+              >
+                <Send className="w-5 h-5" />
+              </Button>
             </div>
-            <Link href="/dashboard/student/coaching/recipes">
-              <Button className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 whitespace-nowrap">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Continue to Recipes
+          </div>
+        </section>
+
+        <footer className="shrink-0 pt-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+            <div>
+              <h3 className="font-semibold text-white text-sm">Hands-on practice</h3>
+              <p className="text-slate-400 text-xs mt-0.5">Explore recipes and build real skills.</p>
+            </div>
+            <Link href="/dashboard/student/coaching/recipes" className="shrink-0">
+              <Button variant="outline" size="sm" className="border-slate-600 text-slate-200 hover:bg-slate-800">
+                <BookOpen className="w-4 h-4 mr-2" aria-hidden />
+                Recipes
               </Button>
             </Link>
           </div>
-        </Card>
+        </footer>
       </div>
     </div>
   );
