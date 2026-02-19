@@ -193,10 +193,6 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/finance/security', roles: ['finance'] },
   { path: '/dashboard/finance/profile', roles: ['finance'] },
 
-  // New finance dashboard routes
-  { path: '/finance', roles: ['finance'] },
-  { path: '/finance/[userId]/dashboard', roles: ['finance'] },
-
   // Organizations routes (accessible by admins and program directors)
   { path: '/dashboard/organizations', roles: ['admin', 'program_director'] },
 

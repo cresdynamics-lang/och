@@ -5,7 +5,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     subscription_status, upgrade_subscription, stripe_webhook, billing_history,
-    list_plans, simulate_payment, cancel_subscription,
+    list_plans, simulate_payment, cancel_subscription, list_user_subscriptions,
 )
 from .admin_views import (
     SubscriptionPlanViewSet, UserSubscriptionAdminViewSet,
@@ -28,6 +28,7 @@ urlpatterns = [
     # ── User-facing subscription endpoints ──────────────────────────────────
     path('subscription/status', subscription_status, name='status'),
     path('subscription/plans', list_plans, name='plans'),          # pricing page
+    path('subscription/users', list_user_subscriptions, name='user-subscriptions'),  # finance dashboard
     path('subscription/upgrade', upgrade_subscription, name='upgrade'),
     path('subscription/simulate-payment', simulate_payment, name='simulate-payment'),
     path('subscription/cancel', cancel_subscription, name='cancel'),

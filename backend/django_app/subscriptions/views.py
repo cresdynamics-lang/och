@@ -370,17 +370,63 @@ def billing_history(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def list_user_subscriptions(request):
+    """
+    GET /api/v1/subscription/users
+    Return all user subscriptions with details for finance dashboard.
+    Supports filtering by plan.
+    """
+    plan_id = request.query_params.get('plan')
+    
+    subscriptions = UserSubscription.objects.select_related('user', 'plan').filter(status='active')
+    
+    if plan_id:
+        subscriptions = subscriptions.filter(plan_id=plan_id)
+    
+    data = []
+    for sub in subscriptions:
+        data.append({
+            'id': str(sub.id),
+            'user_id': str(sub.user.id),
+            'user_email': sub.user.email,
+            'user_name': sub.user.get_full_name() or sub.user.email,
+            'plan_id': str(sub.plan.id),
+            'plan_name': sub.plan.name,
+            'plan_tier': sub.plan.tier,
+            'price_monthly': float(sub.plan.price_monthly or 0),
+            'status': sub.status,
+            'current_period_start': sub.current_period_start.isoformat() if sub.current_period_start else None,
+            'current_period_end': sub.current_period_end.isoformat() if sub.current_period_end else None,
+            'enhanced_access_expires_at': sub.enhanced_access_expires_at.isoformat() if sub.enhanced_access_expires_at else None,
+            'days_remaining': (sub.current_period_end - timezone.now()).days if sub.current_period_end else None,
+            'created_at': sub.created_at.isoformat(),
+        })
+    
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def list_plans(request):
     """
     GET /api/v1/subscription/plans
-    Return all active subscription plans for the pricing/upgrade UI.
+    Return all active subscription plans with user counts for finance dashboard.
     """
+    from django.db.models import Count, Q
+    
     plans = SubscriptionPlan.objects.all().order_by('price_monthly')
     data = []
     for p in plans:
+        # Count active users on this plan
+        user_count = UserSubscription.objects.filter(
+            plan=p,
+            status='active'
+        ).count()
+        
         mode_note = ''
         if p.tier == 'starter':
             mode_note = 'First 6 months: Enhanced Access (full features). After: Normal Mode (limited).'
+        
         data.append({
             'id': str(p.id),
             'name': p.name,
@@ -395,6 +441,8 @@ def list_plans(request):
             'marketplace_contact': p.marketplace_contact,
             'enhanced_access_days': p.enhanced_access_days,
             'mode_note': mode_note,
+            'users': user_count,  # Add user count
+            'revenue': float(p.price_monthly or 0) * user_count,  # Calculate revenue
         })
     return Response(data, status=status.HTTP_200_OK)
 

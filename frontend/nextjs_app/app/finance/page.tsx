@@ -7,7 +7,8 @@ export default function FinancePage() {
   const router = useRouter()
   
   useEffect(() => {
-    router.replace('/finance/dashboard')
+    // Redirect to new finance dashboard location
+    router.replace('/dashboard/finance')
   }, [router])
   
   return null

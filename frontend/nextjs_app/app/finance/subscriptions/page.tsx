@@ -19,6 +19,13 @@ function SubscriptionsContent() {
   const { data: subscriptionsData } = useSWR(`/api/finance/${userId}/subscriptions`, fetcher);
   const plans = subscriptionsData?.plans || [];
 
+  const usersUrl = selectedPlan === 'all' 
+    ? `/api/finance/${userId}/subscription-users`
+    : `/api/finance/${userId}/subscription-users?plan=${selectedPlan}`;
+  
+  const { data: usersData } = useSWR(usersUrl, fetcher);
+  const users = Array.isArray(usersData) ? usersData : [];
+
   const filteredPlans = selectedPlan === 'all' 
     ? plans 
     : plans.filter((p: any) => p.id === selectedPlan);
@@ -77,24 +84,74 @@ function SubscriptionsContent() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
-            {filteredPlans.map((plan: any) => (
-              <Card key={plan.id} className="bg-slate-800/50 border-slate-700">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-bold text-white">{plan.name} Plan</h3>
-                      <p className="text-sm text-slate-400 mt-1">{plan.users || 0} active subscribers</p>
+          <>
+            <div className="space-y-4 mb-6">
+              {filteredPlans.map((plan: any) => (
+                <Card key={plan.id} className="bg-slate-800/50 border-slate-700">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">{plan.name} Plan</h3>
+                        <p className="text-sm text-slate-400 mt-1">{plan.users || 0} active subscribers</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-white">KES {(plan.revenue || 0).toLocaleString()}</p>
+                        <p className="text-sm text-slate-400">KES {(plan.price_monthly || 0).toLocaleString()}/month per user</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-white">KES {(plan.revenue || 0).toLocaleString()}</p>
-                      <p className="text-sm text-slate-400">KES {(plan.price || 0).toLocaleString()}/month per user</p>
-                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Subscribers</h3>
+                {users.length === 0 ? (
+                  <p className="text-center text-slate-400">No subscribers found</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          <th className="text-left text-sm text-slate-400 pb-3">User</th>
+                          <th className="text-left text-sm text-slate-400 pb-3">Plan</th>
+                          <th className="text-left text-sm text-slate-400 pb-3">Status</th>
+                          <th className="text-left text-sm text-slate-400 pb-3">Expires</th>
+                          <th className="text-left text-sm text-slate-400 pb-3">Monthly Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((sub: any) => (
+                          <tr key={sub.id} className="border-b border-slate-800">
+                            <td className="py-3">
+                              <div>
+                                <p className="text-white">{sub.user_name}</p>
+                                <p className="text-xs text-slate-400">{sub.user_email}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 text-slate-300">{sub.plan_name}</td>
+                            <td className="py-3">
+                              <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">
+                                {sub.status}
+                              </span>
+                            </td>
+                            <td className="py-3 text-slate-400">
+                              {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : 'N/A'}
+                              {sub.days_remaining !== null && (
+                                <span className="text-xs block">{sub.days_remaining} days left</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-white font-semibold">KES {sub.price_monthly.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
         )}
       </Suspense>
     </div>
