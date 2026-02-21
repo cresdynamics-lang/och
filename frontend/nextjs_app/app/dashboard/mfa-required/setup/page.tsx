@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -8,7 +8,7 @@ import { OCHSettingsSecurity } from '@/components/ui/settings/sections/OCHSettin
 import { useAuth } from '@/hooks/useAuth';
 import { djangoClient } from '@/services/djangoClient';
 
-export default function MFASetupPage() {
+function MFASetupContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -22,7 +22,6 @@ export default function MFASetupPage() {
     }
   }, [isLoading, isAuthenticated, user, router]);
 
-  // Ensure we have ?mfa=true (wizard) or ?mfa=manage (add/remove methods) so OCHSettingsSecurity shows the right view
   useEffect(() => {
     if (isLoading || !user || mfaParam) return;
 
@@ -61,5 +60,17 @@ export default function MFASetupPage() {
         <OCHSettingsSecurity />
       </div>
     </div>
+  );
+}
+
+export default function MFASetupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-och-midnight to-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-och-defender" />
+      </div>
+    }>
+      <MFASetupContent />
+    </Suspense>
   );
 }
