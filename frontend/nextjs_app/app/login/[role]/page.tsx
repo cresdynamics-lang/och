@@ -244,9 +244,31 @@ function LoginForm() {
       localStorage.setItem('access_token', token);
       console.log('[Login] Token stored, proceeding with redirect logic');
 
-      // CRITICAL: Wait for cookies to be set by the browser
+      // CRITICAL: Wait for cookies to be set by the browser and verify they exist
       // In production, cookies take time to be written
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      let cookiesSet = false;
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      while (!cookiesSet && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+        
+        // Check if access_token cookie exists
+        const cookies = document.cookie.split(';');
+        const hasAccessToken = cookies.some(c => c.trim().startsWith('access_token='));
+        
+        if (hasAccessToken) {
+          console.log('[Login] Cookies verified after', attempts * 200, 'ms');
+          cookiesSet = true;
+        } else {
+          console.log('[Login] Waiting for cookies... attempt', attempts);
+        }
+      }
+      
+      if (!cookiesSet) {
+        console.warn('[Login] Cookies not set after', maxAttempts * 200, 'ms, proceeding anyway');
+      }
 
       const redirectTo = searchParams.get('redirect');
 
@@ -950,8 +972,32 @@ function LoginForm() {
                     const needsProfiling = (u as any)?.profiling_complete === false && roleNames.some((name: string) => ['student', 'mentee'].includes(name));
                     const redirectRoute = needsProfiling ? '/profiling' : (u ? getRedirectRoute(u) : '/dashboard/student');
                     console.log('[MFA Complete] Redirecting to:', redirectRoute);
-                    // CRITICAL: Wait for cookies to be set before redirecting
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // CRITICAL: Wait for cookies to be set and verify they exist
+                    let cookiesSet = false;
+                    let attempts = 0;
+                    const maxAttempts = 10;
+                    
+                    while (!cookiesSet && attempts < maxAttempts) {
+                      await new Promise(resolve => setTimeout(resolve, 200));
+                      attempts++;
+                      
+                      // Check if access_token cookie exists
+                      const cookies = document.cookie.split(';');
+                      const hasAccessToken = cookies.some(c => c.trim().startsWith('access_token='));
+                      
+                      if (hasAccessToken) {
+                        console.log('[MFA Complete] Cookies verified after', attempts * 200, 'ms');
+                        cookiesSet = true;
+                      } else {
+                        console.log('[MFA Complete] Waiting for cookies... attempt', attempts);
+                      }
+                    }
+                    
+                    if (!cookiesSet) {
+                      console.warn('[MFA Complete] Cookies not set after', maxAttempts * 200, 'ms, proceeding anyway');
+                    }
+                    
                     // Use window.location.replace for reliable redirect in production
                     if (typeof window !== 'undefined') {
                       window.location.replace(redirectRoute);
