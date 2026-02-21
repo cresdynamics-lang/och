@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getRedirectRoute } from '@/utils/redirect';
+import { getAccessToken, getRefreshToken } from '@/utils/auth';
 import { Eye, EyeOff, ArrowRight, Lock, Mail, Shield, Sparkles } from 'lucide-react';
 import type { LoginRequest } from '@/services/types';
 
@@ -137,6 +138,43 @@ function LoginForm() {
       router.push('/login/student');
     }
   }, [currentRole, router]);
+
+  // Fallback: we have token in localStorage but middleware sent us back to login (no cookie).
+  // Sync token to cookies via set-tokens, then redirect so the next request is authenticated.
+  const localStorageRecoverRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || hasRedirectedRef.current || localStorageRecoverRef.current) return;
+    const redirectTo = searchParams.get('redirect');
+    if (!redirectTo || (!redirectTo.startsWith('/dashboard') && !redirectTo.startsWith('/onboarding/') && !redirectTo.startsWith('/students/'))) return;
+    const accessToken = getAccessToken();
+    const refreshToken = getRefreshToken();
+    if (!accessToken) return;
+
+    localStorageRecoverRef.current = true;
+    (async () => {
+      try {
+        const { djangoClient } = await import('@/services/djangoClient');
+        const userData = await djangoClient.auth.getCurrentUser();
+        const res = await fetch('/api/auth/set-tokens', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: accessToken,
+            refresh_token: refreshToken ?? '',
+            user: userData,
+          }),
+        });
+        if (res.ok) {
+          window.location.replace(redirectTo);
+        } else {
+          localStorageRecoverRef.current = false;
+        }
+      } catch {
+        localStorageRecoverRef.current = false;
+      }
+    })();
+  }, [searchParams]);
 
   useEffect(() => {
     if (hasRedirectedRef.current) return;
