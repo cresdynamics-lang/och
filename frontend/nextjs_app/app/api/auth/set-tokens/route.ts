@@ -64,8 +64,12 @@ export async function POST(request: Request) {
 
     const nextResponse = NextResponse.json({ ok: true }, { status: 200 });
 
+    // In production (HTTPS or behind TLS proxy), cookies must have Secure or browsers may drop them
+    const proto = request.headers.get('x-forwarded-proto') ?? request.headers.get('x-url-scheme') ?? (request.url.startsWith('https') ? 'https' : null);
+    const isSecure = proto === 'https';
+
     const cookieOptions = {
-      secure: false, // Set to true only when using HTTPS
+      secure: isSecure,
       sameSite: 'lax' as const,
       maxAge: 60 * 60 * 24 * 30,
       path: '/',

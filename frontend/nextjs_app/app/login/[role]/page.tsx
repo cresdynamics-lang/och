@@ -965,13 +965,17 @@ function LoginForm() {
                     setResendCooldownSeconds(0);
                     setExpirySecondsRemaining(0);
                     setIsRedirecting(true);
-                    const { getRedirectRoute } = await import('@/utils/redirect');
+                    const { getRedirectRoute, isValidDashboardRoute } = await import('@/utils/redirect');
                     const u = result?.user;
                     const roles = (u as any)?.roles || [];
                     const roleNames = roles.map((r: any) => typeof r === 'string' ? r : (r?.role || r?.name || ''));
                     const needsProfiling = (u as any)?.profiling_complete === false && roleNames.some((name: string) => ['student', 'mentee'].includes(name));
-                    const redirectRoute = needsProfiling ? '/profiling' : (u ? getRedirectRoute(u) : '/dashboard/student');
-                    console.log('[MFA Complete] Redirecting to:', redirectRoute);
+                    const redirectTo = (searchParams.get('redirect') ?? '').replace(/\/$/, '') || '';
+                    const useRedirectParam = redirectTo && (redirectTo.startsWith('/dashboard') || redirectTo.startsWith('/onboarding/') || redirectTo.startsWith('/students/')) && (isValidDashboardRoute(redirectTo) || ['/dashboard/director', '/dashboard/admin', '/dashboard/mentor', '/dashboard/sponsor', '/dashboard/analyst', '/dashboard/employer', '/finance/dashboard', '/support/dashboard'].some(r => redirectTo === r || redirectTo.startsWith(r + '/')));
+                    const redirectRoute = needsProfiling
+                      ? '/profiling'
+                      : (useRedirectParam ? redirectTo : (u ? getRedirectRoute(u) : '/dashboard/student'));
+                    console.log('[MFA Complete] Redirecting to:', redirectRoute, useRedirectParam ? '(from redirect param)' : '');
                     
                     // CRITICAL: Wait for cookies to be set and verify they exist
                     let cookiesSet = false;

@@ -202,12 +202,9 @@ export function useAuth() {
     method: 'totp' | 'sms' | 'email' | 'backup_codes';
   }) => {
     const { access_token, refresh_token: newRefreshToken, user: userData } = await djangoClient.auth.completeMFA(params);
-    localStorage.setItem('access_token', access_token);
-    localStorage.setItem('auth_token', access_token);
-    if (newRefreshToken) {
-      localStorage.setItem('refresh_token', newRefreshToken);
-    }
-    // Set auth cookies so middleware sees the user on next request (prevents redirect back to login)
+    // Set tokens in localStorage and in cookies (client-side) so middleware sees them on next request
+    setAuthTokens(access_token, newRefreshToken ?? '');
+    // Also set via API so och_roles and other cookies are set; middleware relies on access_token cookie
     try {
       await fetch('/api/auth/set-tokens', {
         method: 'POST',
