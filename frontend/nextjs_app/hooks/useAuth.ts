@@ -213,7 +213,7 @@ export function useAuth() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token, refresh_token: newRefreshToken }),
+        body: JSON.stringify({ access_token, refresh_token: newRefreshToken, user: userData }),
       });
     } catch (e) {
       console.warn('[useAuth] set-tokens failed:', e);
