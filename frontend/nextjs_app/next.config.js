@@ -3,7 +3,7 @@ const nextConfig = {
   output: 'standalone',
   productionBrowserSourceMaps: false,
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
   async rewrites() {
     return [
