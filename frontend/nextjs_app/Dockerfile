@@ -1,6 +1,6 @@
 # Multi-stage build for Next.js production (optimized for DigitalOcean)
 # Stage 1: Install dependencies (including devDependencies for build)
-FROM node:18-alpine AS deps
+FROM node:20-alpine AS deps
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ RUN if [ -f package-lock.json ]; then \
     npm cache clean --force
 
 # Stage 2: Build the application
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -147,7 +147,7 @@ RUN mv .eslintrc.json .eslintrc.json.bak 2>/dev/null || true && \
     fi
 
 # Stage 3: Production runner (minimal image)
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
