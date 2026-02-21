@@ -45,8 +45,8 @@ export default function DashboardPage() {
     }
   }, [user?.id]);
 
-  // Real-time updates via Server-Sent Events
-  const { isConnected } = useSSE({
+  // Real-time updates via Server-Sent Events (only in browser)
+  const sseResult = typeof window !== 'undefined' ? useSSE({
     url: user?.id ? `/api/control-center/stream/${user?.id}` : '',
     onEvent: (event) => {
       console.log('Received SSE event:', event);
@@ -100,7 +100,9 @@ export default function DashboardPage() {
     onClose: () => {
       setIsOnline(false);
     }
-  });
+  }) : { isConnected: false };
+  
+  const { isConnected } = sseResult;
 
   // Helper functions for SSE events
   const getAvatarInitials = (title: string): string => {
