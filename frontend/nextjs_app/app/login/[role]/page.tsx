@@ -244,10 +244,11 @@ function LoginForm() {
       localStorage.setItem('access_token', token);
       console.log('[Login] Token stored, proceeding with redirect logic');
 
-      const redirectTo = searchParams.get('redirect');
-      // Route will be determined below based on user roles
+      // CRITICAL: Wait for cookies to be set by the browser
+      // In production, cookies take time to be written
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const redirectTo = searchParams.get('redirect');
 
       let updatedUser = result?.user || user;
       console.log('[Login] Initial user from result:', { 
@@ -949,6 +950,8 @@ function LoginForm() {
                     const needsProfiling = (u as any)?.profiling_complete === false && roleNames.some((name: string) => ['student', 'mentee'].includes(name));
                     const redirectRoute = needsProfiling ? '/profiling' : (u ? getRedirectRoute(u) : '/dashboard/student');
                     console.log('[MFA Complete] Redirecting to:', redirectRoute);
+                    // CRITICAL: Wait for cookies to be set before redirecting
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     // Use window.location.replace for reliable redirect in production
                     if (typeof window !== 'undefined') {
                       window.location.replace(redirectRoute);
