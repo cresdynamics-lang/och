@@ -118,6 +118,9 @@ urlpatterns = [
     # Note: director_dashboard.urls only registers 'dashboard' routes, so it won't conflict with 'cohorts'
     path('director/', include('director_dashboard.urls')),
     
+    # Support (tickets & problem codes)
+    path('support/', include('support.urls')),
+
     # TalentScope Analytics
     path('talentscope/', include('talentscope.urls')),
     

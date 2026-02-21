@@ -36,21 +36,21 @@ export const RevenueHero = ({ revenue, realtime, showExportButtons = true }: Rev
             {revenue.cohort.toLocaleString()}
           </div>
           <div className="text-xs opacity-80">Cohort Value</div>
-          <div className="text-xs text-green-400 font-mono">+12%</div>
+          <div className="text-xs text-slate-400 font-mono">From billing</div>
         </div>
         <div className="space-y-1">
           <div className="text-2xl font-bold text-emerald-400">
             {revenue.placements.toLocaleString()}
           </div>
           <div className="text-xs opacity-80">Placements</div>
-          <div className="text-xs text-green-400 font-mono">+2</div>
+          <div className="text-xs text-slate-400 font-mono">{revenue.placementsCount} hires</div>
         </div>
         <div className="space-y-1">
           <div className="text-2xl font-bold text-cyan-400">
             {revenue.pro7.toLocaleString()}
           </div>
           <div className="text-xs opacity-80">Pro7 MRR</div>
-          <div className="text-xs text-green-400 font-mono">{revenue.activeUsers}/mo</div>
+          <div className="text-xs text-slate-400 font-mono">{revenue.activeUsers} active/mo</div>
         </div>
       </div>
 

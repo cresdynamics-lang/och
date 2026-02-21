@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Shield, Lock } from 'lucide-react';
 
-const ROLES_REQUIRING_TWO_MFA = ['admin', 'program_director', 'director', 'mentor', 'finance', 'finance_admin', 'analyst'] as const;
+const ROLES_REQUIRING_TWO_MFA = ['admin', 'program_director', 'director', 'mentor', 'finance', 'finance_admin', 'analyst', 'support'] as const;
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
   admin: 'Admin',
   program_director: 'Director',
@@ -16,6 +16,7 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
   finance: 'Finance',
   finance_admin: 'Finance',
   analyst: 'Analyst',
+  support: 'Support',
 };
 
 function getPrimaryMfaRoleDisplay(roles: string[]): string {

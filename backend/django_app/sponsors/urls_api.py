@@ -38,6 +38,7 @@ billing_patterns = [
     path('catalog/', views_api.billing_catalog, name='billing-catalog'),
     path('checkout/sessions/', views_api.create_checkout_session, name='create-checkout-session'),
     path('invoices/', views_api.sponsor_invoices, name='sponsor-invoices'),
+    path('invoices/create/', views_api.create_manual_invoice, name='create-manual-invoice'),
     path('entitlements/', views_api.sponsor_entitlements, name='sponsor-entitlements'),
 ]
 

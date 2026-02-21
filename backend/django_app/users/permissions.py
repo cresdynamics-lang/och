@@ -190,3 +190,23 @@ class IsAdminOrDirector(BasePermission):
             role__name__in=['admin', 'program_director'],
             is_active=True
         ).exists()
+
+
+class IsSupportOrDirectorOrAdmin(BasePermission):
+    """
+    Permission class for support dashboard and ticket management.
+    Allows users with support role, program_director, or admin.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or request.user.is_superuser:
+            return True
+        user_roles = getattr(request.user, 'user_roles', None)
+        if not user_roles:
+            return False
+        return user_roles.filter(
+            role__name__in=['support', 'program_director', 'admin'],
+            is_active=True
+        ).exists()

@@ -65,7 +65,7 @@ export default function UsersPage() {
     last_name: '',
     password: '',
     // Include analyst as a valid primary role option
-    role: 'mentor' as 'mentor' | 'student' | 'admin' | 'program_director' | 'finance' | 'analyst',
+    role: 'mentor' as 'mentor' | 'student' | 'admin' | 'program_director' | 'finance' | 'analyst' | 'support',
   })
   const [isCreating, setIsCreating] = useState(false)
   const passwordValue = createForm.password || ''
@@ -580,6 +580,7 @@ export default function UsersPage() {
                   <option value="analyst">Analysts</option>
                   <option value="finance">Finance</option>
                   <option value="finance_admin">Finance Admin</option>
+                  <option value="support">Support</option>
                   <option value="sponsor_admin">Sponsor Admin</option>
                 </select>
 
@@ -964,6 +965,7 @@ export default function UsersPage() {
                         <option value="admin">Admin</option>
                         <option value="program_director">Program Director</option>
                         <option value="finance">Finance</option>
+                        <option value="support">Support</option>
                         <option value="analyst">Analyst</option>
                       </select>
                     </div>

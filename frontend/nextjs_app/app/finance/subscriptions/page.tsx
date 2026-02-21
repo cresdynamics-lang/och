@@ -71,8 +71,9 @@ function SubscriptionsContent() {
           </Card>
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
-              <p className="text-sm text-slate-400">Churn Rate</p>
-              <p className="text-2xl font-bold text-white">2.3%</p>
+              <p className="text-sm text-slate-400">Plans</p>
+              <p className="text-2xl font-bold text-white">{filteredPlans.length}</p>
+              <p className="text-xs text-slate-500 mt-1">Active plans</p>
             </CardContent>
           </Card>
         </div>
@@ -142,7 +143,7 @@ function SubscriptionsContent() {
                                 <span className="text-xs block">{sub.days_remaining} days left</span>
                               )}
                             </td>
-                            <td className="py-3 text-white font-semibold">KES {sub.price_monthly.toLocaleString()}</td>
+                            <td className="py-3 text-white font-semibold">KES {Number(sub.price_monthly ?? 0).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>

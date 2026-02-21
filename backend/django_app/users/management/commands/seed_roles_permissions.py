@@ -94,6 +94,14 @@ class Command(BaseCommand):
             ('update_webhook', 'webhook', 'update', 'Update webhooks'),
             ('delete_webhook', 'webhook', 'delete', 'Delete webhooks'),
             ('list_webhooks', 'webhook', 'list', 'List webhooks'),
+
+            # Support / ticket permissions
+            ('create_ticket', 'ticket', 'create', 'Create support tickets'),
+            ('read_ticket', 'ticket', 'read', 'Read support ticket details'),
+            ('update_ticket', 'ticket', 'update', 'Update support tickets'),
+            ('list_tickets', 'ticket', 'list', 'List support tickets'),
+            ('list_problem_codes', 'problem_code', 'list', 'List problem tracking codes'),
+            ('manage_problem_codes', 'problem_code', 'manage', 'Create/update/delete problem codes'),
         ]
         
         # Create permissions
@@ -141,6 +149,7 @@ class Command(BaseCommand):
                     'list_mentorship', 'read_mentorship', 'create_mentorship', 'update_mentorship',  # Mentorship
                     'read_portfolio', 'list_portfolios',  # Portfolio access for director view
                     'read_profiling', 'list_profiling',  # Profiling for director view
+                    'list_tickets', 'read_ticket', 'create_ticket', 'update_ticket', 'list_problem_codes', 'manage_problem_codes',  # Support (add/manage support team, view tickets/codes)
                 ],
             },
             {
@@ -222,6 +231,16 @@ class Command(BaseCommand):
                 'description': 'Analytics read with RLS/CLS; no PII without scope',
                 # Analyst dashboard: analytics views only
                 'permissions': ['read_analytics', 'list_analytics'],
+            },
+            {
+                'name': 'support',
+                'display_name': 'Support',
+                'description': 'Internal support role: handle tickets, problem tracking codes; added by director',
+                # Support dashboard: tickets, problem codes, stats
+                'permissions': [
+                    'list_tickets', 'read_ticket', 'create_ticket', 'update_ticket',
+                    'list_problem_codes',
+                ],
             },
         ]
         

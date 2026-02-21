@@ -36,6 +36,7 @@ function getLoginRouteForPath(pathname: string) {
   if (pathname.startsWith('/dashboard/analyst') || pathname.startsWith('/dashboard/analytics')) return '/login/analyst'
   if (pathname.startsWith('/dashboard/employer') || pathname.startsWith('/dashboard/marketplace')) return '/login/employer'
   if (pathname.startsWith('/dashboard/finance')) return '/login/finance'
+  if (pathname.startsWith('/support')) return '/login/support'
   // Student routes (including coaching OS)
   if (pathname.startsWith('/students/')) return '/login/student'
   return '/login/student'
@@ -53,6 +54,8 @@ function getLoginRouteForRole(role: string | null): string {
     case 'finance':
     case 'finance_admin':
       return '/login/finance'
+    case 'support':
+      return '/login/support'
     case 'mentee':
     case 'student':
     default:

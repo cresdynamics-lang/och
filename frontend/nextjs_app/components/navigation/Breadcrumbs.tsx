@@ -25,6 +25,16 @@ const generateBreadcrumbs = (pathname: string): BreadcrumbItem[] => {
   if (pathname.startsWith('/finance')) {
     return [{ label: 'Finance', href: '/finance/dashboard' }]
   }
+
+  // Handle support dashboard
+  if (pathname.startsWith('/support')) {
+    const base = { label: 'Support', href: '/support/dashboard' }
+    if (pathname === '/support' || pathname === '/support/dashboard') return [base]
+    if (pathname.startsWith('/support/tickets')) return [base, { label: 'Tickets', href: '/support/tickets' }]
+    if (pathname.startsWith('/support/problem-codes')) return [base, { label: 'Problem codes', href: '/support/problem-codes' }]
+    if (pathname.startsWith('/support/settings')) return [base, { label: 'Settings', href: '/support/settings' }]
+    return [base]
+  }
   
   const dashboardBase = dashboardContext || '/dashboard/student'
 

@@ -56,7 +56,7 @@ function FinanceDashboardContent() {
               <DollarSign className="w-5 h-5 text-green-500" />
             </div>
             <p className="text-2xl font-bold text-white">KES {Number(revenueData?.total || 0).toLocaleString()}</p>
-            <p className="text-xs text-green-500 mt-1">+12% from last month</p>
+            <p className="text-xs text-slate-400 mt-1">From billing & subscriptions</p>
           </CardContent>
         </Card>
 
@@ -67,7 +67,7 @@ function FinanceDashboardContent() {
               <Users className="w-5 h-5 text-blue-500" />
             </div>
             <p className="text-2xl font-bold text-white">{Number(revenueData?.activeUsers || 0)}</p>
-            <p className="text-xs text-blue-500 mt-1">+5 new this week</p>
+            <p className="text-xs text-slate-400 mt-1">Active subscribers</p>
           </CardContent>
         </Card>
 
@@ -78,7 +78,7 @@ function FinanceDashboardContent() {
               <Target className="w-5 h-5 text-purple-500" />
             </div>
             <p className="text-2xl font-bold text-white">{Number(revenueData?.placementsCount || 0)}</p>
-            <p className="text-xs text-purple-500 mt-1">+2 this month</p>
+            <p className="text-xs text-slate-400 mt-1">From cohort billing</p>
           </CardContent>
         </Card>
 

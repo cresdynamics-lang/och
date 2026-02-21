@@ -48,6 +48,7 @@ const navItems: NavItem[] = [
       { label: 'Program Directors', href: '/dashboard/admin/users/directors', icon: '', permission: 'list_users' },
       { label: 'Mentors', href: '/dashboard/admin/users/mentors', icon: '', permission: 'list_users' },
       { label: 'Finance Directors', href: '/dashboard/admin/users/finance', icon: '', permission: 'list_users' },
+      { label: 'Support', href: '/dashboard/admin/users/support', icon: '', permission: 'list_users' },
       { label: 'Students', href: '/dashboard/admin/users/mentees', icon: '', permission: 'list_users' },
     ]
   },

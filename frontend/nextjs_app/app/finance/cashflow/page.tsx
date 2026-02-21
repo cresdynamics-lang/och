@@ -22,24 +22,26 @@ function CashFlowContent() {
       <Suspense fallback={<FinanceDashboardSkeleton />}>
         <Card className="bg-slate-800/50 border-slate-700">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Revenue Streams & Net Position</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-4 bg-slate-900/50 rounded-lg">
-                <p className="text-sm text-slate-400">Current Balance</p>
-                <p className="text-2xl font-bold text-white">KES {revenueData?.total ? Number(revenueData.total).toLocaleString() : '0'}</p>
+                <p className="text-sm text-slate-400">Total Revenue</p>
+                <p className="text-2xl font-bold text-white">KES {revenueData?.total != null ? Number(revenueData.total).toLocaleString() : '0'}</p>
               </div>
               <div className="p-4 bg-slate-900/50 rounded-lg">
-                <p className="text-sm text-slate-400">Monthly Burn Rate</p>
-                <p className="text-2xl font-bold text-white">KES 450,000</p>
+                <p className="text-sm text-slate-400">Placements (revenue share)</p>
+                <p className="text-2xl font-bold text-white">KES {revenueData?.placements != null ? Number(revenueData.placements).toLocaleString() : '0'}</p>
               </div>
               <div className="p-4 bg-slate-900/50 rounded-lg">
-                <p className="text-sm text-slate-400">Runway</p>
-                <p className="text-2xl font-bold text-white">18 months</p>
+                <p className="text-sm text-slate-400">Subscriptions</p>
+                <p className="text-2xl font-bold text-white">KES {revenueData?.subscriptions != null ? Number(revenueData.subscriptions).toLocaleString() : '0'}</p>
               </div>
               <div className="p-4 bg-slate-900/50 rounded-lg">
-                <p className="text-sm text-slate-400">Next Payroll</p>
-                <p className="text-2xl font-bold text-white">15 days</p>
+                <p className="text-sm text-slate-400">Cohort / Billing</p>
+                <p className="text-2xl font-bold text-white">KES {revenueData?.cohort != null ? Number(revenueData.cohort).toLocaleString() : '0'}</p>
               </div>
             </div>
+            <p className="text-xs text-slate-500 mt-4">Expenses, refunds, and wallet activity are tracked via invoices and billing. Forecasts use active subscription and placement data.</p>
           </CardContent>
         </Card>
       </Suspense>

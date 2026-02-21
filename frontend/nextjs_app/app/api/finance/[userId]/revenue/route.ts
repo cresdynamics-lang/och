@@ -31,7 +31,7 @@ export async function GET(
     if (!meResp.ok) {
       console.error('Finance revenue API: /auth/me failed', meResp.status);
       return NextResponse.json(
-        { total: 0, cohort: 0, placements: 0, pro7: 0, roi: 0, activeUsers: 0, placementsCount: 0, scope: 'sponsor' },
+        { total: 0, cohort: 0, placements: 0, subscriptions: 0, pro7: 0, roi: 0, activeUsers: 0, placementsCount: 0, scope: 'sponsor' },
         { status: 200 }
       );
     }
@@ -41,61 +41,72 @@ export async function GET(
     const primarySponsor = sponsorOrgs[0];
     const sponsorSlug = primarySponsor?.slug as string | undefined;
 
-    let overview: any;
+    let overview: any = null;
     if (sponsorSlug) {
       const financeResp = await fetch(`${djangoUrl}/api/sponsors/${sponsorSlug}/finance`, {
         method: 'GET',
         headers: authHeaders,
         credentials: 'include',
       });
-      if (!financeResp.ok) {
-        console.error('Finance revenue API: /sponsors/{slug}/finance failed', financeResp.status);
-        return NextResponse.json(
-          { total: 0, cohort: 0, placements: 0, pro7: 0, roi: 0, activeUsers: 0, placementsCount: 0, scope: 'sponsor' },
-          { status: 200 }
-        );
-      }
-      overview = await financeResp.json();
+      if (financeResp.ok) overview = await financeResp.json();
+      else console.error('Finance revenue API: /sponsors/{slug}/finance failed', financeResp.status);
     } else {
-      // Platform Finance (no sponsor org): use cross-sponsor overview
       const platformResp = await fetch(`${djangoUrl}/api/v1/finance/platform/overview/`, {
         method: 'GET',
         headers: authHeaders,
         credentials: 'include',
       });
-      if (!platformResp.ok) {
-        console.error('Finance revenue API: /finance/platform/overview failed', platformResp.status);
-        return NextResponse.json(
-          { total: 0, cohort: 0, placements: 0, pro7: 0, roi: 0, activeUsers: 0, placementsCount: 0, scope: 'platform' },
-          { status: 200 }
-        );
-      }
-      overview = await platformResp.json();
+      if (platformResp.ok) overview = await platformResp.json();
+      else console.error('Finance revenue API: /finance/platform/overview failed', platformResp.status);
     }
 
-    const totalPlatformCost = Number(overview.total_platform_cost || 0);
-    const totalValueCreated = Number(overview.total_value_created || 0);
-    const totalRevenueShare = Number(overview.total_revenue_share || 0);
-    const totalHires = Number(overview.total_hires || 0);
-    const totalRoi = Number(overview.total_roi || 0);
+    const totalPlatformCost = Number(overview?.total_platform_cost || 0);
+    const totalValueCreated = Number(overview?.total_value_created || 0);
+    const totalRevenueShare = Number(overview?.total_revenue_share || 0);
+    const totalHires = Number(overview?.total_hires || 0);
+    const totalRoi = Number(overview?.total_roi || 0);
 
-    // Sum billed amounts for cohorts if present
-    const cohorts = Array.isArray(overview.cohorts) ? overview.cohorts : [];
+    const cohorts = Array.isArray(overview?.cohorts) ? overview.cohorts : [];
     const cohortTotal = cohorts.reduce(
       (sum: number, c: any) => sum + Number(c?.billed_amount || c?.net_amount || 0),
       0
     );
 
-    // Map to frontend revenue shape (all numbers are real from Django)
+    // Always fetch subscription data so dashboard shows revenue even when billing overview fails or is empty
+    const USD_TO_KES = Number(process.env.USD_TO_KES_RATE || process.env.NEXT_PUBLIC_USD_TO_KES || 130);
+    let subscriptionTotal = 0;
+    let activeUsers = 0;
+    try {
+      const plansResp = await fetch(`${djangoUrl}/api/v1/subscription/plans`, {
+        method: 'GET',
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      if (plansResp.ok) {
+        const plans = await plansResp.json();
+        const plansList = Array.isArray(plans) ? plans : [];
+        const usdTotal = plansList.reduce((s: number, p: any) => s + Number(p.revenue || 0), 0);
+        subscriptionTotal = Math.round(usdTotal * USD_TO_KES * 100) / 100;
+        activeUsers = plansList.reduce((s: number, p: any) => s + Number(p.users || 0), 0);
+      }
+    } catch (_) {
+      // Subscription service optional
+    }
+
+    const billingTotal = totalPlatformCost || totalValueCreated || cohortTotal;
+    const total = billingTotal + subscriptionTotal;
+
+    // Map to frontend revenue shape (all numbers from real Django APIs)
     const revenuePayload = {
-      total: totalPlatformCost || totalValueCreated,
+      total,
       cohort: cohortTotal || totalPlatformCost || totalValueCreated,
       placements: totalRevenueShare,
-      pro7: Number(overview.revenue_forecast_q2 || 0),
+      subscriptions: subscriptionTotal,
+      pro7: Number(overview?.revenue_forecast_q2 || 0),
       roi: totalRoi,
-      activeUsers: 0, // can be wired to real headcount later
+      activeUsers,
       placementsCount: totalHires,
-      scope: sponsorSlug ? 'sponsor' : 'platform', // platform = internal Finance, all sponsors
+      scope: sponsorSlug ? 'sponsor' : 'platform',
     };
 
     return NextResponse.json(revenuePayload);
@@ -106,6 +117,7 @@ export async function GET(
         total: 0,
         cohort: 0,
         placements: 0,
+        subscriptions: 0,
         pro7: 0,
         roi: 0,
         activeUsers: 0,

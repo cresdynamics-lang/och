@@ -113,6 +113,7 @@ export const ROLE_DASHBOARD_MAP = {
   'analyst': '/dashboard/analyst',
   'employer': '/dashboard/employer',
   'finance': '/finance/dashboard',
+  'support': '/support/dashboard',
 } as const
 
 /**
@@ -164,6 +165,7 @@ export function getFallbackRoute(user: User | null): string {
   if (roles.includes('analyst')) return '/dashboard/analyst'
   if (roles.includes('employer')) return '/dashboard/employer'
   if (roles.includes('finance')) return '/finance/dashboard'
+  if (roles.includes('support')) return '/support/dashboard'
 
   // For students/mentees, fallback to student dashboard
   if (roles.some(r => ['student', 'mentee'].includes(r))) {

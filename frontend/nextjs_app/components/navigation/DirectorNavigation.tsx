@@ -27,8 +27,9 @@ function getRoleDisplayName(role: string | null): string {
     'employer': 'Employer',
     'analyst': 'Analyst',
     'finance': 'Finance Director',
+    'support': 'Support',
   }
-  
+
   return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1).replace(/_/g, ' ')
 }
 
@@ -96,6 +97,7 @@ const navItems: NavItem[] = [
     ]
   },
   { label: 'Analytics & Reports', href: '/dashboard/director/analytics', icon: TrendingUp, permission: 'read_analytics' },
+  { label: 'Support Team', href: '/dashboard/director/support-team', icon: Ticket, permission: 'list_tickets' },
   { label: 'Settings & Rules', href: '/dashboard/director/settings', icon: Settings, permission: 'manage_cohorts' },
 ]
 

@@ -89,6 +89,7 @@ def _assign_user_role(user, role_name='student'):
         'employer': 'employer',
         'analyst': 'analyst',
         'finance': 'finance',
+        'support': 'support',
     }
 
     # Get the mapped role name, default to student

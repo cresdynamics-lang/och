@@ -29,7 +29,7 @@ from programs.models import Cohort, Enrollment
 from .models import (
     Sponsor, SponsorCohort, SponsorStudentCohort, SponsorAnalytics,
     SponsorIntervention, SponsorFinancialTransaction, SponsorCohortBilling,
-    RevenueShareTracking, SponsorCohortAssignment
+    RevenueShareTracking, SponsorCohortAssignment, ManualFinanceInvoice,
 )
 from .serializers import (
     SponsorSerializer, SponsorCohortSerializer, SponsorDashboardSerializer,
@@ -623,13 +623,21 @@ def create_checkout_session(request):
 
 
 def _build_invoice_item(b):
-    """Build a single invoice dict from a SponsorCohortBilling instance."""
+    """Build a single invoice dict from a SponsorCohortBilling instance with line items."""
     if not getattr(b, 'sponsor_cohort', None):
         return None
     sc = b.sponsor_cohort
     org = getattr(sc, 'organization', None)
     if not org:
         return None
+    # Line items: products, prices, seat allocations (paid, scholarship, sponsored)
+    line_items = [
+        {'description': 'Platform fee (seats)', 'quantity': int(b.students_active or 0), 'unit_price_kes': 20000, 'amount': float(b.platform_cost or 0)},
+        {'description': 'Mentor sessions', 'quantity': int(b.mentor_sessions or 0), 'unit_price_kes': 7000, 'amount': float(b.mentor_cost or 0)},
+        {'description': 'Lab usage (hours)', 'quantity': int(b.lab_usage_hours or 0), 'unit_price_kes': 200, 'amount': float(b.lab_cost or 0)},
+        {'description': 'Scholarship allocation', 'quantity': 1, 'unit_price_kes': float(b.scholarship_cost or 0), 'amount': float(b.scholarship_cost or 0)},
+        {'description': 'Revenue share (hires)', 'quantity': int(b.hires or 0), 'unit_price_kes': 0, 'amount': -float(b.revenue_share_kes or 0)},
+    ]
     return {
         'id': str(b.id),
         'cohort_id': str(sc.id),
@@ -638,9 +646,17 @@ def _build_invoice_item(b):
         'sponsor_name': getattr(org, 'name', ''),
         'billing_month': b.billing_month.isoformat() if getattr(b, 'billing_month', None) else '',
         'net_amount': float(b.net_amount or 0),
+        'total_cost': float(b.total_cost or 0),
         'currency': 'KES',
         'payment_status': getattr(b, 'payment_status', 'pending') or 'pending',
         'invoice_generated': getattr(b, 'invoice_generated', False),
+        'source': 'system',
+        'line_items': line_items,
+        'students_active': int(b.students_active or 0),
+        'mentor_sessions': int(b.mentor_sessions or 0),
+        'lab_usage_hours': int(b.lab_usage_hours or 0),
+        'hires': int(b.hires or 0),
+        'revenue_share_kes': float(b.revenue_share_kes or 0),
         'created_at': b.created_at.isoformat() if getattr(b, 'created_at', None) else None,
     }
 
@@ -653,7 +669,7 @@ def sponsor_invoices(request):
         from .permissions import _user_sponsor_orgs
         sponsor_orgs = list(_user_sponsor_orgs(request.user))
 
-        # Platform Finance (no sponsor org): return all invoices across sponsors
+        # Platform Finance (no sponsor org): return all invoices across sponsors + manual invoices
         if not sponsor_orgs:
             if not is_platform_finance(request.user):
                 return Response({
@@ -663,6 +679,34 @@ def sponsor_invoices(request):
                 'sponsor_cohort', 'sponsor_cohort__organization'
             ).order_by('-billing_month')
             invoices = [x for b in billing_qs if (x := _build_invoice_item(b)) is not None]
+            manual = list(
+                ManualFinanceInvoice.objects.all().order_by('-created_at').values(
+                    'id', 'sponsor_name', 'amount_kes', 'currency', 'status', 'line_items', 'due_date', 'created_at'
+                )
+            )
+            for m in manual:
+                invoices.append({
+                    'id': str(m['id']),
+                    'cohort_id': '',
+                    'cohort_name': '',
+                    'sponsor_id': '',
+                    'sponsor_name': m['sponsor_name'],
+                    'billing_month': m['due_date'].isoformat() if m.get('due_date') else '',
+                    'net_amount': float(m['amount_kes'] or 0),
+                    'total_cost': float(m['amount_kes'] or 0),
+                    'currency': m.get('currency') or 'KES',
+                    'payment_status': m.get('status') or 'pending',
+                    'invoice_generated': False,
+                    'source': 'manual',
+                    'line_items': m.get('line_items') or [],
+                    'students_active': 0,
+                    'mentor_sessions': 0,
+                    'lab_usage_hours': 0,
+                    'hires': 0,
+                    'revenue_share_kes': 0,
+                    'created_at': m['created_at'].isoformat() if m.get('created_at') else None,
+                })
+            invoices.sort(key=lambda x: (x.get('created_at') or ''), reverse=True)
             return Response({'invoices': invoices, 'total_invoices': len(invoices)})
 
         # Sponsor-scoped: only invoices for user's orgs (organizations with org_type='sponsor')
@@ -681,6 +725,59 @@ def sponsor_invoices(request):
         return Response({
             'error': f'Failed to retrieve invoices: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsPlatformFinance])
+def create_manual_invoice(request):
+    """POST /api/v1/billing/invoices/create/ - Create a manual invoice (Finance role)."""
+    try:
+        client = (request.data.get('client') or '').strip()
+        if not client:
+            return Response({'error': 'client is required'}, status=status.HTTP_400_BAD_REQUEST)
+        amount_kes = request.data.get('amount') or request.data.get('total') or 0
+        try:
+            amount_kes = float(amount_kes)
+        except (TypeError, ValueError):
+            amount_kes = 0
+        due_date = request.data.get('dueDate') or request.data.get('due_date')
+        if due_date:
+            from datetime import datetime
+            if isinstance(due_date, str):
+                try:
+                    due_date = datetime.strptime(due_date[:10], '%Y-%m-%d').date()
+                except ValueError:
+                    due_date = None
+            else:
+                due_date = None
+        items = request.data.get('items') or []
+        line_items = []
+        for it in items:
+            line_items.append({
+                'description': it.get('description') or '',
+                'quantity': int(it.get('quantity') or 0),
+                'rate': float(it.get('rate') or 0),
+                'amount': float(it.get('amount') or 0),
+            })
+        inv = ManualFinanceInvoice.objects.create(
+            created_by=request.user,
+            sponsor_name=client,
+            amount_kes=amount_kes,
+            currency='KES',
+            status='pending',
+            line_items=line_items,
+            due_date=due_date,
+        )
+        return Response({
+            'id': str(inv.id),
+            'sponsor_name': inv.sponsor_name,
+            'amount_kes': float(inv.amount_kes),
+            'status': inv.status,
+            'created_at': inv.created_at.isoformat(),
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        logger.exception('create_manual_invoice failed')
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

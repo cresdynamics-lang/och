@@ -4,15 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { 
-  DollarSign, 
-  BarChart3, 
-  FileText, 
-  Wallet, 
-  Shield,
-  Home,
-  UserCircle,
-  Settings
+import {
+  LayoutDashboard,
+  Ticket,
+  Hash,
+  Settings,
+  LifeBuoy,
 } from 'lucide-react'
 
 interface NavItem {
@@ -23,32 +20,28 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/finance/dashboard', icon: Home },
-  { label: 'Revenue', href: '/finance/revenue', icon: DollarSign },
-  { label: 'Invoices', href: '/finance/invoices', icon: FileText },
-  { label: 'Placements', href: '/finance/placements', icon: BarChart3 },
-  { label: 'Subscriptions', href: '/finance/subscriptions', icon: Wallet },
-  { label: 'Cash Flow', href: '/finance/cashflow', icon: Shield },
-  { label: 'Account', href: '/finance/account', icon: UserCircle },
-  { label: 'Settings', href: '/finance/settings', icon: Settings },
+  { label: 'Dashboard', href: '/support/dashboard', icon: LayoutDashboard },
+  { label: 'Tickets', href: '/support/tickets', icon: Ticket },
+  { label: 'Problem Codes', href: '/support/problem-codes', icon: Hash },
+  { label: 'Settings', href: '/support/settings', icon: Settings },
 ]
 
-export function FinanceNavigation() {
+export function SupportNavigation() {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const isActive = (href: string) => {
-    if (href === '/finance/dashboard') {
-      return pathname === '/finance/dashboard'
+    if (href === '/support/dashboard') {
+      return pathname === '/support/dashboard'
     }
     return pathname.startsWith(href)
   }
 
   return (
     <>
-      {/* Mobile Menu Button */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button
+          type="button"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 bg-och-defender text-white rounded-lg hover:bg-och-defender/80"
           aria-label="Toggle menu"
@@ -63,15 +56,14 @@ export function FinanceNavigation() {
         </button>
       </div>
 
-      {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-och-midnight/90 z-40"
           onClick={() => setIsMobileMenuOpen(false)}
+          aria-hidden
         />
       )}
 
-      {/* Sidebar Navigation */}
       <aside
         className={clsx(
           'fixed left-0 top-0 h-full w-64 bg-och-midnight border-r border-och-steel/20 z-40 transition-transform duration-300',
@@ -80,16 +72,14 @@ export function FinanceNavigation() {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo/Brand */}
           <div className="p-6 border-b border-och-steel/20">
-            <Link href="/finance/dashboard" className="flex items-center gap-2">
-              <DollarSign className="h-8 w-8 text-och-defender" />
-              <span className="text-xl font-bold text-white">Finance</span>
+            <Link href="/support/dashboard" className="flex items-center gap-2">
+              <LifeBuoy className="h-8 w-8 text-och-defender" aria-hidden />
+              <span className="text-xl font-bold text-white">Support</span>
             </Link>
           </div>
 
-          {/* Navigation Items */}
-          <nav className="flex-1 overflow-y-auto p-4 space-y-2">
+          <nav className="flex-1 overflow-y-auto p-4 space-y-2" aria-label="Support navigation">
             {navItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item.href)
@@ -99,16 +89,16 @@ export function FinanceNavigation() {
                   href={item.href}
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={clsx(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                     active
-                      ? 'bg-och-defender text-och-mint'
-                      : 'text-och-steel hover:bg-och-midnight/50 hover:text-white'
+                      ? 'bg-och-defender/20 text-och-defender border border-och-defender/30'
+                      : 'text-och-steel hover:text-white hover:bg-och-midnight/80'
                   )}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium">{item.label}</span>
-                  {item.badge && (
-                    <span className="ml-auto bg-och-defender text-white text-xs px-2 py-1 rounded-full">
+                  <Icon className="w-5 h-5 shrink-0" aria-hidden />
+                  <span>{item.label}</span>
+                  {item.badge != null && item.badge > 0 && (
+                    <span className="ml-auto bg-och-orange text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                       {item.badge}
                     </span>
                   )}
@@ -116,16 +106,8 @@ export function FinanceNavigation() {
               )
             })}
           </nav>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-och-steel/20">
-            <div className="text-xs text-och-steel text-center">
-              MFA Required
-            </div>
-          </div>
         </div>
       </aside>
     </>
   )
 }
-

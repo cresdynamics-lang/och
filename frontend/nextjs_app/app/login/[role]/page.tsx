@@ -59,6 +59,13 @@ const PERSONAS = {
     description: 'Manage billing and revenue operations',
     gradient: 'from-blue-500/20 via-blue-600/10 to-slate-900/30'
   },
+  support: {
+    name: 'Support',
+    icon: '🛟',
+    color: 'defender-blue',
+    description: 'Internal support: tickets and problem tracking',
+    gradient: 'from-cyan-500/20 via-blue-600/10 to-slate-900/30'
+  },
 };
 
 const VALID_ROLES = Object.keys(PERSONAS);
@@ -534,7 +541,7 @@ function LoginForm() {
       }
 
       // Before redirect: if destination requires 2 MFA, check now so we never show dashboard URL with "Verifying..."
-      const ROUTES_REQUIRING_TWO_MFA = ['/dashboard/director', '/dashboard/mentor', '/dashboard/admin', '/dashboard/finance', '/dashboard/analyst'];
+      const ROUTES_REQUIRING_TWO_MFA = ['/dashboard/director', '/dashboard/mentor', '/dashboard/admin', '/dashboard/finance', '/dashboard/analyst', '/support'];
       const needsMfaCheck = ROUTES_REQUIRING_TWO_MFA.some((r) => route === r || route.startsWith(r + '/'));
       if (needsMfaCheck) {
         try {

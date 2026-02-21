@@ -677,3 +677,37 @@ class SponsorCohortAssignment(models.Model):
 
     def __str__(self):
         return f"{self.sponsor_uuid_id.email} -> {self.cohort_id.name} ({self.seat_allocation} seats)"
+
+
+class ManualFinanceInvoice(models.Model):
+    """
+    Manually created invoice by Finance role (not system-generated from billing).
+    Returned with billing invoices in GET /api/v1/billing/invoices/ for platform finance.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('waived', 'Waived'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='manual_invoices_created',
+    )
+    sponsor_name = models.CharField(max_length=255, help_text='Client / sponsor name')
+    amount_kes = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default='KES')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    line_items = models.JSONField(default=list, blank=True)  # [{"description","quantity","rate","amount"}]
+    due_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'manual_finance_invoices'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Manual invoice {self.sponsor_name} - {self.amount_kes} {self.currency}"

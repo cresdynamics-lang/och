@@ -5,7 +5,7 @@
 
 import { User, UserRole } from '@/services/types/user'
 
-export type Role = 'mentee' | 'student' | 'mentor' | 'admin' | 'program_director' | 'sponsor_admin' | 'analyst' | 'employer' | 'finance'
+export type Role = 'mentee' | 'student' | 'mentor' | 'admin' | 'program_director' | 'sponsor_admin' | 'analyst' | 'employer' | 'finance' | 'support'
 
 /**
  * Check if user has a given permission (by name).
@@ -58,6 +58,7 @@ export const DIRECTOR_NAV_PERMISSIONS: Record<string, string> = {
   '/dashboard/director/mentorship/cycles': 'update_mentorship',
   '/dashboard/director/analytics': 'read_analytics',
   '/dashboard/director/settings': 'manage_cohorts',
+  '/dashboard/director/support-team': 'list_tickets',
 }
 
 export const ADMIN_NAV_PERMISSIONS: Record<string, string> = {
@@ -66,6 +67,7 @@ export const ADMIN_NAV_PERMISSIONS: Record<string, string> = {
   '/dashboard/admin/users/directors': 'list_users',
   '/dashboard/admin/users/mentors': 'list_users',
   '/dashboard/admin/users/finance': 'list_users',
+  '/dashboard/admin/users/support': 'list_users',
   '/dashboard/admin/users/mentees': 'list_users',
   '/dashboard/admin/subscriptions': 'read_billing',
   '/dashboard/admin/subscriptions/plans': 'read_billing',
@@ -94,7 +96,7 @@ export interface RoutePermission {
 // Route permissions mapping
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   // Dashboard root (redirect page) - allow any authenticated role
-  { path: '/dashboard', roles: ['mentee', 'student', 'mentor', 'admin', 'program_director', 'sponsor_admin', 'analyst', 'employer', 'finance'] },
+  { path: '/dashboard', roles: ['mentee', 'student', 'mentor', 'admin', 'program_director', 'sponsor_admin', 'analyst', 'employer', 'finance', 'support'] },
 
   // Student/Mentee routes
   { path: '/dashboard/student', roles: ['mentee', 'student'] },
@@ -143,6 +145,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/director/reports', roles: ['program_director', 'admin'] },
   { path: '/dashboard/director/rules', roles: ['program_director', 'admin'] },
   { path: '/dashboard/director/settings', roles: ['program_director', 'admin'] },
+  { path: '/dashboard/director/support-team', roles: ['program_director', 'admin'] },
   { path: '/dashboard/director/dashboard', roles: ['program_director', 'admin'] },
   
   // Employer routes
@@ -166,6 +169,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/dashboard/admin/cohorts', roles: ['admin'] },
   { path: '/dashboard/admin/users/mentees', roles: ['admin'] },
   { path: '/dashboard/admin/users/finance', roles: ['admin'] },
+  { path: '/dashboard/admin/users/support', roles: ['admin'] },
   { path: '/dashboard/admin/settings', roles: ['admin'] },
   { path: '/dashboard/admin/subscriptions', roles: ['admin'] },
   { path: '/dashboard/admin/audit', roles: ['admin'] },
@@ -199,6 +203,14 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { path: '/finance/revenue', roles: ['finance'] },
   { path: '/finance/settings', roles: ['finance'] },
   { path: '/finance/subscriptions', roles: ['finance'] },
+  { path: '/finance/account', roles: ['finance'] },
+
+  // Support routes (internal role; added by director)
+  { path: '/support', roles: ['support'] },
+  { path: '/support/dashboard', roles: ['support'] },
+  { path: '/support/tickets', roles: ['support'] },
+  { path: '/support/problem-codes', roles: ['support'] },
+  { path: '/support/settings', roles: ['support'] },
 
   // Organizations routes (accessible by admins and program directors)
   { path: '/dashboard/organizations', roles: ['admin', 'program_director'] },
@@ -268,7 +280,8 @@ export function getUserRoles(user: User | null): Role[] {
     if (normalized === 'analyst') return 'analyst'
     if (normalized === 'employer') return 'employer'
     if (normalized === 'finance' || normalized === 'finance_admin') return 'finance'
-    
+    if (normalized === 'support') return 'support'
+
     // Log unknown roles for debugging
     console.warn('⚠️ Unknown role name:', roleName, 'normalized:', normalized, 'from user role:', ur)
     return normalized as Role
@@ -373,7 +386,7 @@ export function getPrimaryRole(user: User | null): Role | null {
   
   // Priority order (higher priority roles first)
   // This ensures users with multiple roles get redirected to the most appropriate dashboard
-  const priority: Role[] = ['program_director', 'finance', 'mentor', 'analyst', 'sponsor_admin', 'employer', 'mentee', 'student']
+  const priority: Role[] = ['program_director', 'finance', 'support', 'mentor', 'analyst', 'sponsor_admin', 'employer', 'mentee', 'student']
   
   console.log('getPrimaryRole: Checking priority order for roles:', roles)
   console.log('getPrimaryRole: Priority order:', priority)
@@ -413,6 +426,7 @@ export function getDashboardRoute(role: Role | null): string {
     'analyst': '/dashboard/analyst',           // Analyst role → Analyst Dashboard
     'employer': '/dashboard/employer',         // Employer role → Employer Dashboard
     'finance': '/finance/dashboard',           // Finance role → Finance Dashboard
+    'support': '/support/dashboard',           // Support role → Support Dashboard
   }
   
   const route = routeMap[role]
