@@ -65,11 +65,10 @@ export async function POST(request: Request) {
     const nextResponse = NextResponse.json({ ok: true }, { status: 200 });
 
     const cookieOptions = {
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to true only when using HTTPS
       sameSite: 'lax' as const,
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
-      domain: process.env.NODE_ENV === 'production' ? undefined : 'localhost',
     };
 
     nextResponse.cookies.set('access_token', access_token, {

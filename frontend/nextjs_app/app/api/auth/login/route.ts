@@ -212,21 +212,21 @@ export async function POST(request: NextRequest) {
     console.log('[Login API] Final results - Normalized roles:', normalizedRoles, 'Primary role:', primaryRole);
     nextResponse.cookies.set('och_roles', JSON.stringify(normalizedRoles), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Set to true only when using HTTPS
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
     })
     nextResponse.cookies.set('och_primary_role', primaryRole || '', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
     })
     nextResponse.cookies.set('och_dashboard', getDashboardForRole(primaryRole), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
 
     nextResponse.cookies.set('user_track', trackKey, {
       httpOnly: false, // Allow client-side access
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 30,
       path: '/',
@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
     if (loginResponse.access_token) {
       nextResponse.cookies.set('access_token', loginResponse.access_token, {
         httpOnly: false, // Allow client-side access for Authorization header
-        secure: process.env.NODE_ENV === 'production',
+        secure: false,
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 30, // 30 days (matches refresh token)
         path: '/',
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
     if (loginResponse.refresh_token) {
       nextResponse.cookies.set('refresh_token', loginResponse.refresh_token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: false,
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 30, // 30 days
         path: '/',
