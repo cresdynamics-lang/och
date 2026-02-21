@@ -947,10 +947,13 @@ function LoginForm() {
                     const roles = (u as any)?.roles || [];
                     const roleNames = roles.map((r: any) => typeof r === 'string' ? r : (r?.role || r?.name || ''));
                     const needsProfiling = (u as any)?.profiling_complete === false && roleNames.some((name: string) => ['student', 'mentee'].includes(name));
-                    if (u && needsProfiling) {
-                      router.push('/profiling');
+                    const redirectRoute = needsProfiling ? '/profiling' : (u ? getRedirectRoute(u) : '/dashboard/student');
+                    console.log('[MFA Complete] Redirecting to:', redirectRoute);
+                    // Use window.location.replace for reliable redirect in production
+                    if (typeof window !== 'undefined') {
+                      window.location.replace(redirectRoute);
                     } else {
-                      router.push(u ? getRedirectRoute(u) : '/dashboard/student');
+                      router.push(redirectRoute);
                     }
                   } catch (e: any) {
                     setError(e?.data?.detail || e?.message || 'Invalid code');
